@@ -551,6 +551,61 @@ async def test_interaction_ack_timing_and_event_ids(
     assert "fast" in outcome, outcome
 
 
+async def test_interaction_ack_threshold(
+    app_id: str,
+    app_secret: str,
+    openid: str,
+    wait_seconds: float,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """主动发一条带四个回调按钮的 Markdown，按钮分别在收到点击后 0、0.3、0.6、1 秒回应。
+
+    让测试用户逐个点，告诉我们哪些变成「已点」、哪些提示失败。2026-11-16 隔 1 秒和 5 秒回应时，接口都返回成功，
+    客户端却都显示「请求第三方失败」。日志里记下每个按钮从收到事件到回应完成的实际耗时。
+    """
+    bot = pyqbot.Bot(app_id, app_secret)
+    record_event_ids(bot, monkeypatch)
+    tag = secrets.token_hex(4)
+    delays = {f"pyqbot-ack-{tag}-{delay}": delay for delay in (0.0, 0.3, 0.6, 1.0)}
+    outcome: dict[str, object] = {}
+    loop = asyncio.get_running_loop()
+
+    @bot.on_interaction
+    async def clicked(event: pyqbot.Interaction) -> None:
+        delay = delays.get(event.button_data or "")
+        if event.user_openid != openid or delay is None:
+            return
+        received = loop.time()
+        await asyncio.sleep(delay)
+        try:
+            await event.ack()
+            result: object = "被接受"
+        except pyqbot.APIError as error:
+            result = api_outcome(error)
+        outcome[f"{delay} 秒"] = (result, f"实际 {loop.time() - received:.2f} 秒")
+        if len(outcome) == len(delays):
+            await bot.close()
+
+    keyboard = pyqbot.Keyboard.from_rows(
+        [
+            pyqbot.Button.callback(f"{delay} 秒", data, visited_label=f"已点 {delay}")
+            for data, delay in delays.items()
+        ]
+    )
+    async with bot:
+        await bot.users.send_message(
+            openid, markdown="**pyqbot 回应阈值实测**：从左到右逐个点", keyboard=keyboard
+        )
+        try:
+            async with asyncio.timeout(wait_seconds):
+                await bot.start()
+        except TimeoutError:
+            outcome["timeout"] = f"{wait_seconds} 秒内没有点完四个按钮"
+
+    note("interaction_ack_threshold", outcome)
+    assert len(outcome) >= len(delays), outcome
+
+
 # ---- 测试群：按钮、富媒体、撤回与通知事件 ----
 
 IMAGE_URL = "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/image-send.35813305.jpg"
