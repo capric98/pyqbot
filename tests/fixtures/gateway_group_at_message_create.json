@@ -1,0 +1,31 @@
+{
+  "op": 0,
+  "id": "GROUP_AT_MESSAGE_CREATE:fakegroupatmessageevent",
+  "s": 2,
+  "t": "GROUP_AT_MESSAGE_CREATE",
+  "d": {
+    "author": {
+      "avatar": "https://example.invalid/avatar.png",
+      "bot": false,
+      "id": "0123456789ABCDEF0123456789ABCDEF",
+      "member_nickname": "测试群名片",
+      "member_openid": "0123456789ABCDEF0123456789ABCDEF",
+      "member_role": "admin",
+      "union_openid": "",
+      "username": "测试用户"
+    },
+    "content": " /ping",
+    "group_id": "FEDCBA9876543210FEDCBA9876543210",
+    "group_openid": "FEDCBA9876543210FEDCBA9876543210",
+    "id": "ROBOT1.0_fake-group-message-id",
+    "message_scene": {
+      "ext": [
+        "msg_idx=REFIDX_fake",
+        "auth_token=fake"
+      ],
+      "source": "default"
+    },
+    "message_type": 0,
+    "timestamp": "2026-11-17T04:54:43+08:00"
+  }
+}

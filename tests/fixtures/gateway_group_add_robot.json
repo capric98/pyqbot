@@ -1,0 +1,11 @@
+{
+  "op": 0,
+  "id": "GROUP_ADD_ROBOT:00000000-0000-0000-0000-000000000004",
+  "s": 2,
+  "t": "GROUP_ADD_ROBOT",
+  "d": {
+    "group_openid": "FEDCBA9876543210FEDCBA9876543210",
+    "op_member_openid": "0123456789ABCDEF0123456789ABCDEF",
+    "timestamp": 1794862393
+  }
+}

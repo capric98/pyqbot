@@ -195,3 +195,20 @@ def test_media_image_list_gives_times_as_digit_strings() -> None:
     assert image.created_at == 1794861718
     assert image.expires_at is not None
     assert image.expires_at - image.created_at == 90 * 24 * 3600  # 文档示例约 7 天，实测是 90 天
+
+
+def test_group_add_robot_replies_with_the_outer_id() -> None:
+    event = event_from("gateway_group_add_robot.json", pyqbot.GroupAddRobot)
+
+    assert event.group_openid == "FEDCBA9876543210FEDCBA9876543210"
+    assert reply_fields(event)["event_id"] == "GROUP_ADD_ROBOT:00000000-0000-0000-0000-000000000004"
+
+
+def test_group_at_message_keeps_the_leading_space_and_the_group_nickname() -> None:
+    message = event_from("gateway_group_at_message_create.json", pyqbot.GroupAtMessage)
+
+    assert message.content == " /ping"
+    assert message.author.member_nickname == "测试群名片"
+    assert message.author.member_role == pyqbot.GroupMemberRole.ADMIN
+    assert message.author.member_openid == "0123456789ABCDEF0123456789ABCDEF"
+    assert reply_fields(message)["msg_id"] == "ROBOT1.0_fake-group-message-id"

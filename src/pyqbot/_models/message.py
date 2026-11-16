@@ -109,12 +109,14 @@ class GroupMessageMember(_UserBase):
     Attributes:
         member_openid: 群成员的 openid，与单聊的 `user_openid` 不是同一套取值。
         member_role: 群内角色。
-        username: 昵称，可能为空串。
+        member_nickname: 群昵称（群名片）；文档没有列出，实测消息的发送者带它。
+        username: QQ 昵称，可能为空串。
         bot: 是否为机器人。
     """
 
     member_openid: str | None = None
     member_role: GroupMemberRole | None = None
+    member_nickname: str | None = None
 
 
 class MessageElementAuthor(_UserBase):
@@ -445,7 +447,7 @@ class GroupAtMessage(GroupMessage):
     平台可能重复推送同一条消息（`id` 相同），需要时自行去重。
 
     Attributes:
-        content: 文本内容，已去掉开头的 @机器人；官方示例里带首尾空格，需要时自行 `strip()`。
+        content: 文本内容，已去掉开头的 @机器人，但实测开头留着一个空格（如 `" /ping"`），需要时自行 `strip()`。
         mentions: 消息里 @ 的其他成员，不含机器人自己。
 
     其余字段与方法同 `GroupMessage`。
