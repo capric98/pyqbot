@@ -91,7 +91,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
   | 响应体不是 JSON | `APIError`（「无法解析响应」） |
   | 2xx、没有错误码，但解不成 `type_` | `APIError`（「响应无法识别」） |
 
-- **接口分组**：`_api/users.py`、`_api/groups.py` 各一个小类，挂成 `client.users`、`client.groups`。单聊与群聊共用 `_api/message.py` 拼请求体。
+- **接口分组**：`_api/users.py`、`_api/groups.py` 各一个小类，挂成 `client.users`、`client.groups`。单聊与群聊共用 `_api/message.py` 拼请求体。`_api/interactions.py` 挂成 `client.interactions`，只有回应互动的 `ack()`。
 - **发消息**：`send_message(openid, content=None, *, markdown, keyboard, media, card, quote, reply_to)`，单聊另有 `wakeup`；返回 `pyqbot.SentMessage`。新的内容类型照样追加仅限关键字的参数，不改已有签名。
   - `msg_type` 由 SDK 推断：传了 `markdown` 为 2、`media` 为 7、`card` 为 8，否则为 0。调用方不接触 `msg_type`。
   - 发请求前抛 `ValueError` 的组合：什么内容都没有；`markdown`、`media`、`card` 传了不止一个；`markdown` 与 `content` 同传（接口页）；`keyboard` 不随 `markdown`（`msg-btn.md`）；`wakeup` 与 `reply_to` 同传。`content` 可以随 `media`、`card` 一起发（文档没禁止，见 `errata.md`）。
@@ -162,6 +162,11 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 - **关闭**（`await aclose(grace_period=5)`）：可以重复、并发调用，一定返回。只有第一次调用标记关闭并取消处理函数，每个任务只取消一次，之后的调用只等待，不打断处理函数的清理。在处理函数里调用（`bot.close()` 也一样）只请求停止、立刻返回，不等任何处理函数，所以处理函数之间不会互相等待。在外面调用时最多等 `grace_period` 秒，还没结束的（吞掉了取消）记一条 WARNING 后不再等。`Bot.close()` 依次断开网关、调它、关 HTTP 连接。
 - **加一种事件**：在 `_models/` 按官方文档定义模型（声明 `event_name`、`intent`，只把 SDK 要用的字段写成必填，需要的话加 `reply()`），从顶层导出；在 `Bot` 上照 `on_c2c_message` 加一个装饰器。分发器与 Intents 推导不用改。
 - **加一种可以被动回复的事件**：在上一条之外，让模型继承发消息接口文档里它所属场景的标记类（`event_id` 支持的事件列在 `event_id` 一行），如 `class FriendAdd(C2CReplyTarget)`。`send_message` 的签名、`msg_seq` 与 `event_id` 的填写都不用改。需要快捷方法时照 `C2CMessage.reply()` 写 `reply()`，`reply_to=self`。
+- **单聊、群聊的通知类事件**（`_models/notice.py`、`_models/interaction.py`）：类名照事件名去掉下划线（`FRIEND_ADD` → `FriendAdd`，`C2C_MSG_REJECT` → `C2CMsgReject`），装饰器是 `on_` 加事件名的小写（`on_friend_add`、`on_group_member_add`）；`INTERACTION_CREATE` 是 `Interaction` / `on_interaction`。可用 `event_id` 回复的是 `FriendAdd`、`C2CMsgReceive`、`GroupAddRobot`、`GroupMsgReceive` 与 `Interaction`，都有 `reply()`，参数同所属场景的 `send_message`。除 SDK 要用的 openid 之外，事件的主体（如 `GroupMemberAdd.member_openid`、`GroupJoinRequest.join_request_id`，以及审批接口要用的 `GroupJoinRequest.member_openid`）也是必填，缺了这条事件就没有意义。
+- **时间戳**：RFC3339 字符串解成带时区的 `datetime`（如消息的 `timestamp`、`GroupJoinRequest.apply_at`）；整数的 Unix 秒保持 `int`，字段名照官方 JSON（`timestamp`、`subscribe_ts`）。不转成 `datetime`：`to_dict()` 要与接口 JSON 一一对应，`decode()` 严格解码也不会把整数当成时间。调用方要时间对象时写 `datetime.fromtimestamp(event.timestamp, UTC)`。
+- **字段相同、事件名不同的消息**：`GroupAnyMessage`（`GROUP_MESSAGE_CREATE`，群里的全部消息）是基类，`GroupMessage`（`GROUP_AT_MESSAGE_CREATE`）继承它、只覆盖 `event_name`。分发只按事件名找处理函数，不看继承，所以 `on_group_at_message` 收不到全量消息；反过来，标注为 `GroupAnyMessage` 的处理函数可以两处都注册。接受群消息的参数（`quote`、`recall_message`）写基类。以后遇到同类情况照此办理：更宽的事件做基类。
+- **`Interaction` 的两个 ID**：字段 `id`（`d.id`）只用于回应互动 `ack()`（`PUT /interactions/{id}`）；被动回复用 `event_id`（payload 外层的 `id`），与其它事件一样由 `reply_fields()` 填写。回应不自动做，也不在本地防重复，由平台拒绝。
+- **多场景事件的回复分派**：`Interaction.reply()` 按 `chat_type` 选接口，没有时按 `scene`：单聊发给 `user_openid`，群聊发到 `group_openid`；频道抛 `NotImplementedError`（`RuntimeError` 的子类，频道接口落地后补上）；认不出场景或缺少该场景的 openid 抛 `ValueError`，都在发请求之前。因为两个场景共用一个方法，它的 `quote` 只接受引用索引与 `SentMessage`。
 
 ## 后续模块要遵守的约定
 
@@ -195,7 +200,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 
 骨架已经打通：凭证、请求层、网关连接、事件分发、`Bot.start()` / `run()` 都已落地，单聊消息能收能回。剩下的主要是按现有写法铺开：
 
-- **其余事件**：`autogen/event/` 下还有二十种，照「加一种事件」的步骤做。
+- **其余事件**：单聊、群聊的事件（好友增删、主动消息开关、机器人进出群、群成员与入群申请、全量群消息、订阅消息授权）和 `INTERACTION_CREATE` 已落地，见「事件」。剩下频道的事件，照「加一种事件」的步骤做；频道的互动回复要补上 `Interaction.reply()` 的频道分支。
 - **其余接口**：`autogen/api/` 下的群管理、用户、面板等，以及 `server-inter/channel/` 下的频道接口，照约定 5 按资源分组。
 - **其它消息类型**（已落地）：Markdown、键盘、富媒体、卡片、引用、正在输入、互动召回、撤回，见「请求层与接口分组」。剩下：流式消息（`v2_users_user_openid_stream_messages`）；文本里的 `<qqbot-at-user>` 等交互标签（`trans/text-chain.md`）现在由调用方自己拼。
 - **富媒体上传**：预上传、分片、完成三步，需要实测。返回 `pyqbot.Media`（字段即上传接口的响应体，可直接 `decode` 成它），按场景挂在 `client.users` / `client.groups` 上。

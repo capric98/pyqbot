@@ -89,14 +89,14 @@
 
 - **位置**：同上两页的 `User` 结构。
 - **含糊**：单聊的实测结果多一个 `avatar`（已确认，见下）；群聊 `author` 是否同样有 `avatar`、`member_role` 的取值是否只有三种，都没测到。`message_type` 的 101「并行消息」也没有说明含义。
-- **当前做法**：`avatar` 两边都建模为可选；`member_role` 先用字符串，未知取值原样保留。
+- **当前做法**：`avatar` 两边都建模为可选；`member_role` 是 `MemberRole`（`OpenStrEnum`，收录 member、admin、owner），未知取值得到伪成员、原值保留。
 
 ### 被动回复的 `event_id`：取外层 `id` 还是 `d.id`
 
 - **位置**：`autogen/api/v2_users_user_openid_messages.post.md` 与群聊页的 `event_id` 一行；`autogen/event/interaction_create.md` 事件体的 `id`；`autogen/api/interactions_interaction_id.put.md` 的 `interaction_id`。
 - **矛盾**：发消息接口说 `event_id`「从事件最外层的 id 获取」；`interaction_create.md` 说 `d.id`「用于被动消息发送和互动回调」；回应互动的接口说 `d.id`「不带 `INTERACTION_CREATE:` 前缀」，暗示外层 `id` 带前缀、两者不同。另外 `msg_seq` 只说「与 msg_id 联合使用」，没说用 `event_id` 时要不要带。
 - **当前做法**：按发消息接口页，取外层 `id`（`event.event_id`）；`msg_seq` 照样按对象从 1 递增并带上。
-- **怎么测**：点一次回调按钮，记下外层 `id` 与 `d.id`；分别用两者作为 `event_id` 被动回复，看哪个被接受；再用同一个 `event_id` 带递增的 `msg_seq` 连发两条。
+- **怎么测**：点一次回调按钮，记下外层 `id` 与 `d.id`；分别用两者作为 `event_id` 被动回复，看哪个被接受；再用同一个 `event_id` 带递增的 `msg_seq` 连发两条。`tests/live/test_live_events.py` 的三个用例会把每条事件的外层 `id` 与 `d.id` 记进 `.cache/live/events.txt`，并用外层 `id` 回复；互动用例回复成功即说明外层 `id` 可用。
 
 ### `msg_type` 的取值各页不一致
 
@@ -154,6 +154,41 @@
 - **位置**：`server-inter/message/overview.md`「撤回消息」；`autogen/api/v2_groups_group_openid_messages_message_id.delete.md`。
 - **矛盾**：概述只说「机器人可撤回自己发送的消息」，群聊撤回页说机器人是群管理员时还能撤回普通成员的消息（`d.id`）。两处都说超过 2 分钟不可撤回。
 - **当前做法**：`client.groups.recall_message()` 也接受收到的 `GroupMessage`；时限不在本地判断，由平台拒绝（40064004）。
+
+### 入群申请 `GROUP_JOIN_REQUEST` 的字段
+
+- **位置**：`autogen/event/group_join_request.md`。
+- **矛盾**：`VerifyInfo` 的字段叫 `method`，`verify_message`、`review_qa_list` 的说明却写「仅 `auth_type=...` 时」；`auto_approved` 的结构名拼成 `AutoAppproved`；申请时间是 RFC3339 字符串 `apply_at`，其它群事件都是整数秒的 `timestamp`。
+- **当前做法**：按字段表与示例：`verify_info.method`（`JoinRequestVerifyMethod`），`auto_approved.strategy_id`，`apply_at` 解成 `datetime`（不是 RFC3339 时退回 `None`，不让整条事件丢掉）。`group_openid`、`join_request_id` 与 `member_openid` 必填：后者是审批接口 `POST /v2/groups/{group_openid}/approval_join_request/{member_openid}` 的路径参数，三个示例都有。
+- **怎么测**：要一个机器人是管理员的测试群，再请人申请加群，会影响其他用户，须单独征得同意；记下 `verify_info` 的键名与 `apply_at` 的格式。
+
+### 好友事件的 `author`、`short_code` 与 `union_openid`
+
+- **位置**：`autogen/event/friend_add.md`、`friend_del.md`；`server-inter/user/manage/event.md`；`server-inter/channel/manage/user/model.md`。
+- **矛盾**：`autogen` 的 `FRIEND_ADD`、`FRIEND_DEL` 都有 `author{union_openid}`，`FRIEND_ADD` 还有 `short_code`；`manage/event.md` 两个都没有，`FRIEND_DEL` 的 `autogen` 示例也没有 `author`。频道的用户模型说事件里的用户对象不带 `union_openid`，而单聊、群聊的消息事件和 `FRIEND_ADD` 都列了它。
+- **当前做法**：`author`、`short_code`、`union_openid` 都可缺省（`author` 缺失时各字段为 `None`），只有 `openid` 必填。
+- **怎么测**：实测用例 `test_friend_del_then_add` 记下两条事件是否带 `author`、`union_openid` 是否为空。
+
+### 互动事件 `INTERACTION_CREATE` 的类型与场景
+
+- **位置**：`autogen/event/interaction_create.md`。
+- **矛盾**：外层 `type` 有 11~16 与 18、19、20，`data.type` 说「与外层 type 含义一致」却只列了 11~16；20（群授权状态变更）没有说明；示例 3（用户授权）没有 `data.type` 与 `chat_type`，只有 `scene`。
+- **当前做法**：两处用同一个 `InteractionType`，未知取值保留原值；`chat_type`、`data.type` 都可缺省，`reply()` 在没有 `chat_type` 时按 `scene` 判断场景。
+- **怎么测**：实测用例 `test_callback_button_interaction` 记下按钮互动的 `chat_type` 与 `data.type`；`test_c2c_msg_reject_then_receive` 期间同时订阅互动，看切换主动消息开关时是否推送 `type=18`，以及它带不带 `chat_type`。
+
+### 回应互动的期限
+
+- **位置**：`server-inter/message/trans/overview.md`「响应互动」；`autogen/api/interactions_interaction_id.put.md`；`autogen/event/interaction_create.md`。
+- **含糊**：只有 `trans/overview.md` 写了「指令回调类场景为 3 秒」，接口页与事件页只说「超时后失效」。
+- **当前做法**：在 `Interaction.ack()` 与 `client.interactions.ack()` 的 docstring 里写 3 秒；SDK 不自动回应，不计时，也不在本地拦截重复回应，超时与重复都由平台拒绝。
+- **怎么测**：点回调按钮后分别隔 1 秒、5 秒回应，看后者是否报错与错误码；对同一互动回应两次，记下错误码。
+
+### 全量群消息与 @ 消息会不会重复推送
+
+- **位置**：`autogen/event/group_message_create.md`；`group_at_message_create.md`。
+- **含糊**：开启「接收所有消息」后，群里 @机器人 的消息是只推 `GROUP_MESSAGE_CREATE`，还是两个事件都推，没有说明。
+- **当前做法**：两个事件各走各的处理函数（`on_group_message`、`on_group_at_message`），SDK 不合并、不去重。
+- **怎么测**：开启全量模式的群里 @机器人 发一条消息，看收到几条事件、`id` 是否相同。要群与权限配置，须单独征得同意。
 
 ## 已确认
 
