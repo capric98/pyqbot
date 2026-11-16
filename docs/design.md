@@ -167,7 +167,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 
 - **事件模型**（`_models/`）：每种事件一个 `Event` 的子类，收到的消息继承 `ReceivedMessage`（带 `id`）。首批是 `C2CMessage`、`GroupMessage`，都带 `reply()`。子类用 `ClassVar` 声明 `event_name`（Dispatch 的 `t`）与 `intent`。绑定的 `Client`、事件 ID 与回复计数存在实例的 `__dict__` 里（`dict=True`），`repr`、`to_dict()`、编码与相等性只看字段。
 - **事件 ID**：分发器把 payload 外层的 `id` 经 `bind_event_id()` 记到事件上，对外是只读的 `event.event_id`（不是分发来的事件为 `None`）。被动回复的 `event_id` 取它（文档的出入见 `errata.md`）。
-- **可以被动回复的事件**（`_models/event.py`）：`ReplyTarget` 是基类，场景用无字段的标记子类表示：`C2CReplyTarget`、`GroupReplyTarget`（从顶层导出，以后加频道再加一个）。`ReceivedMessage` 也是 `ReplyTarget`，所以 `C2CMessage(_ChatMessage, C2CReplyTarget)` 这样多继承即可。两个场景都会发生的事件（如 `INTERACTION_CREATE`）同时继承两个标记，场景不对时由平台拒绝。
+- **可以被动回复的事件**（`_models/event.py`）：`ReplyTarget` 是基类，场景用无字段的标记子类表示：`C2CReplyTarget`、`GroupReplyTarget`，频道另有两个（见下文「频道的事件」），都从顶层导出。`ReceivedMessage` 也是 `ReplyTarget`，所以 `C2CMessage(_ChatMessage, C2CReplyTarget)` 这样多继承即可。两个场景都会发生的事件（如 `INTERACTION_CREATE`）同时继承两个标记，场景不对时由平台拒绝。
 - **模型上的行为**：分发器在调用处理函数前 `bind_client(event, client)`，`message.reply()` 这类快捷方法经 `self._bound_client()` 调用接口；没有绑定时抛 `RuntimeError`。同一事件的所有处理函数拿到同一个对象，所以 `msg_seq` 在它们之间也是递增的。
 - **常用信息一步拿到**：嵌在发送者里的 openid 在消息上另有属性（`message.user_openid`、`message.member_openid`）；用户写类型标注会用到的嵌套类型（发送者、附件）从顶层导出，其余不导出。文本字段缺失与空串没有区别时默认 `""`（如 `content`），省得处处判断 `None`。
 - **注册**（`Bot`）：每种事件一个装饰器 `@bot.on_<事件>`，原样返回处理函数；类型写成 `[F: Handler[事件模型]](handler: F) -> F`，参数类型不对时 pyright 报错。处理函数必须是 `async def`，否则注册时抛 `TypeError`。同一事件可以注册多个。
@@ -182,6 +182,12 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 - **字段相同、事件名不同的消息**：`GroupAnyMessage`（`GROUP_MESSAGE_CREATE`，群里的全部消息）是基类，`GroupMessage`（`GROUP_AT_MESSAGE_CREATE`）继承它、只覆盖 `event_name`。分发只按事件名找处理函数，不看继承，所以 `on_group_at_message` 收不到全量消息；反过来，标注为 `GroupAnyMessage` 的处理函数可以两处都注册。接受群消息的参数（`quote`、`recall_message`）写基类。以后遇到同类情况照此办理：更宽的事件做基类。
 - **`Interaction` 的两个 ID**：字段 `id`（`d.id`）只用于回应互动 `ack()`（`PUT /interactions/{id}`）；被动回复用 `event_id`（payload 外层的 `id`），与其它事件一样由 `reply_fields()` 填写。回应不自动做，也不在本地防重复，由平台拒绝。
 - **多场景事件的回复分派**：`Interaction.reply()` 按 `chat_type` 选接口，没有时按 `scene`：单聊发给 `user_openid`，群聊发到 `group_openid`；频道抛 `NotImplementedError`（`RuntimeError` 的子类，频道接口落地后补上）；认不出场景或缺少该场景的 openid 抛 `ValueError`，都在发请求之前。因为两个场景共用一个方法，它的 `quote` 只接受引用索引与 `SentMessage`。
+- **频道的事件**（`_models/guild.py`、`guild_message.py`、`forum.py`、`audio.py`）：类名与装饰器的规则同上（`GUILD_MEMBER_ADD` → `GuildMemberAdd` / `on_guild_member_add`）。消息照群聊：`MESSAGE_CREATE` 是 `ChannelAnyMessage` / `on_channel_message`，`AT_MESSAGE_CREATE` 是它的子类 `ChannelMessage` / `on_channel_at_message`，`DIRECT_MESSAGE_CREATE` 是 `DirectMessage` / `on_direct_message`；`PublicMessageDelete` 继承 `MessageDelete`。
+  - **数据模型与事件**：频道里的对象另有纯数据模型（`Guild`、`Channel`、`GuildUser`、`GuildMember`、`GuildRole`、`GuildMessage` 等），供事件嵌套与频道接口返回；同形的事件直接继承它（`GuildCreate(Guild, Event)`），处理函数拿到的事件也能当数据模型用。`GuildMessage`（官方的 Message 对象）继承 `ReceivedMessage`：msgspec 只允许一个带字段的基类，而 `reply_fields()` 靠它认出消息；它没有 `event_name`、不带场景标记，不会被分发，也不能作为 `reply_to`。频道成员事件的 `user` 必填，所以不继承 `GuildMember`（那里的 `user` 可选：消息里的 `member` 没有它）。
+  - **场景标记**：`ChannelReplyTarget`（`POST /channels/{channel_id}/messages`）与 `DirectMessageReplyTarget`（`POST /dms/{guild_id}/messages`）。继承前者的是 `ChannelAnyMessage`、`ChannelMessage`（用 `msg_id`），`send.md` 的 `event_id` 列表里的 `GuildMember*`、`MessageReaction*`、`ForumThread*`、`ForumPost*`、`ForumReply*`，以及 `Interaction`；继承后者的只有 `DirectMessage`。
+  - **留给频道消息接口的**：发送接口与各事件的 `reply()` 还没有。`reply_to` 照单聊、群聊用上面两个标记类限定；`reply_fields()` 照常给出 `msg_id` / `event_id` 与 `msg_seq`，但子频道发消息的文档没有 `msg_seq`，带不带由实现者定。发送目标：子频道消息、表态、论坛事件取 `channel_id`（都必填），私信取 `guild_id`；频道成员事件没有子频道 ID，它的 `reply()` 要让调用方传 `channel_id`；`Interaction.reply()` 的频道分支（现在抛 `NotImplementedError`）发到 `channel_id`。
+  - **没有 Intent 位的事件**（`OPEN_FORUM_*`、`AUDIO_OR_LIVE_CHANNEL_MEMBER_*`）：`intent` 为 `Intents(0)`，不编造位。注册了照常分发，但不参与推导：调用方须在构造 `Bot` 时传入完整的 `intents`；只注册这类处理函数又不传时，`start()` 照常抛「没有要订阅的事件」。
+  - **论坛富文本与 ID**：论坛事件的 `title`、`content` 是 `str | tuple[ForumRichObject, ...]`，两种原样保留（模型写字符串，事件示例是数组）；字符串可能是 JSON 形式的 RichText，由调用方按需用 `ForumRichText.from_json()` 解析，SDK 不猜。论坛事件与富文本里的 ID 在示例里有时是数字：对外标注为 `str`，运行时也收整数并在 `__post_init__` 里转成字符串（`forum.py` 的 `_Id`），`to_dict()` 里随之是字符串。其它频道事件的示例里 ID 都是字符串，不放宽。
 
 ## 后续模块要遵守的约定
 
@@ -215,7 +221,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 
 骨架已经打通：凭证、请求层、网关连接、事件分发、`Bot.start()` / `run()` 都已落地，单聊消息能收能回。剩下的主要是按现有写法铺开：
 
-- **其余事件**：单聊、群聊的事件（好友增删、主动消息开关、机器人进出群、群成员与入群申请、全量群消息、订阅消息授权）和 `INTERACTION_CREATE` 已落地，见「事件」。剩下频道的事件，照「加一种事件」的步骤做；频道的互动回复要补上 `Interaction.reply()` 的频道分支。
+- **其余事件**：单聊、群聊、频道的事件和 `INTERACTION_CREATE` 都已落地，见「事件」。频道的发送接口、各事件的 `reply()` 与 `Interaction.reply()` 的频道分支随频道消息接口补上，要接的点见「事件」的「留给频道消息接口的」。
 - **其余接口**：`autogen/api/` 下的群管理、用户等，以及 `server-inter/channel/` 下的频道接口，照约定 5 按资源分组。机器人自身、分享链接、自定义菜单、指令面板已落地。
 - **其它消息类型**（已落地）：Markdown、键盘、富媒体、卡片、引用、正在输入、互动召回、撤回、流式消息，见「请求层与接口分组」。剩下：文本里的 `<qqbot-at-user>` 等交互标签（`trans/text-chain.md`）现在由调用方自己拼。
 - **富媒体上传与素材库**（已落地）：见「请求层与接口分组」，文档出入与待实测项见 `errata.md`，实测用例在 `tests/live/test_live_upload.py`。

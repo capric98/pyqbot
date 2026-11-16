@@ -294,6 +294,117 @@
 - **当前做法**：不发送 `version`；`update()` 不传 `remark` 时请求里没有它，docstring 提示备注可能被清空。
 - **怎么测**：实测用例 `test_panel_lifecycle` 之外，再修改一次不带 `remark`，用 `get()` 看备注。
 
+### 频道：测试条件
+
+以下频道相关的条目目前都不能实测：`AGENTS.md` 只允许对测试用户发单聊消息。共同的前提是一个机器人所在的测试频道（沙箱频道即可），多数还要由另一个人在频道里操作，会影响其他用户，须单独征得同意。私域事件（`GUILD_MESSAGES`、`FORUMS_EVENT`）另需私域机器人。
+
+### 子频道全量消息 `MESSAGE_CREATE` 的 Intent
+
+- **位置**：`server-inter/channel/message/event.md` 的 `MESSAGE_CREATE` 标题；`dev-prepare/event-emit/payload.md`「事件订阅 Intents」。
+- **矛盾**：`event.md` 写 `intents PUBLIC_GUILD_MESSAGES，私域`，`payload.md` 把它列在 `GUILD_MESSAGES (1 << 9)`（仅私域）下。
+- **当前做法**：`GUILD_MESSAGES`：`payload.md` 是 Intents 的总表，且与「仅私域」吻合；`PUBLIC_GUILD_MESSAGES` 下只有 `AT_MESSAGE_CREATE` 与 `PUBLIC_MESSAGE_DELETE`。
+- **怎么测**：私域机器人；由人在子频道发一条不 @机器人 的消息，分别只订阅 `GUILD_MESSAGES`、只订阅 `PUBLIC_GUILD_MESSAGES`，看哪次收到。
+
+### 论坛事件的 Intent 名称
+
+- **位置**：`server-inter/channel/content/forum/forum.md` 标题；`payload.md`。
+- **矛盾**：`forum.md` 叫 `FORUM_EVENT`，`payload.md` 叫 `FORUMS_EVENT (1 << 28)`，事件列表一致。
+- **当前做法**：`Intents.FORUMS_EVENT`。
+- **怎么测**：私域机器人，测试频道里有论坛子频道；只订阅 `1 << 28`，由人发帖，看是否收到 `FORUM_THREAD_CREATE`。
+
+### 没有 Intent 位的频道事件
+
+- **位置**：`forum/open_forum.md`（`OPEN_FORUM_*`）；`server-inter/channel/role/audio_or_live_channel_member.md`（`AUDIO_OR_LIVE_CHANNEL_MEMBER_*`）。
+- **含糊**：两组事件都没有给出 Intent 位，`payload.md` 的总表里也没有。
+- **当前做法**：`intent` 为 `Intents(0)`，不编造位：注册了照常分发，但不参与推导，要收到须在构造 `Bot` 时自己传入完整的 `intents`（见 `design.md`「事件」）。
+- **怎么测**：先向平台确认这两组事件的位；测试频道里有音视频子频道与论坛子频道，带上该位 Identify，由人进出音视频子频道、在论坛发帖，看是否收到。
+
+### 音视频 / 直播子频道成员进出：`channel_type`
+
+- **位置**：`role/audio_or_live_channel_member.md` 的两个示例。
+- **矛盾**：示例的注释写「2-音视频子频道 5-直播子频道」，而 `ChannelType` 里语音是 2、直播是 10005；示例带 `//` 注释，不是合法 JSON。
+- **当前做法**：单独的 `AudioOrLiveChannelType`（2、5），认不出的取值（如 10005）保留原值；`channel_id`、`user_id` 必填。
+- **怎么测**：由人分别进出音视频子频道与直播子频道，记下 `channel_type`。
+
+### 公域论坛事件的字段
+
+- **位置**：`forum/open_forum.md` 的三个示例。
+- **含糊**：示例只有 `guild_id`、`channel_id`、`author_id`，没有主帖、评论、回复的 ID 与内容；都带尾逗号，不是合法 JSON。
+- **当前做法**：只建模这三个字段，`channel_id` 必填；ID 也收整数（同下一条）。
+- **怎么测**：公域机器人，由人在论坛子频道发帖、评论、回复，记下完整的事件体。
+
+### 论坛事件：`title`、`content` 的形式与 ID 的类型
+
+- **位置**：`forum/model.md` 的 `ThreadInfo`、`PostInfo`、`ReplyInfo`、`RichObject`；`forum/forum.md` 的四个示例；`forum/get_thread.md`。
+- **矛盾**：
+  - 模型说 `title`、`content` 是字符串，`forum.md` 的示例里是 `RichObject` 数组；`get_thread.md` 说 `content` 是字符串、内容按 `RichText`（`paragraphs`）结构。`model.md` 定义的 `RichText` 没有被任何字段引用。
+  - `guild_id`、`channel_id`、`author_id` 在模型里是字符串，主帖、回复、审核结果的示例里是数字，评论的示例里是字符串；`RichObject` 里的 `ChannelInfo.channel_id`、`AtRoleInfo.role_id` 是 uint64。
+- **当前做法**：`title`、`content` 为 `str | tuple[ForumRichObject, ...]`，原样保留；字符串由调用方按需用 `ForumRichText.from_json()` 解析。上述 ID 字段收字符串与整数，统一成字符串（见 `design.md`「事件」）。
+- **怎么测**：私域机器人，由人发一个带文字、链接、表情、#子频道、@ 的主帖，再评论、回复，记下三种事件里 `title`、`content` 的形式与 ID 的 JSON 类型。
+
+### 论坛富文本的 `EmojiInfo` 与表情表态的 `Emoji`
+
+- **位置**：`forum/model.md` 的 `EmojiInfo`；`forum/forum.md` 评论的示例；`openapi/emoji/model.md`。
+- **矛盾**：`EmojiInfo` 的 `id`、`type` 在表格里都是字符串，示例里 `id` 是数字、`type` 是字符串 `"1"`；表情表态的 `Emoji.type` 是 uint32。
+- **当前做法**：`ForumEmojiInfo.id` 收字符串与整数、统一成字符串，`type` 保持字符串（表格与示例一致），不复用 `EmojiType`；表态的 `Emoji` 照 `emoji/model.md`：`id` 字符串，`type` 为 `EmojiType`，两者都必填（表态接口的路径要用）。
+- **怎么测**：同上，帖子里放一个系统表情和一个 emoji，记下 `emoji_info`；再由人对消息表态，记下 `emoji`。
+
+### 消息删除事件与音频事件：没有给出事件体
+
+- **位置**：`payload.md` 列出的 `MESSAGE_DELETE`、`PUBLIC_MESSAGE_DELETE`、`DIRECT_MESSAGE_DELETE` 与 `AUDIO_START`、`AUDIO_FINISH`、`AUDIO_ON_MIC`、`AUDIO_OFF_MIC`；`server-inter/message/template/model.md` 的 `MessageDelete`；`content/audio/model.md` 的 `AudioAction`。
+- **含糊**：这些事件都没有页面说明事件体，`MessageDelete`、`AudioAction` 两个结构也没有被任何事件链接；被删除的消息带哪些字段、上下麦的是谁都不清楚。
+- **当前做法**：按名字对应：删除事件为 `MessageDelete`（`message` 必填，其中 `id`、`channel_id`、`guild_id` 必填；`op_user` 可缺省），音频事件为 `AudioAction`（`channel_id` 必填）。
+- **怎么测**：由人撤回一条子频道消息、一条私信；机器人在音频子频道播放并上下麦（音频接口落地后）；记下事件体。
+
+### 子频道事件：`position` 与 `op_user_id`
+
+- **位置**：`autogen/event/channel_create.md`、`channel_update.md`、`channel_delete.md`。
+- **矛盾**：事件体表格没有 `position`、示例里有；表格有 `op_user_id`、示例里没有。
+- **当前做法**：都建模，都可缺省（`position` 是 `Channel` 的字段）。
+- **怎么测**：由有管理权限的人在测试频道里创建、修改、删除子频道，记下事件体。
+
+### 频道事件：`GUILD_UPDATE`、`GUILD_DELETE` 的示例缺字段
+
+- **位置**：`autogen/event/guild_update.md`、`guild_delete.md`。
+- **矛盾**：表格有 `joined_at`、`op_user_id`，两个示例都没有。
+- **当前做法**：都可缺省，只有 `id` 必填。
+- **怎么测**：修改测试频道的资料、把机器人移出测试频道，记下事件体。移出后要重新添加机器人。
+
+### 消息审核：`MESSAGE_AUDIT_REJECT` 的 `message_id`
+
+- **位置**：`server-inter/channel/message/event.md` 的示例；`server-inter/message/template/model.md` 的 `MessageAudited`。
+- **矛盾**：模型说 `message_id`「只有审核通过事件才会有值」，审核不通过的示例里却有。
+- **当前做法**：两个事件同一结构，`message_id` 可缺省，只有 `audit_id` 必填。
+- **怎么测**：机器人向测试频道的子频道发主动消息（频道消息接口落地后），平台返回 304023 时等审核结果事件，记下 `message_id`。
+
+### 频道消息：`seq` 与 `seq_in_channel`
+
+- **位置**：`server-inter/message/template/model.md` 的 `Message`；`server-inter/channel/message/event.md` 的三个示例与「发送时机」。
+- **矛盾**：模型说 `seq` 2022 年 8 月后废弃、改用 `seq_in_channel`（字符串），示例都还用 `seq` 且没有 `seq_in_channel`；「发送时机」仍让开发者按 `Message.seq` 排序。
+- **当前做法**：两个都建模（`seq` 整数，`seq_in_channel` 字符串），都可缺省；docstring 推荐用 `seq_in_channel` 排序。
+- **怎么测**：由人在子频道 @机器人 发几条消息，记下两个字段是否都有、类型与递增规律。
+
+### 频道成员事件的 `joined_at`、`roles`
+
+- **位置**：`server-inter/channel/role/guild_member.md` 的「注」。
+- **含糊**：说这两个字段「尚有一些字段未标准化」，没说实际是什么形式。
+- **当前做法**：按 `Member` 结构（RFC3339 字符串、字符串数组）解码，形式不对时退回默认值（`None`、空元组），事件照常分发。
+- **怎么测**：由人加入、退出测试频道，修改频道昵称或身份组，记下这两个字段。
+
+### 频道成员事件能被动回复，却没有子频道 ID
+
+- **位置**：`server-inter/channel/message/send.md`「目前支持被动回复的事件类型」；`role/guild_member.md`。
+- **含糊**：`GUILD_MEMBER_*` 可以用 `event_id` 被动回复，但发消息接口的路径要 `channel_id`，事件里只有 `guild_id`。
+- **当前做法**：`GuildMember*` 继承 `ChannelReplyTarget`，回复时由调用方指定子频道（见 `design.md`「事件」）。
+- **怎么测**：由人加入测试频道，用事件 ID 被动回复到任一子频道，看是否被接受、是否限定子频道。
+
+### 频道里的互动事件能否被动回复
+
+- **位置**：`server-inter/channel/message/send.md`「目前支持被动回复的事件类型」；`autogen/event/interaction_create.md`。
+- **矛盾**：频道发消息页列出的可用 `event_id` 回复的事件里没有 `INTERACTION_CREATE`；互动事件页又笼统地说事件 ID「用于被动消息发送」，且互动包括频道场景。
+- **当前做法**：`Interaction` 同时继承 `ChannelReplyTarget`，在频道里用 `event_id` 回复到 `channel_id`；平台不接受时由它拒绝。
+- **怎么测**：在测试频道发一条带回调按钮的消息，点击后用互动事件的 `event_id` 被动回复，记下是否成功与错误码；不接受就去掉 `Interaction` 的频道标记。
+
 ## 已确认
 
 以下都是 2026-11-16 用真实机器人实测的结果。
