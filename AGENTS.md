@@ -38,6 +38,7 @@ uv run --env-file .env pytest -m live --no-cov  # 实测，须先获用户同意
   - 同一件事只说一处：跨模块的决定写在 `docs/design.md`，代码里至多留一句指向它；docstring 说过的，注释不再说。
   - 从包顶层导出的 API 必须有 Google 风格的 docstring：一句话摘要，加上调用方真正需要的 `Args` / `Raises`。摘要已说清返回值就不写 `Returns`，名字和类型已说清的参数不逐个解释；构造参数写在类的 docstring 里，`__init__` 不再重复。内部函数和类最多一句话。
   - 接口封装要注明对应的官方接口，如 `POST /v2/users/{openid}/messages`。
+- 凭证（`app_secret`、access_token）不得出现在日志、异常文案和 `repr` 里：持有凭证的对象要隐藏该字段；平台返回的文案和底层库的异常文案，进入异常或日志前先脱敏。这些行为都要有测试，例如平台回显密钥时异常里没有它。
 - 运行时依赖越少越好，新增前先征得用户同意。
 
 ## 接口设计
