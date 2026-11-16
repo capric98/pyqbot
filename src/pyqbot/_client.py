@@ -11,6 +11,7 @@ from ._config import DEFAULT_BASE_URL, DEFAULT_TIMEOUT, Config
 from ._credentials import AccessTokenManager
 from ._http import HTTP
 from ._models.gateway import Gateway
+from ._redact import redact
 
 
 class Client:
@@ -102,6 +103,10 @@ class Client:
         if self._closed:
             raise RuntimeError(f"{type(self).__name__} 已关闭，不能再发请求")
         return await self._access_token.get()
+
+    def _redact_secrets(self, text: str) -> str:
+        """把 `text` 里的 `app_secret` 与已知的 access_token 换成 `***`，写日志前用。"""
+        return redact(text, *self._access_token.known_secrets())
 
     async def _get_gateway_url(self) -> str:
         """返回网关的 WebSocket 地址，对应 `GET /gateway`；与 API 不是同一个域名。"""

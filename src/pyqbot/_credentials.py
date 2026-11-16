@@ -95,7 +95,7 @@ class AccessTokenManager:
                 timeout=config.timeout,
             )
         except httpx2.RequestError as exc:
-            secrets = self._known_secrets()
+            secrets = self.known_secrets()
             reason = (
                 "请求超时"
                 if isinstance(exc, httpx2.TimeoutException)
@@ -104,7 +104,7 @@ class AccessTokenManager:
             error = NetworkError(f"获取 access_token 失败：{reason}")
             raise error from safe_cause(exc, *secrets)
 
-        value, expires_in = _parse_response(response, self._known_secrets())
+        value, expires_in = _parse_response(response, self.known_secrets())
         token = _CachedToken(
             value=value,
             sent_monotonic=sent_monotonic,
@@ -116,7 +116,8 @@ class AccessTokenManager:
             raise NetworkError("获取 access_token 失败：耗时超过了 token 的有效期")
         return token
 
-    def _known_secrets(self) -> tuple[str | None, ...]:
+    def known_secrets(self) -> tuple[str | None, ...]:
+        """`app_secret` 与当前缓存的 access_token（还没有时为 `None`），供脱敏使用。"""
         return (self._config.app_secret, self._token.value if self._token else None)
 
 

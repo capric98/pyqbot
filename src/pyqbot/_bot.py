@@ -49,7 +49,7 @@ class Bot(Client):
             app_id, app_secret, base_url=base_url, timeout=timeout, http_client=http_client
         )
         self._intents = intents
-        self._dispatcher = Dispatcher()
+        self._dispatcher = Dispatcher(redact=self._redact_secrets)
         self._connection: GatewayConnection | None = None
 
     def on_c2c_message[F: Handler[C2CMessage]](self, handler: F) -> F:
@@ -129,9 +129,10 @@ class Bot(Client):
             asyncio.run(main())
 
     async def close(self) -> None:
-        """断开网关，取消还在运行的处理函数，然后关闭连接；可以重复调用，`start()` 随之返回。
+        """断开网关，取消还在运行的处理函数，然后关闭连接；`start()` 随之返回。
 
-        构造时传入的 `http_client` 不会被关闭。
+        可以重复、并发调用，也可以在处理函数里调用（这时不等其它处理函数结束）。
+        处理函数最多等 5 秒，到期仍不结束的记一条警告后不再等。构造时传入的 `http_client` 不会被关闭。
         """
         # 顺序不能换：先断开网关就不再有新事件，再取消处理函数，最后才能关 HTTP 连接。
         if self._connection is not None:

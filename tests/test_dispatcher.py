@@ -2,8 +2,10 @@
 
 import asyncio
 import functools
+import gc
 import json
 import logging
+import weakref
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 
@@ -48,6 +50,11 @@ def frame(t: str, data: object) -> GatewayPayload:
     return decode_payload(json.dumps({"op": 0, "s": 1, "t": t, "d": data}))
 
 
+def new_dispatcher() -> Dispatcher:
+    # 不脱敏：这里只测分发本身，脱敏由 Bot 注入，见 test_bot.py。
+    return Dispatcher(redact=lambda text: text)
+
+
 def handler_tasks() -> list[asyncio.Task[object]]:
     """分发器建的、还没结束的任务。"""
     return [task for task in asyncio.all_tasks() if task.get_name().startswith("pyqbot:")]
@@ -60,7 +67,7 @@ async def client() -> AsyncGenerator[pyqbot.Client]:
 
 
 async def test_events_are_routed_by_name_and_bound_to_the_client(client: pyqbot.Client) -> None:
-    dispatcher = Dispatcher()
+    dispatcher = new_dispatcher()
     got: list[Event] = []
     done = asyncio.Event()
 
@@ -84,7 +91,7 @@ async def test_events_are_routed_by_name_and_bound_to_the_client(client: pyqbot.
 
 
 async def test_every_handler_of_an_event_is_called(client: pyqbot.Client) -> None:
-    dispatcher = Dispatcher()
+    dispatcher = new_dispatcher()
     seen: list[str] = []
     first_done, second_done = asyncio.Event(), asyncio.Event()
 
@@ -108,7 +115,7 @@ async def test_every_handler_of_an_event_is_called(client: pyqbot.Client) -> Non
 async def test_failing_handler_is_logged_and_does_not_affect_the_others(
     client: pyqbot.Client, caplog: pytest.LogCaptureFixture
 ) -> None:
-    dispatcher = Dispatcher()
+    dispatcher = new_dispatcher()
     failed, succeeded = asyncio.Event(), asyncio.Event()
 
     async def broken(event: Ping) -> None:
@@ -128,37 +135,115 @@ async def test_failing_handler_is_logged_and_does_not_affect_the_others(
     [record] = caplog.records
     assert record.name == "pyqbot"
     assert record.levelno == logging.ERROR
-    assert "PING" in record.getMessage()
-    assert "broken" in record.getMessage()
-    assert record.exc_info is not None
-    assert record.exc_info[0] is ValueError
+    message = record.getMessage()
+    assert "PING" in message
+    assert "broken" in message
+    assert "ValueError: 坏了" in message  # traceback 已格式化进文案
+    assert record.exc_info is None  # 不交给 logging 打印未脱敏的异常链
 
 
-async def test_handler_without_a_qualname_is_logged_by_its_repr(
+async def test_handler_exception_is_redacted_before_logging(
     client: pyqbot.Client, caplog: pytest.LogCaptureFixture
 ) -> None:
-    dispatcher = Dispatcher()
+    dispatcher = Dispatcher(redact=lambda text: text.replace("SECRET", "***"))
     failed = asyncio.Event()
 
-    async def fail(reason: str, event: Ping) -> None:
+    async def leak(event: Ping) -> None:
         failed.set()
-        raise RuntimeError(reason)
+        try:
+            raise KeyError("原因里有 SECRET")
+        except KeyError as exc:
+            raise RuntimeError("外层也有 SECRET") from exc
 
-    dispatcher.add_handler(Ping, functools.partial(fail, "原因"))
+    dispatcher.add_handler(Ping, leak)
     with caplog.at_level(logging.ERROR, logger="pyqbot"):
         dispatcher.dispatch(frame("PING", {"n": 1}), client)
         async with asyncio.timeout(HANG_GUARD):
             await failed.wait()
+        await dispatcher.aclose()
 
-    [record] = caplog.records
-    assert "functools.partial" in record.getMessage()
+    assert "SECRET" not in caplog.text
+    assert "原因里有 ***" in caplog.text  # 异常链整条都在、都脱敏了
+    assert "外层也有 ***" in caplog.text
+
+
+async def test_handler_names_never_include_bound_arguments(
+    client: pyqbot.Client, caplog: pytest.LogCaptureFixture
+) -> None:
+    dispatcher = new_dispatcher()
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def fail(secret: str, label: str, event: Ping) -> None:
+        started.set()
+        await release.wait()
+        raise RuntimeError("失败")
+
+    handler = functools.partial(functools.partial(fail, "app-secret-value"), "x")
+    dispatcher.add_handler(Ping, handler)
+    with caplog.at_level(logging.ERROR, logger="pyqbot"):
+        dispatcher.dispatch(frame("PING", {"n": 1}), client)
+        async with asyncio.timeout(HANG_GUARD):
+            await started.wait()
+            [task] = handler_tasks()
+            assert task.get_name() == f"pyqbot:PING:{fail.__qualname__}"
+            release.set()
+            await asyncio.wait([task])
+
+    assert fail.__qualname__ in caplog.text
+    assert "app-secret-value" not in caplog.text
+
+
+class SyncCallable:
+    def __init__(self, secret: str) -> None:
+        self.secret = secret
+
+    def __repr__(self) -> str:
+        return f"SyncCallable({self.secret!r})"
+
+    def __call__(self, event: Ping) -> None: ...
+
+
+class _NamelessMeta(type):
+    # 让类也取不到 __qualname__，走到占位名。
+    def __getattribute__(cls, name: str) -> object:
+        if name == "__qualname__":
+            raise AttributeError(name)
+        return super().__getattribute__(name)
+
+
+class Nameless(SyncCallable, metaclass=_NamelessMeta):
+    pass
+
+
+def sync_with_secret(secret: str, event: Ping) -> None: ...
+
+
+@pytest.mark.parametrize(
+    ("handler", "name"),
+    [
+        (functools.partial(sync_with_secret, "app-secret-value"), "sync_with_secret"),
+        (SyncCallable("app-secret-value"), "SyncCallable"),
+        (Nameless("app-secret-value"), "<未命名的处理函数>"),
+    ],
+    ids=["partial", "callable-object", "nameless"],
+)
+def test_registration_error_names_the_handler_without_its_arguments(
+    handler: object, name: str
+) -> None:
+    dispatcher = new_dispatcher()
+
+    with pytest.raises(TypeError) as caught:
+        dispatcher.add_handler(Ping, handler)  # pyright: ignore[reportArgumentType]  验证运行期检查
+
+    assert name in str(caught.value)
+    assert "app-secret-value" not in str(caught.value)
 
 
 @pytest.mark.parametrize("t", ["PONG", "SOMETHING_NEW", None])
 async def test_events_without_handlers_are_ignored_without_decoding(
     client: pyqbot.Client, caplog: pytest.LogCaptureFixture, t: str | None
 ) -> None:
-    dispatcher = Dispatcher()
+    dispatcher = new_dispatcher()
 
     async def on_ping(event: Ping) -> None:
         raise AssertionError("不应被调用")
@@ -176,7 +261,7 @@ async def test_events_without_handlers_are_ignored_without_decoding(
 async def test_undecodable_event_is_dropped_and_logged(
     client: pyqbot.Client, caplog: pytest.LogCaptureFixture
 ) -> None:
-    dispatcher = Dispatcher()
+    dispatcher = new_dispatcher()
     got: list[Ping] = []
     done = asyncio.Event()
 
@@ -200,7 +285,7 @@ async def test_undecodable_event_is_dropped_and_logged(
 
 
 async def test_dispatch_returns_at_once_while_handlers_are_stuck(client: pyqbot.Client) -> None:
-    dispatcher = Dispatcher()
+    dispatcher = new_dispatcher()
     started, release, all_finished = asyncio.Event(), asyncio.Event(), asyncio.Event()
     finished: list[int] = []
 
@@ -226,7 +311,7 @@ async def test_dispatch_returns_at_once_while_handlers_are_stuck(client: pyqbot.
 
 
 async def test_aclose_cancels_running_handlers_and_leaves_no_tasks(client: pyqbot.Client) -> None:
-    dispatcher = Dispatcher()
+    dispatcher = new_dispatcher()
     started, cancelled = asyncio.Event(), asyncio.Event()
 
     async def stuck(event: Ping) -> None:
@@ -251,12 +336,11 @@ async def test_aclose_cancels_running_handlers_and_leaves_no_tasks(client: pyqbo
     await dispatcher.aclose()  # 可以重复调用
 
 
-async def test_aclose_from_inside_a_handler_does_not_cancel_the_caller(
+async def test_aclose_from_inside_a_handler_only_requests_the_stop(
     client: pyqbot.Client,
 ) -> None:
-    dispatcher = Dispatcher()
-    closed = asyncio.Event()
-    other_cancelled = asyncio.Event()
+    dispatcher = new_dispatcher()
+    closed, other_cleaning, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
 
     async def shutdown(event: Ping) -> None:
         await dispatcher.aclose()
@@ -265,22 +349,131 @@ async def test_aclose_from_inside_a_handler_does_not_cancel_the_caller(
     async def other(event: Ping) -> None:
         try:
             await asyncio.Event().wait()
-        except asyncio.CancelledError:
-            other_cancelled.set()
-            raise
+        finally:
+            other_cleaning.set()
+            await release.wait()
 
     dispatcher.add_handler(Ping, other)
     dispatcher.add_handler(Ping, shutdown)
     dispatcher.dispatch(frame("PING", {"n": 1}), client)
     async with asyncio.timeout(HANG_GUARD):
-        await closed.wait()
+        # other 还卡在清理里，shutdown 的 aclose() 已经返回：处理函数里不等别的处理函数。
+        await asyncio.gather(closed.wait(), other_cleaning.wait())
+        assert not release.is_set()
+        release.set()
+        await dispatcher.aclose()
 
-    assert other_cancelled.is_set()
     assert handler_tasks() == []
 
 
+async def test_concurrent_aclose_waits_for_cleanup_without_cancelling_again(
+    client: pyqbot.Client,
+) -> None:
+    dispatcher = new_dispatcher()
+    started, cleaning = asyncio.Event(), asyncio.Event()
+    release, cleaned = asyncio.Event(), asyncio.Event()
+
+    async def careful(event: Ping) -> None:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleaning.set()
+            await release.wait()  # 第二次取消会打断这里
+            cleaned.set()
+
+    dispatcher.add_handler(Ping, careful)
+    dispatcher.dispatch(frame("PING", {"n": 1}), client)
+    async with asyncio.timeout(HANG_GUARD):
+        await started.wait()  # 在处理函数开始之前取消，就走不到 finally
+        first = asyncio.create_task(dispatcher.aclose())
+        await cleaning.wait()
+        # eager_start：第二次调用同步跑到它挂起为止，该发的取消（如果有）此时已经发出。
+        second = asyncio.create_task(dispatcher.aclose(), eager_start=True)
+        assert not second.done()
+        release.set()
+        await asyncio.gather(first, second)
+
+    assert cleaned.is_set()
+    assert handler_tasks() == []
+
+
+async def test_aclose_gives_up_on_handlers_that_swallow_cancellation(
+    client: pyqbot.Client, caplog: pytest.LogCaptureFixture
+) -> None:
+    dispatcher = new_dispatcher()
+    started, swallowed, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+    async def stubborn(event: Ping) -> None:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            swallowed.set()
+            await release.wait()
+
+    dispatcher.add_handler(Ping, stubborn)
+    dispatcher.dispatch(frame("PING", {"n": 1}), client)
+    async with asyncio.timeout(HANG_GUARD):
+        await started.wait()
+        with caplog.at_level(logging.WARNING, logger="pyqbot"):
+            await dispatcher.aclose(grace_period=0.01)
+        assert swallowed.is_set()
+        [task] = handler_tasks()  # 关闭已经返回，处理函数还在
+        release.set()
+        await asyncio.wait([task])
+
+    [record] = caplog.records
+    assert record.levelno == logging.WARNING
+    assert "1 个处理函数" in record.getMessage()
+
+
+async def test_dispatch_does_not_run_handlers_even_with_an_eager_task_factory(
+    client: pyqbot.Client,
+) -> None:
+    loop = asyncio.get_running_loop()
+    loop.set_task_factory(asyncio.eager_task_factory)
+    try:
+        dispatcher = new_dispatcher()
+        started = asyncio.Event()
+
+        async def on_ping(event: Ping) -> None:
+            started.set()
+
+        dispatcher.add_handler(Ping, on_ping)
+        dispatcher.dispatch(frame("PING", {"n": 1}), client)
+        assert not started.is_set()
+        async with asyncio.timeout(HANG_GUARD):
+            await started.wait()
+    finally:
+        loop.set_task_factory(None)
+
+
+async def test_finished_handler_tasks_are_released(client: pyqbot.Client) -> None:
+    dispatcher = new_dispatcher()
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def on_ping(event: Ping) -> None:
+        started.set()
+        await release.wait()
+
+    dispatcher.add_handler(Ping, on_ping)
+    dispatcher.dispatch(frame("PING", {"n": 1}), client)
+    async with asyncio.timeout(HANG_GUARD):
+        await started.wait()
+        [task] = handler_tasks()
+        task_ref = weakref.ref(task)
+        release.set()
+        # wait() 的完成回调排在分发器的清理回调之后，返回时清理已经执行。
+        await asyncio.wait([task])
+    del task
+    gc.collect()
+
+    assert task_ref() is None
+
+
 def test_intents_are_derived_from_the_registered_handlers() -> None:
-    dispatcher = Dispatcher()
+    dispatcher = new_dispatcher()
     assert dispatcher.intents == pyqbot.Intents(0)
 
     async def on_ping(event: Ping) -> None: ...
@@ -296,7 +489,7 @@ def test_intents_are_derived_from_the_registered_handlers() -> None:
 
 
 def test_sync_handler_is_rejected_with_a_hint() -> None:
-    dispatcher = Dispatcher()
+    dispatcher = new_dispatcher()
 
     def on_ping(event: Ping) -> None: ...
 

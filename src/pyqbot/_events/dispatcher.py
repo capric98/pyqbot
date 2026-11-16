@@ -1,11 +1,13 @@
 """事件分发器，行为约定见 `docs/design.md`「事件」。"""
 
 import asyncio
+import functools
 import inspect
 import logging
+import traceback
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from .._errors import PayloadError
 from .._gateway.intents import Intents
@@ -15,6 +17,9 @@ if TYPE_CHECKING:
     from .._client import Client
 
 _logger = logging.getLogger("pyqbot")
+
+CLOSE_GRACE_PERIOD = 5.0  # 秒：aclose() 等处理函数结束的默认期限
+_UNNAMED_HANDLER = "<未命名的处理函数>"
 
 type Handler[E: Event] = Callable[[E], Awaitable[object]]
 """事件处理函数：只收一个事件对象，必须是 `async def`。"""
@@ -36,12 +41,13 @@ class _Route[E: Event]:
 
 
 class Dispatcher:
-    """按事件名把 Dispatch 解成事件模型，交给注册的处理函数，每个处理函数在自己的任务里运行。"""
+    """按事件名把 Dispatch 解成事件模型，交给注册的处理函数；`redact` 给写进日志的异常脱敏。"""
 
-    def __init__(self) -> None:
+    def __init__(self, *, redact: Callable[[str], str]) -> None:
         # 各事件的模型类型不同，只能写 Any；同一个 _Route 里的类型由 add_handler 保证一致。
         self._routes: dict[str, _Route[Any]] = {}
         self._tasks: set[asyncio.Task[None]] = set()  # 强引用：事件循环只弱引用任务
+        self._redact = redact
         self._closed = False
 
     @property
@@ -82,31 +88,51 @@ class Dispatcher:
         bind_client(event, client)
         for handler in route.handlers:
             task = asyncio.create_task(
-                _run(payload.t, handler, event), name=f"pyqbot:{payload.t}:{_name_of(handler)}"
+                self._run(payload.t, handler, event),
+                name=f"pyqbot:{payload.t}:{_name_of(handler)}",
+                eager_start=False,
             )
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
 
-    async def aclose(self) -> None:
-        """不再接受分发，取消并等待还在运行的处理函数；可以重复调用。
-
-        在处理函数里调用时不取消调用者自己，否则它会在等待中被取消、无法完成关闭。
-        """
-        self._closed = True
+    async def aclose(self, *, grace_period: float = CLOSE_GRACE_PERIOD) -> None:
+        """不再分发，取消并等待处理函数，最多等 `grace_period` 秒；时序上的语义见 `docs/design.md`「事件」。"""
         current = asyncio.current_task()
-        tasks = [task for task in self._tasks if task is not current]
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        if not self._closed:  # 只取消一次：再次取消会打断处理函数正在做的清理
+            self._closed = True
+            for task in self._tasks:
+                if task is not current:
+                    task.cancel()
+        if current in self._tasks:  # 在处理函数里：等别的处理函数可能形成互相等待
+            return
+        pending = set(self._tasks)
+        if not pending:
+            return
+        _, pending = await asyncio.wait(pending, timeout=grace_period)
+        if pending:
+            _logger.warning(
+                "关闭时有 %d 个处理函数在 %s 秒内没有结束（可能吞掉了取消），不再等待",
+                len(pending),
+                grace_period,
+            )
 
-
-async def _run[E: Event](event_name: str, handler: Handler[E], event: E) -> None:
-    try:
-        await handler(event)
-    except Exception:
-        _logger.exception("事件 %s 的处理函数 %s 抛出了异常", event_name, _name_of(handler))
+    async def _run[E: Event](self, event_name: str, handler: Handler[E], event: E) -> None:
+        try:
+            await handler(event)
+        except Exception as exc:  # noqa: BLE001  处理函数的任何异常都只记日志，不影响其它处理函数
+            # 异常链可能带着凭证，先格式化、脱敏，不交给 logging 打印。
+            detail = self._redact("".join(traceback.format_exception(exc)))
+            _logger.error(
+                "事件 %s 的处理函数 %s 抛出了异常：\n%s", event_name, _name_of(handler), detail
+            )
 
 
 def _name_of(handler: object) -> str:
-    name = getattr(handler, "__qualname__", None)
-    return name if isinstance(name, str) else repr(handler)
+    """处理函数的名字，不含 `partial` 绑定的参数（可能是凭证），取法见 `docs/design.md`「事件」。"""
+    while isinstance(handler, functools.partial):
+        handler = cast(functools.partial[object], handler).func
+    for candidate in (handler, type(handler)):
+        name = getattr(candidate, "__qualname__", None)
+        if isinstance(name, str):
+            return name
+    return _UNNAMED_HANDLER

@@ -2,7 +2,10 @@
 # 上面这行让本文件里的 ignore 都必须真的有错可压：装饰器的类型变宽时，类型检查测试会失败。
 
 import asyncio
+import contextlib
+import functools
 import json
+import logging
 from collections.abc import Coroutine
 from pathlib import Path
 
@@ -176,3 +179,133 @@ async def test_real_c2c_message_is_dispatched_and_replied_to() -> None:
             {"msg_type": 0, "content": "收到", "msg_id": "ROBOT1.0_fake-message-id", "msg_seq": 1},
         )
     ]
+
+
+# ---- 关闭与日志脱敏 ----
+
+TOKEN = "token-value-never-logged"
+
+
+def feed(bot: pyqbot.Bot) -> None:
+    """不连网关，直接把真实的单聊样本交给分发器。"""
+    bot._dispatcher.dispatch(decode_payload(C2C_SAMPLE.read_bytes()), bot)  # pyright: ignore[reportPrivateUsage]
+
+
+async def test_handlers_closing_the_bot_from_cleanup_do_not_wait_for_each_other() -> None:
+    first_started, first_cleaned, second_closed = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    bot = pyqbot.Bot("app-id", "app-secret")
+
+    @bot.on_c2c_message
+    async def first(message: pyqbot.C2CMessage) -> None:
+        first_started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            await bot.close()
+            first_cleaned.set()
+
+    @bot.on_c2c_message
+    async def second(message: pyqbot.C2CMessage) -> None:
+        await first_started.wait()
+        await bot.close()
+        second_closed.set()
+
+    feed(bot)
+    async with asyncio.timeout(HANG_GUARD):
+        await asyncio.gather(first_cleaned.wait(), second_closed.wait())
+        await bot.close()
+
+    assert bot.is_closed
+
+
+async def test_concurrent_close_lets_handlers_finish_their_cleanup() -> None:
+    started, cleaning = asyncio.Event(), asyncio.Event()
+    release, cleaned = asyncio.Event(), asyncio.Event()
+    bot = pyqbot.Bot("app-id", "app-secret")
+
+    @bot.on_c2c_message
+    async def careful(message: pyqbot.C2CMessage) -> None:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleaning.set()
+            await release.wait()
+            cleaned.set()
+
+    feed(bot)
+    async with asyncio.timeout(HANG_GUARD):
+        await started.wait()
+        first = asyncio.create_task(bot.close())
+        await cleaning.wait()
+        # eager_start：第二次 close() 同步跑到挂起为止，该发的取消（如果有）此时已经发出。
+        second = asyncio.create_task(bot.close(), eager_start=True)
+        release.set()
+        await asyncio.gather(first, second)
+
+    assert cleaned.is_set()
+    assert bot.is_closed
+
+
+async def test_close_returns_even_if_a_handler_swallows_cancellation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started, release = asyncio.Event(), asyncio.Event()
+    bot = pyqbot.Bot("app-id", "app-secret")
+    dispatcher = bot._dispatcher  # pyright: ignore[reportPrivateUsage]
+    monkeypatch.setattr(
+        dispatcher, "aclose", functools.partial(dispatcher.aclose, grace_period=0.01)
+    )
+    finished: list[asyncio.Task[object]] = []
+
+    @bot.on_c2c_message
+    async def stubborn(message: pyqbot.C2CMessage) -> None:
+        task = asyncio.current_task()
+        assert task is not None
+        finished.append(task)
+        started.set()
+        with contextlib.suppress(asyncio.CancelledError):
+            await asyncio.Event().wait()
+        await release.wait()
+
+    feed(bot)
+    async with asyncio.timeout(HANG_GUARD):
+        await started.wait()
+        await bot.close()
+        assert bot.is_closed
+        release.set()
+        await asyncio.wait(finished)
+
+
+async def test_handler_errors_echoing_credentials_are_redacted_in_the_log(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    failed = asyncio.Event()
+
+    def platform(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"access_token": TOKEN, "expires_in": "7200"})
+
+    async with (
+        httpx2.AsyncClient(transport=httpx2.MockTransport(platform)) as http_client,
+        pyqbot.Bot("app-id", "app-secret", http_client=http_client) as bot,
+    ):
+
+        @bot.on_c2c_message
+        async def leaky(message: pyqbot.C2CMessage) -> None:
+            token = await bot.get_access_token()
+            failed.set()
+            try:
+                raise ValueError("app-secret 被回显了")
+            except ValueError as exc:
+                raise httpx2.ConnectError(f"连接失败：Authorization: QQBot {token}") from exc
+
+        with caplog.at_level(logging.ERROR, logger="pyqbot"):
+            feed(bot)
+            async with asyncio.timeout(HANG_GUARD):
+                await failed.wait()
+            await bot.close()  # 等处理函数的日志写完
+
+    assert "ConnectError" in caplog.text
+    assert TOKEN not in caplog.text
+    assert "app-secret" not in caplog.text
+    assert "QQBot ***" in caplog.text
