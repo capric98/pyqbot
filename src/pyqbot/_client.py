@@ -6,6 +6,7 @@ from typing import Self
 import httpx2
 
 from ._api.groups import Groups
+from ._api.interactions import Interactions
 from ._api.users import Users
 from ._config import DEFAULT_BASE_URL, DEFAULT_TIMEOUT, Config
 from ._credentials import AccessTokenManager
@@ -29,6 +30,7 @@ class Client:
     Attributes:
         users: 单聊接口，如 `client.users.send_message(...)`。
         groups: 群聊接口，如 `client.groups.send_message(...)`。
+        interactions: 互动事件接口，如 `client.interactions.ack(...)`。
 
     Raises:
         ValueError: 凭证为空、`base_url` 不是完整的 http(s) 地址，或 `timeout` 不是正数。
@@ -67,6 +69,7 @@ class Client:
         )
         self.users = Users(self._http)
         self.groups = Groups(self._http)
+        self.interactions = Interactions(self._http)
 
     @property
     def config(self) -> Config:

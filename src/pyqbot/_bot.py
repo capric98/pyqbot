@@ -10,7 +10,22 @@ from ._config import DEFAULT_BASE_URL, DEFAULT_TIMEOUT
 from ._events.dispatcher import Dispatcher, Handler
 from ._gateway.connection import GatewayConnection
 from ._gateway.intents import Intents
-from ._models.message import C2CMessage, GroupMessage
+from ._models.interaction import Interaction
+from ._models.message import C2CMessage, GroupAnyMessage, GroupMessage
+from ._models.notice import (
+    C2CMsgReceive,
+    C2CMsgReject,
+    FriendAdd,
+    FriendDel,
+    GroupAddRobot,
+    GroupDelRobot,
+    GroupJoinRequest,
+    GroupMemberAdd,
+    GroupMemberRemove,
+    GroupMsgReceive,
+    GroupMsgReject,
+    SubscribeMessageStatus,
+)
 
 
 class Bot(Client):
@@ -72,6 +87,138 @@ class Bot(Client):
             TypeError: 处理函数不是 `async def` 定义的。
         """
         self._dispatcher.add_handler(GroupMessage, handler)
+        return handler
+
+    def on_group_message[F: Handler[GroupAnyMessage]](self, handler: F) -> F:
+        """注册群里的全部消息（`GROUP_MESSAGE_CREATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        机器人须开启「接收所有消息」。只收 @机器人 的消息用 `on_group_at_message`，两者互不转发。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(GroupAnyMessage, handler)
+        return handler
+
+    def on_friend_add[F: Handler[FriendAdd]](self, handler: F) -> F:
+        """注册用户添加机器人为好友（`FRIEND_ADD`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(FriendAdd, handler)
+        return handler
+
+    def on_friend_del[F: Handler[FriendDel]](self, handler: F) -> F:
+        """注册用户删除机器人好友（`FRIEND_DEL`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(FriendDel, handler)
+        return handler
+
+    def on_c2c_msg_reject[F: Handler[C2CMsgReject]](self, handler: F) -> F:
+        """注册用户关闭主动消息（`C2C_MSG_REJECT`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(C2CMsgReject, handler)
+        return handler
+
+    def on_c2c_msg_receive[F: Handler[C2CMsgReceive]](self, handler: F) -> F:
+        """注册用户打开主动消息（`C2C_MSG_RECEIVE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(C2CMsgReceive, handler)
+        return handler
+
+    def on_group_add_robot[F: Handler[GroupAddRobot]](self, handler: F) -> F:
+        """注册机器人被拉进群（`GROUP_ADD_ROBOT`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(GroupAddRobot, handler)
+        return handler
+
+    def on_group_del_robot[F: Handler[GroupDelRobot]](self, handler: F) -> F:
+        """注册机器人被移出群（`GROUP_DEL_ROBOT`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(GroupDelRobot, handler)
+        return handler
+
+    def on_group_msg_reject[F: Handler[GroupMsgReject]](self, handler: F) -> F:
+        """注册群关闭主动消息（`GROUP_MSG_REJECT`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(GroupMsgReject, handler)
+        return handler
+
+    def on_group_msg_receive[F: Handler[GroupMsgReceive]](self, handler: F) -> F:
+        """注册群打开主动消息（`GROUP_MSG_RECEIVE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(GroupMsgReceive, handler)
+        return handler
+
+    def on_group_member_add[F: Handler[GroupMemberAdd]](self, handler: F) -> F:
+        """注册群成员加入（`GROUP_MEMBER_ADD`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(GroupMemberAdd, handler)
+        return handler
+
+    def on_group_member_remove[F: Handler[GroupMemberRemove]](self, handler: F) -> F:
+        """注册群成员离开（`GROUP_MEMBER_REMOVE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(GroupMemberRemove, handler)
+        return handler
+
+    def on_group_join_request[F: Handler[GroupJoinRequest]](self, handler: F) -> F:
+        """注册入群申请（`GROUP_JOIN_REQUEST`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        只有机器人是群管理员时才会收到。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(GroupJoinRequest, handler)
+        return handler
+
+    def on_subscribe_message_status[F: Handler[SubscribeMessageStatus]](self, handler: F) -> F:
+        """注册订阅消息授权状态变更（`SUBSCRIBE_MESSAGE_STATUS`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(SubscribeMessageStatus, handler)
+        return handler
+
+    def on_interaction[F: Handler[Interaction]](self, handler: F) -> F:
+        """注册互动事件（`INTERACTION_CREATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        回调按钮与快捷菜单要在 3 秒内 `ack()`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(Interaction, handler)
         return handler
 
     def _resolve_intents(self) -> Intents:

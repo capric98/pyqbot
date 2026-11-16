@@ -5,10 +5,10 @@
 
 from .._http import HTTP, path_segment
 from .._models.event import ReplyTarget, reply_fields
-from .._models.message import C2CMessage, GroupMessage, MessageType, SentMessage
+from .._models.message import C2CMessage, GroupAnyMessage, MessageType, SentMessage
 from .._models.send import Card, Keyboard, Markdown, Media
 
-type Quote = str | SentMessage | C2CMessage | GroupMessage
+type Quote = str | SentMessage | C2CMessage | GroupAnyMessage
 
 _CARD_TYPE = "tuwen"  # 图文卡片，目前唯一的卡片类型
 _INPUT_TYPE = 1  # 文档只说「填1」
@@ -89,7 +89,7 @@ def typing_body(seconds: int) -> dict[str, object]:
     }
 
 
-def message_path(base: str, message: str | SentMessage | GroupMessage) -> str:
+def message_path(base: str, message: str | SentMessage | GroupAnyMessage) -> str:
     """撤回接口的路径：`{base}/{message_id}`。
 
     Raises:

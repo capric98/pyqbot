@@ -2,7 +2,7 @@
 
 from .._http import HTTP, path_segment
 from .._models.event import GroupReplyTarget
-from .._models.message import GroupMessage, SentMessage
+from .._models.message import GroupAnyMessage, SentMessage
 from .._models.send import Card, Keyboard, Markdown, Media
 from .message import message_body, message_path, send_message
 
@@ -22,7 +22,7 @@ class Groups:
         keyboard: Keyboard | None = None,
         media: Media | None = None,
         card: Card | None = None,
-        quote: str | SentMessage | GroupMessage | None = None,
+        quote: str | SentMessage | GroupAnyMessage | None = None,
         reply_to: GroupReplyTarget | None = None,
     ) -> SentMessage:
         """向群发送一条消息，`msg_type` 由 SDK 按传了哪些内容推断。
@@ -61,10 +61,12 @@ class Groups:
         )
         return await send_message(self._http, path, body, reply_to=reply_to)
 
-    async def recall_message(self, openid: str, message: str | SentMessage | GroupMessage) -> None:
+    async def recall_message(
+        self, openid: str, message: str | SentMessage | GroupAnyMessage
+    ) -> None:
         """撤回群里的一条消息。发出超过 2 分钟的消息不能撤回。
 
-        机器人只能撤回自己的消息；是群管理员时还能撤回普通成员的消息（传入收到的 `GroupMessage`）。
+        机器人只能撤回自己的消息；是群管理员时还能撤回普通成员的消息（传入收到的群消息）。
 
         对应官方接口 `DELETE /v2/groups/{group_openid}/messages/{message_id}`。
 

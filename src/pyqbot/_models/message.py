@@ -1,7 +1,7 @@
 """消息相关的模型：发消息的结果，以及收到的单聊、群聊消息事件。
 
 官方文档：`autogen/api/v2_users_user_openid_messages.post.md`、`autogen/event/c2c_message_create.md`、
-`autogen/event/group_at_message_create.md`。
+`autogen/event/group_at_message_create.md`、`autogen/event/group_message_create.md`。
 """
 
 from datetime import datetime
@@ -9,7 +9,7 @@ from datetime import datetime
 import msgspec
 
 from .._gateway.intents import Intents
-from .._model import Model, OpenIntEnum
+from .._model import Model, OpenIntEnum, OpenStrEnum
 from .event import C2CReplyTarget, GroupReplyTarget, ReceivedMessage
 from .send import Card, Keyboard, Markdown, Media
 
@@ -66,6 +66,14 @@ class ReceivedMessageType(OpenIntEnum):
     QUOTE = 103
 
 
+class MemberRole(OpenStrEnum):
+    """群成员在群里的角色（`member_role`）。"""
+
+    MEMBER = "member"
+    ADMIN = "admin"
+    OWNER = "owner"
+
+
 class _UserBase(Model):
     # 文档的 User 结构里各场景共有的部分；avatar 文档没写，见 docs/errata.md。
     id: str | None = None
@@ -94,13 +102,13 @@ class GroupMember(_UserBase):
 
     Attributes:
         member_openid: 群成员的 openid，与单聊的 `user_openid` 不是同一套取值。
-        member_role: 群内角色：`"member"`、`"admin"` 或 `"owner"`。
+        member_role: 群内角色。
         username: 昵称，可能为空串。
         bot: 是否为机器人。
     """
 
     member_openid: str | None = None
-    member_role: str | None = None
+    member_role: MemberRole | None = None
 
 
 class MessageElementAuthor(_UserBase):
@@ -108,7 +116,7 @@ class MessageElementAuthor(_UserBase):
 
     user_openid: str | None = None
     member_openid: str | None = None
-    member_role: str | None = None
+    member_role: MemberRole | None = None
 
 
 class MessageAttachment(Model):
@@ -262,29 +270,31 @@ class C2CMessage(_ChatMessage, C2CReplyTarget):
         await client.users.send_typing(self.user_openid, seconds=seconds, reply_to=self)
 
 
-class GroupMessage(_ChatMessage, GroupReplyTarget):
-    """群里 @机器人 的消息，对应事件 `GROUP_AT_MESSAGE_CREATE`。
+class GroupAnyMessage(_ChatMessage, GroupReplyTarget):
+    """群里的任意一条消息（不限于 @机器人），对应事件 `GROUP_MESSAGE_CREATE`。
 
-    平台可能重复推送同一条消息（`id` 相同），需要时自行去重。
+    机器人开启了「接收所有消息」才会收到。`GroupMessage`（@机器人 的消息）是它的子类，
+    所以一个标注为 `GroupAnyMessage` 的处理函数可以同时注册到 `@bot.on_group_message` 与
+    `@bot.on_group_at_message`；反过来不行。平台可能重复推送同一条消息（`id` 相同），需要时自行去重。
 
     Attributes:
         group_openid: 群的 openid，主动往群里发消息时传给 `client.groups.send_message()`。
         author: 发送者；缺失时各字段都是 `None`。
-        content: 文本内容，已去掉开头的 @机器人；官方示例里带首尾空格，需要时自行 `strip()`。
-        mentions: 消息里 @ 的其他成员，不含机器人自己。
+        content: 文本内容。@ 某成员写作 `<@member_openid>`，@全体成员写作 `<@all>`。
+        mentions: 消息里 @ 的成员。
 
     其余字段与 `C2CMessage` 相同。
 
     Example:
         ```python
-        @bot.on_group_at_message
-        async def pong(message: pyqbot.GroupMessage) -> None:
-            if message.content.strip() == "/ping":
-                await message.reply("pong")
+        @bot.on_group_message
+        async def watch(message: pyqbot.GroupAnyMessage) -> None:
+            if "<@all>" in message.content:
+                await message.reply("收到通知")
         ```
     """
 
-    event_name = "GROUP_AT_MESSAGE_CREATE"
+    event_name = "GROUP_MESSAGE_CREATE"
     intent = Intents.GROUP_AND_C2C_EVENT
 
     group_openid: str
@@ -304,7 +314,7 @@ class GroupMessage(_ChatMessage, GroupReplyTarget):
         keyboard: Keyboard | None = None,
         media: Media | None = None,
         card: Card | None = None,
-        quote: str | SentMessage | GroupMessage | None = None,
+        quote: str | SentMessage | GroupAnyMessage | None = None,
     ) -> SentMessage:
         """被动回复这条消息，`msg_id` 与 `msg_seq` 由 SDK 填写；参数同 `client.groups.send_message()`。
 
@@ -327,3 +337,26 @@ class GroupMessage(_ChatMessage, GroupReplyTarget):
             quote=quote,
             reply_to=self,
         )
+
+
+class GroupMessage(GroupAnyMessage):
+    """群里 @机器人 的消息，对应事件 `GROUP_AT_MESSAGE_CREATE`。
+
+    平台可能重复推送同一条消息（`id` 相同），需要时自行去重。
+
+    Attributes:
+        content: 文本内容，已去掉开头的 @机器人；官方示例里带首尾空格，需要时自行 `strip()`。
+        mentions: 消息里 @ 的其他成员，不含机器人自己。
+
+    其余字段与方法同 `GroupAnyMessage`。
+
+    Example:
+        ```python
+        @bot.on_group_at_message
+        async def pong(message: pyqbot.GroupMessage) -> None:
+            if message.content.strip() == "/ping":
+                await message.reply("pong")
+        ```
+    """
+
+    event_name = "GROUP_AT_MESSAGE_CREATE"

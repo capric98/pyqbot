@@ -1,0 +1,289 @@
+"""互动事件 `INTERACTION_CREATE`（`autogen/event/interaction_create.md`）及回应它用的枚举。"""
+
+from datetime import datetime
+
+import msgspec
+
+from .._gateway.intents import Intents
+from .._model import Model, OpenIntEnum, OpenStrEnum
+from .event import C2CReplyTarget, GroupReplyTarget
+from .message import SentMessage
+from .send import Card, Keyboard, Markdown, Media
+
+
+class InteractionType(OpenIntEnum):
+    """互动的类型（`Interaction.type` 与 `data.type`）。
+
+    Attributes:
+        INLINE_KEYBOARD: 点击消息里的回调按钮，需要 `ack()`。
+        CALLBACK_COMMAND: 点击单聊的快捷菜单，需要 `ack()`。
+        MESSAGE_FEEDBACK: 对智能体消息点赞或点踩。
+        CLEAR_SESSION: 清空智能体会话。
+        IN_OUT_STORY: 进入或退出故事集。
+        SWITCH_MODEL: 切换智能体模型。
+        USER_AUTHORIZE: 用户授权。
+        GROUP_AUTHORIZE: 群授权。
+        GROUP_AUTHORIZE_STATUS: 群授权状态变更（文档没有说明）。
+    """
+
+    INLINE_KEYBOARD = 11
+    CALLBACK_COMMAND = 12
+    MESSAGE_FEEDBACK = 13
+    CLEAR_SESSION = 14
+    IN_OUT_STORY = 15
+    SWITCH_MODEL = 16
+    USER_AUTHORIZE = 18
+    GROUP_AUTHORIZE = 19
+    GROUP_AUTHORIZE_STATUS = 20
+
+
+class ChatType(OpenIntEnum):
+    """互动发生在哪里（`Interaction.chat_type`）。"""
+
+    GUILD = 0
+    GROUP = 1
+    C2C = 2
+
+
+class InteractionScene(OpenStrEnum):
+    """互动发生在哪里（`Interaction.scene`），与 `ChatType` 一一对应。"""
+
+    C2C = "c2c"
+    GROUP = "group"
+    GUILD = "guild"
+
+
+class AuthorizeOptScene(OpenStrEnum):
+    """用户在哪里授权（`InteractionAuthorizeData.opt_scene`）。
+
+    Attributes:
+        SETTING: 资料页设置。
+        DIALOG: 弹窗授权。
+    """
+
+    SETTING = "setting"
+    DIALOG = "dialog"
+
+
+class AuthorizeScope(OpenStrEnum):
+    """授权的范围（`InteractionAuthorizeData.scope`）。
+
+    Attributes:
+        C2C_PUSH: 单聊主动消息。
+        GROUP_PUSH: 群主动消息。
+    """
+
+    C2C_PUSH = "c2c_push"
+    GROUP_PUSH = "group_push"
+
+
+class FeedbackOption(OpenStrEnum):
+    """消息反馈的选项（`InteractionResolved.feedback_opt`）。"""
+
+    LIKE = "LIKE"
+    UNLIKE = "UNLIKE"
+
+
+class InteractionResult(OpenIntEnum):
+    """回应互动时告诉平台的结果（`code`），见 `Interaction.ack()`。
+
+    Attributes:
+        SUCCESS: 成功。
+        FAILED: 操作失败。
+        TOO_FREQUENT: 操作过于频繁。
+        DUPLICATE: 重复操作。
+        NO_PERMISSION: 没有权限。
+        ADMIN_ONLY: 仅管理员可以操作。
+    """
+
+    SUCCESS = 0
+    FAILED = 1
+    TOO_FREQUENT = 2
+    DUPLICATE = 3
+    NO_PERMISSION = 4
+    ADMIN_ONLY = 5
+
+
+class InteractionAuthorizeData(Model):
+    """授权类互动的内容：在哪里授权、授权了什么。"""
+
+    opt_scene: AuthorizeOptScene | None = None
+    scope: AuthorizeScope | None = None
+
+
+class InteractionMessageScene(Model):
+    """消息反馈所在消息的场景；`ext` 是 `key=value` 形式的字符串。"""
+
+    ext: tuple[str, ...] = ()
+
+
+class InteractionResolved(Model):
+    """互动的具体内容，各字段只在对应类型下有值。
+
+    Attributes:
+        button_data: 按钮的 `data`；消息反馈时是回调数据。
+        button_id: 按钮的 `id`。
+        user_id: 操作者（仅频道）。
+        feature_id: 快捷菜单的功能 ID。
+        message_id: 被操作的消息 ID。
+        feedback_opt: 消息反馈的选项。
+        checked: 消息反馈的选项是否选中。
+        action: 故事集的 `"ENTER_STORY"` / `"QUIT_STORY"`，或切换模型的动作。
+        message_scene: 消息反馈所在消息的场景。
+        authorize_data: 授权类互动的内容。
+    """
+
+    button_data: str | None = None
+    button_id: str | None = None
+    user_id: str | None = None
+    feature_id: str | None = None
+    message_id: str | None = None
+    feedback_opt: FeedbackOption | None = None
+    checked: int | None = None
+    action: str | None = None
+    message_scene: InteractionMessageScene | None = None
+    authorize_data: InteractionAuthorizeData | None = None
+
+
+class InteractionData(Model):
+    """`Interaction.data`。"""
+
+    type: InteractionType | None = None
+    resolved: InteractionResolved = msgspec.field(default_factory=InteractionResolved)
+
+
+# 文档的示例 3 没有 chat_type，只有 scene，所以按 scene 补上。
+_SCENES = {
+    InteractionScene.C2C: ChatType.C2C,
+    InteractionScene.GROUP: ChatType.GROUP,
+    InteractionScene.GUILD: ChatType.GUILD,
+}
+
+
+class Interaction(C2CReplyTarget, GroupReplyTarget):
+    """用户与机器人的互动，如点击回调按钮、快捷菜单、授权，对应事件 `INTERACTION_CREATE`。
+
+    回调按钮与快捷菜单（`type` 为 `INLINE_KEYBOARD`、`CALLBACK_COMMAND`）需要在 3 秒内 `ack()`，
+    否则用户那边会一直转圈；SDK 不会替你回应。单聊和群聊的互动都可以用 `reply()` 被动回复。
+
+    Attributes:
+        id: 互动 ID，`ack()` 用它；与被动回复用的 `event_id`（payload 外层的 `id`）不是一个值。
+        type: 互动的类型。
+        chat_type: 发生在单聊、群聊还是频道。
+        scene: 同上的字符串形式。
+        timestamp: 触发时间，带时区。
+        user_openid: 操作者的 openid，仅单聊。
+        group_openid: 群的 openid，仅群聊。
+        group_member_openid: 操作者在群里的 openid，仅群聊。
+        guild_id: 频道 ID，仅频道。
+        channel_id: 子频道 ID，仅频道。
+        data: 互动的具体内容；常用的按钮字段另有 `button_data`、`button_id` 属性。
+        version: 版本号。
+        application_id: 机器人的 AppID。
+
+    Example:
+        ```python
+        @bot.on_interaction
+        async def clicked(interaction: pyqbot.Interaction) -> None:
+            await interaction.ack()
+            await interaction.reply(f"你点了 {interaction.button_data}")
+        ```
+    """
+
+    event_name = "INTERACTION_CREATE"
+    intent = Intents.INTERACTION
+
+    id: str
+    type: InteractionType | None = None
+    chat_type: ChatType | None = None
+    scene: InteractionScene | None = None
+    timestamp: datetime | None = None
+    user_openid: str | None = None
+    group_openid: str | None = None
+    group_member_openid: str | None = None
+    guild_id: str | None = None
+    channel_id: str | None = None
+    data: InteractionData = msgspec.field(default_factory=InteractionData)
+    version: int | None = None
+    application_id: str | None = None
+
+    @property
+    def button_data(self) -> str | None:
+        """被点击按钮的 `data`，即 `data.resolved.button_data`。"""
+        return self.data.resolved.button_data
+
+    @property
+    def button_id(self) -> str | None:
+        """被点击按钮的 `id`，即 `data.resolved.button_id`。"""
+        return self.data.resolved.button_id
+
+    async def ack(self, *, code: InteractionResult = InteractionResult.SUCCESS) -> None:
+        """回应这次互动，用户那边随之结束等待；参数同 `client.interactions.ack()`。
+
+        只有回调按钮与快捷菜单需要回应，且每次互动只能回应一次，要在 3 秒内完成。
+
+        Raises:
+            APIError: 平台拒绝，例如已经回应过或已超时。
+            NetworkError: 没有拿到平台的响应。
+            RuntimeError: 事件不是 `Bot` 分发来的（没有绑定客户端），或客户端已关闭。
+        """
+        await self._bound_client().interactions.ack(self, code=code)
+
+    async def reply(
+        self,
+        content: str | None = None,
+        *,
+        markdown: str | Markdown | None = None,
+        keyboard: Keyboard | None = None,
+        media: Media | None = None,
+        card: Card | None = None,
+        quote: str | SentMessage | None = None,
+    ) -> SentMessage:
+        """用事件 ID 被动回复：单聊发给操作者，群聊发到群里；`event_id` 与 `msg_seq` 由 SDK 填写。
+
+        参数同 `client.users.send_message()`，只是 `quote` 不接受收到的消息。
+        对应官方接口 `POST /v2/users/{user_openid}/messages` 或 `POST /v2/groups/{group_openid}/messages`。
+
+        Raises:
+            APIError: 平台拒绝发送，例如事件 ID 已过期（`err_code` 为 40034026）。
+            NetworkError: 没有拿到平台的响应。
+            NotImplementedError: 频道里的互动，暂不支持。
+            ValueError: 内容参数的组合不合法；事件没有事件 ID；认不出场景，或缺少该场景的 openid。
+            RuntimeError: 事件不是 `Bot` 分发来的（没有绑定客户端），或客户端已关闭。
+        """
+        client = self._bound_client()
+        chat_type = self.chat_type
+        if chat_type is None and self.scene is not None:
+            chat_type = _SCENES.get(self.scene)
+        match chat_type:
+            case ChatType.C2C if self.user_openid is not None:
+                return await client.users.send_message(
+                    self.user_openid,
+                    content,
+                    markdown=markdown,
+                    keyboard=keyboard,
+                    media=media,
+                    card=card,
+                    quote=quote,
+                    reply_to=self,
+                )
+            case ChatType.GROUP if self.group_openid is not None:
+                return await client.groups.send_message(
+                    self.group_openid,
+                    content,
+                    markdown=markdown,
+                    keyboard=keyboard,
+                    media=media,
+                    card=card,
+                    quote=quote,
+                    reply_to=self,
+                )
+            case ChatType.GUILD:
+                raise NotImplementedError("频道里的互动暂不支持 reply()")
+            case _:
+                # 不带 scene 原文：平台给的字符串进异常前要脱敏（约定 7），整数的 chat_type 不用。
+                chat_type_value = None if self.chat_type is None else int(self.chat_type)
+                raise ValueError(
+                    f"无法回复这次互动（chat_type={chat_type_value}）：认不出场景，"
+                    "或缺少该场景的 user_openid / group_openid"
+                )
