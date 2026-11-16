@@ -49,6 +49,27 @@
 - **已知**：客户端以 1000 正常关闭后重连并 Resume 可以恢复会话（已确认，见下）。
 - **当前做法**：其它 4000~4999 按「其他错误，请重新发起 identify」Identify；其余尝试 Resume，会话已失效时网关会再以 4006 或 OpCode 9 告知。
 
+### 网关心跳：从什么时候开始
+
+- **位置**：`dev-prepare/event-emit/websocket.md`「发送心跳 Ack」「恢复登录态 Session」。
+- **含糊**：「鉴权成功之后」按周期发心跳，但 Resume 成功的信号 `RESUMED` 要等遗漏事件补发完才到；第一次心跳是立刻发还是隔一个周期也没说。
+- **当前做法**：本连接收到第一条 Dispatch（READY、补发的事件或 RESUMED）就算认证成功，立刻发一次心跳，之后按周期发。
+- **怎么测**：断开后积压几条事件再 Resume，看 `RESUMED` 之前的事件与心跳应答的先后。
+
+### OpCode 7、OpCode 9：之后该怎么做
+
+- **位置**：`dev-prepare/event-emit/payload.md`「OpCode 含义」。
+- **含糊**：只说 7「通知客户端重新连接」、9「identify 或 resume 的时候参数有错」。没说收到 7 之后该 Resume 还是 Identify，也没说 9 的 `d` 是什么。
+- **当前做法**：7 重连并 Resume；9 不看 `d`，清掉会话重新 Identify，连续 3 次放弃。
+- **不主动实测**：两者都无法主动触发，实际遇到时把 `d` 记到这里。
+
+### 网关：WebSocket Ping、单帧大小与二进制帧
+
+- **位置**：`dev-prepare/event-emit/websocket.md`。
+- **含糊**：没说网关是否回应 WebSocket 层的 Ping、单帧最大多大、会不会发二进制帧。
+- **当前做法**：关掉 httpx2 默认每 20 秒一次的 Ping，存活只看 OpCode 1 心跳；单帧上限放宽到 1 MiB（httpx2 默认 64 KiB）；二进制帧记日志后跳过。
+- **怎么测**：长时间挂着连接，并发送带多张图片的消息，看帧大小与类型。
+
 ### Intents：尚未确认的两处
 
 - **位置**：`dev-prepare/event-emit/payload.md`「事件订阅 Intents」；`autogen/event/`；`server-inter/channel/content/forum/open_forum.md`。

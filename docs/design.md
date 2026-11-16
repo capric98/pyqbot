@@ -54,7 +54,7 @@ src/pyqbot/
   _http.py        请求层：拼 URL、鉴权头、解码、错误映射（已落地） ← _credentials _errors _model _redact
   _api/           接口封装，每组一个持有请求层的小类（已落地） ← _http _models
   _client.py      Client = 生命周期 + 凭证 + 各组接口属性（已落地）
-  _gateway/       WebSocket：协议数据（已落地）、连接状态机   ← _errors _model _redact
+  _gateway/       WebSocket：协议数据、连接状态机（已落地）   ← _errors _model _redact
   _events/        分发器，不依赖 _gateway                   ← _models
   _bot.py         Bot(Client)：事件注册、start() / run()，把上面几块接起来
 ```
@@ -73,7 +73,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
   ├── APIError      平台返回了失败：另带 status_code；可按需再细分
   ├── NetworkError  没拿到响应：连接失败、超时
   ├── PayloadError  网关下发的一帧解不开：只丢弃这一帧，连接照常
-  └── GatewayError  网关被关闭且不可恢复（规划，网关模块添加）
+  └── GatewayError  网关被关闭且不可恢复：err_code 为关闭码（有的话）
   ```
 - **`pyqbot.Config`**：见上。
 
@@ -94,9 +94,9 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 - **被动回复**：`reply_to` 接受 `ReceivedMessage`（见「事件」）。`msg_id` 取 `reply_to.id`，`msg_seq` 由 `next_msg_seq()` 在这个消息对象上从 1 递增，发送失败也不回退；调用方不用管。
 - **网关地址**：`Client._get_gateway_url()` 调 `GET /gateway`，由 `Bot.start()` 作为 `get_url` 注入网关连接。
 
-## 网关连接（规划）
+## 网关连接（已落地）
 
-`_gateway/connection.py` 的 `GatewayConnection`（内部）只管连接本身，不认识 `Client` 和事件模型。它需要的东西都由 `Bot.start()` 注入：
+`_gateway/connection.py` 的 `GatewayConnection`（内部）只管连接本身，不认识 `Client` 和事件模型。`Bot.start()` 以关键字参数注入：
 
 | 注入项 | 类型 | 说明 |
 | --- | --- | --- |
@@ -104,24 +104,26 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 | `get_url` | `() -> Awaitable[str]` | 取网关地址，每次建连前调用 |
 | `get_token` | `() -> Awaitable[str]` | 取 access_token，每次建连前调用，所以 token 过期不用单独处理 |
 | `intents` | `Intents` | Identify 时订阅的事件类别 |
-| `on_dispatch` | `(GatewayPayload) -> None` | 每收到一条 Dispatch 调用一次。同步、必须立刻返回，不得在里面等待 |
+| `on_dispatch` | `(GatewayPayload) -> None` | 每条 Dispatch（含 READY、RESUMED）调用一次。同步、必须立刻返回；抛出的异常记日志，不影响连接 |
 
-- **`await connection.run()`**：一直运行到 `await connection.close()`（正常返回）或遇到不可恢复的错误（抛 `GatewayError`）。
-- **会话状态**：`session_id`（来自 READY）与 `seq`（最近一条已交给 `on_dispatch` 的 `s`）。有会话就 Resume，没有就 Identify。
+另有 `shard`（原样用于 Identify）、`connect_timeout`（WebSocket 握手超时，传 `config.timeout`，见约定 2）和下文的各个时间参数，默认值就是生产取值。
+
+- **`await connection.run()`**：一直运行到 `await connection.close()`（正常返回）或遇到不可恢复的错误（抛 `GatewayError`）。`get_url` / `get_token` 抛 `NetworkError` 时按网络错误退避重试，抛其它异常原样向外抛。`run()` 只能调用一次；`close()` 可重复调用，之后再调 `run()` 立即返回。
+- **会话状态**：`session_id`（来自 READY）与 `seq`（最近一条已交给 `on_dispatch` 的 `s`，`on_dispatch` 抛异常也算）。有会话就 Resume，没有就 Identify。
 - **断开后怎么办**：
 
   | 情况 | 动作 |
   | --- | --- |
   | 收到关闭码 | 按 `classify_close_code()`：Resume、Identify（清掉会话）或放弃（抛 `GatewayError`，`err_code` 为关闭码） |
-  | 网络错误、没有关闭帧、心跳没有应答、收到 OpCode 7 | 重连并 Resume |
-  | 收到 OpCode 9 | 清掉会话，重连并 Identify；连续 3 次就放弃 |
-  | Hello、READY、RESUMED 超时未到 | 按网络错误处理 |
+  | 网络错误（含握手被拒）、没有关闭帧、心跳没有应答、收到 OpCode 7 | 重连并 Resume |
+  | 收到 OpCode 9 | 清掉会话，重连并 Identify；连续 3 次（中间没有 READY / RESUMED）就放弃 |
+  | Hello、认证结果超时未到 | 按网络错误处理 |
 
-- **心跳**：按 Hello 给的周期发送，`d` 为当前的 `seq`。到下一次该发时上一次还没收到应答，就认为连接已死，断开重连。收到服务端的 OpCode 1 立刻补发一次。
-- **退避**：重连间隔从 1 秒起每次翻倍，上限 60 秒，带随机抖动；收到 READY 或 RESUMED 后归零。两次 Identify 至少间隔 5 秒（平台按 5 秒窗口限制新建会话数）。这些时间都做成构造参数，测试里设成接近 0。
-- **坏帧**：单帧解不开（`PayloadError`）或遇到未知的 OpCode，记日志后跳过，不影响连接。
+- **心跳**：认证成功（收到本连接的第一条 Dispatch）后立刻发一次，之后按 Hello 给的周期发送，`d` 为当前的 `seq`。到下一次该发时上一次还没收到应答，就认为连接已死，断开重连。收到服务端的 OpCode 1 立刻补发一次。不用 WebSocket 层的 Ping。
+- **认证超时**：`handshake_timeout` 分别限制等 Hello 和等第一条 Dispatch 的时间。不等 RESUMED：它要在补发完遗漏事件之后才到。
+- **退避**：重连间隔从 1 秒起每次翻倍，上限 60 秒，乘以 [0.5, 1] 的随机抖动；收到 READY 或 RESUMED 后从头算。两次 Identify 至少间隔 5 秒（`/gateway/bot` 的 `max_concurrency` 是每 5 秒可新建的会话数）。
+- **坏帧**：单帧解不开（`PayloadError`）、非文本帧或意料之外的 OpCode，记日志后跳过，不影响连接。
 - **日志**：用标准库 `logging.getLogger("pyqbot")`，内容先脱敏（约定 7）。
-- **测试**：用 `ASGIWebSocketTransport` 扮演网关，覆盖上表每一行，以及关闭时不残留任务。
 
 ## 事件（规划）
 
