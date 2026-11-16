@@ -258,6 +258,7 @@ class _GroupMemberNotice(Event):
     timestamp: int | None = None
     group_openid: str
     member_openid: str
+    union_openid: str | None = None
 
 
 class GroupMemberAdd(_GroupMemberNotice):
@@ -267,6 +268,7 @@ class GroupMemberAdd(_GroupMemberNotice):
         group_openid: 群的 openid。
         member_openid: 新成员的 openid。
         timestamp: 加入时间，Unix 秒。
+        union_openid: 跨应用统一的 openid；文档没有列出，实测为空串。
     """
 
     event_name = "GROUP_MEMBER_ADD"
@@ -279,8 +281,9 @@ class GroupMemberRemove(_GroupMemberNotice):
     Attributes:
         group_openid: 群的 openid。
         member_openid: 离开的成员的 openid。
-        user_openid: 他的单聊 openid，可能没有。
+        user_openid: 他的单聊 openid，可能没有（实测没有）。
         timestamp: 离开时间，Unix 秒。
+        union_openid: 跨应用统一的 openid；文档没有列出，实测为空串。
     """
 
     event_name = "GROUP_MEMBER_REMOVE"

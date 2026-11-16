@@ -1,0 +1,12 @@
+{
+  "op": 0,
+  "id": "GROUP_MEMBER_ADD:00000000-0000-0000-0000-000000000006",
+  "s": 2,
+  "t": "GROUP_MEMBER_ADD",
+  "d": {
+    "group_openid": "FEDCBA9876543210FEDCBA9876543210",
+    "member_openid": "0123456789ABCDEF0123456789ABCDEF",
+    "timestamp": 1794864776,
+    "union_openid": ""
+  }
+}

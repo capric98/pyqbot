@@ -19,8 +19,8 @@ class Interactions:
         """回应一次互动，告诉平台已经处理，用户那边随之结束等待。
 
         只有回调按钮与快捷菜单（`InteractionType.INLINE_KEYBOARD`、`CALLBACK_COMMAND`）需要回应，
-        其它类型回应了也不报错。回应要在 3 秒内完成，每次互动只能回应一次；SDK 不自动回应，
-        也不在本地拦截重复回应，由平台拒绝。
+        其它类型回应了也不报错。实测客户端只等约 1 秒（文档写 3 秒）：晚了接口照样成功，用户却看到
+        「请求第三方失败」；重复回应也不报错。SDK 不自动回应。
 
         对应官方接口 `PUT /interactions/{interaction_id}`。
 

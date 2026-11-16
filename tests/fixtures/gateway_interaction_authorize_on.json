@@ -1,0 +1,25 @@
+{
+  "op": 0,
+  "id": "INTERACTION_CREATE:00000000-0000-0000-0000-000000000005",
+  "s": 2,
+  "t": "INTERACTION_CREATE",
+  "d": {
+    "application_id": "1234567890",
+    "data": {
+      "resolved": {
+        "authorize_data": {
+          "opt_scene": "setting",
+          "scope": "c2c_push",
+          "switch": true
+        }
+      }
+    },
+    "id": "00000000-0000-0000-0000-000000000005",
+    "scene": "c2c",
+    "timestamp": "2026-11-17T05:36:40+08:00",
+    "type": 18,
+    "union_openid": "",
+    "user_openid": "0123456789ABCDEF0123456789ABCDEF",
+    "version": 1
+  }
+}

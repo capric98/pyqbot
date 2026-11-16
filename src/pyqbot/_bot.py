@@ -170,8 +170,8 @@ class Bot(Client):
         """注册用户关闭主动消息（`C2C_MSG_REJECT`）的处理函数，原样返回它；要求同 `on_c2c_message`。
 
         2026-11-16 实测切换资料卡的主动消息开关时，平台没有推送这个事件，而是推送
-        `type` 为 `USER_AUTHORIZE`、`authorize_data.scope` 为 `C2C_PUSH` 的 `Interaction`，且分不出开关
-        （`docs/errata.md`）。
+        `type` 为 `USER_AUTHORIZE`、`authorize_data.scope` 为 `C2C_PUSH` 的 `Interaction`，开关状态看
+        `authorize_data.switch`（`docs/errata.md`）。
 
         Raises:
             TypeError: 处理函数不是 `async def` 定义的。
@@ -183,8 +183,8 @@ class Bot(Client):
         """注册用户打开主动消息（`C2C_MSG_RECEIVE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
 
         2026-11-16 实测切换资料卡的主动消息开关时，平台没有推送这个事件，而是推送
-        `type` 为 `USER_AUTHORIZE`、`authorize_data.scope` 为 `C2C_PUSH` 的 `Interaction`，且分不出开关
-        （`docs/errata.md`）。
+        `type` 为 `USER_AUTHORIZE`、`authorize_data.scope` 为 `C2C_PUSH` 的 `Interaction`，开关状态看
+        `authorize_data.switch`（`docs/errata.md`）。
 
         Raises:
             TypeError: 处理函数不是 `async def` 定义的。
@@ -269,7 +269,7 @@ class Bot(Client):
     def on_interaction[F: Handler[Interaction]](self, handler: F) -> F:
         """注册互动事件（`INTERACTION_CREATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
 
-        回调按钮与快捷菜单要在 3 秒内 `ack()`。
+        回调按钮与快捷菜单要在收到后约 1 秒内 `ack()`（实测，见 `Interaction`）。
 
         Raises:
             TypeError: 处理函数不是 `async def` 定义的。

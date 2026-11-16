@@ -212,3 +212,24 @@ def test_group_at_message_keeps_the_leading_space_and_the_group_nickname() -> No
     assert message.author.member_role == pyqbot.GroupMemberRole.ADMIN
     assert message.author.member_openid == "0123456789ABCDEF0123456789ABCDEF"
     assert reply_fields(message)["msg_id"] == "ROBOT1.0_fake-group-message-id"
+
+
+def test_authorize_interaction_carries_switch_only_when_turned_on() -> None:
+    off = event_from("gateway_interaction_authorize.json", pyqbot.Interaction)
+    on = event_from("gateway_interaction_authorize_on.json", pyqbot.Interaction)
+
+    assert off.data.resolved.authorize_data is not None
+    assert on.data.resolved.authorize_data is not None
+    assert (off.data.resolved.authorize_data.switch, on.data.resolved.authorize_data.switch) == (
+        False,
+        True,
+    )
+
+
+def test_group_member_events_carry_an_empty_union_openid() -> None:
+    added = event_from("gateway_group_member_add.json", pyqbot.GroupMemberAdd)
+    removed = event_from("gateway_group_member_remove.json", pyqbot.GroupMemberRemove)
+
+    assert (added.union_openid, removed.union_openid) == ("", "")
+    assert removed.user_openid is None
+    assert added.event_id == "GROUP_MEMBER_ADD:00000000-0000-0000-0000-000000000006"

@@ -107,10 +107,17 @@ class InteractionResult(OpenIntEnum):
 
 
 class InteractionAuthorizeData(Model):
-    """授权类互动的内容：在哪里授权、授权了什么。"""
+    """授权类互动的内容：在哪里授权、授权了什么。
+
+    Attributes:
+        opt_scene: 在哪里操作的。
+        scope: 授权的范围。
+        switch: 是否打开。文档没有这个字段；实测打开时为 `true`，关闭时平台不带它，所以缺省为 `False`。
+    """
 
     opt_scene: AuthorizeOptScene | None = None
     scope: AuthorizeScope | None = None
+    switch: bool = False
 
 
 class InteractionMessageScene(Model):
@@ -165,8 +172,8 @@ _SCENES = {
 class Interaction(C2CReplyTarget, GroupReplyTarget, ChannelReplyTarget):
     """用户与机器人的互动，如点击回调按钮、快捷菜单、授权，对应事件 `INTERACTION_CREATE`。
 
-    回调按钮与快捷菜单（`type` 为 `INLINE_KEYBOARD`、`CALLBACK_COMMAND`）需要在 3 秒内 `ack()`，
-    否则用户那边会一直转圈；SDK 不会替你回应。单聊、群聊和频道的互动都可以用 `reply()` 被动回复。
+    回调按钮与快捷菜单（`type` 为 `INLINE_KEYBOARD`、`CALLBACK_COMMAND`）要在收到后约 1 秒内 `ack()`
+    （实测，文档写 3 秒），否则用户那边提示「请求第三方失败」；SDK 不会替你回应，耗时的处理放在回应之后。单聊、群聊和频道的互动都可以用 `reply()` 被动回复。
 
     Attributes:
         id: 互动 ID，`ack()` 用它；与被动回复用的 `event_id`（payload 外层的 `id`）不是一个值。
@@ -222,12 +229,12 @@ class Interaction(C2CReplyTarget, GroupReplyTarget, ChannelReplyTarget):
     async def ack(self, *, code: InteractionResult = InteractionResult.SUCCESS) -> None:
         """回应这次互动，用户那边随之结束等待；参数同 `client.interactions.ack()`。
 
-        只有回调按钮与快捷菜单需要回应，且每次互动只能回应一次，要在 3 秒内完成。
+        只有回调按钮与快捷菜单需要回应，要在收到后约 1 秒内完成；晚了或重复回应，平台也不报错。
 
         对应官方接口 `PUT /interactions/{interaction_id}`。
 
         Raises:
-            APIError: 平台拒绝，例如已经回应过或已超时。
+            APIError: 平台拒绝，例如互动不存在（超时与重复回应实测都不报错）。
             NetworkError: 没有拿到平台的响应。
             RuntimeError: 事件不是 `Bot` 分发来的（没有绑定客户端），或客户端已关闭。
         """
