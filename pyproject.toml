@@ -1,0 +1,102 @@
+[project]
+name = "pyqbot"
+version = "0.1.0"
+description = "一个人类能使用的 QQ 机器人 Python SDK"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "capric98" }]
+requires-python = ">=3.14"
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Framework :: AsyncIO",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
+]
+dependencies = [
+    "httpx2[ws]>=2.16.0",
+    "msgspec>=0.22.0",
+]
+
+[project.urls]
+Repository = "https://github.com/capric98/pyqbot"
+
+[build-system]
+requires = ["uv_build>=0.13.8,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pyright[nodejs]>=1.1.414",
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.5.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.17.5",
+]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+# scripts/ 下是自带依赖声明的独立脚本，兼容的 Python 版本与 SDK 不同，不套用这里的规则；
+# docs/upstream/ 是生成的官方文档快照，不能被格式化改动。
+extend-exclude = ["scripts", "docs/upstream"]
+
+[tool.ruff.lint]
+extend-select = [
+    "I",     # import 排序
+    "N",     # 命名
+    "UP",    # 使用新语法
+    "B",     # 常见 bug
+    "C4",    # 推导式写法
+    "SIM",   # 可简化的写法
+    "ASYNC", # async 误用
+    "PT",    # pytest 写法
+    "T20",   # 禁止遗留 print
+    "D",     # docstring
+    "RUF",
+]
+ignore = [
+    "D415",   # 该规则不认中文句号
+    "RUF001", # 以下三条会把中文全角标点当成误用字符
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.14"
+typeCheckingMode = "strict"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+    "--import-mode=importlib",
+    "--strict-markers",
+    "--strict-config",
+    "--cov",
+    "--cov-report=term-missing:skip-covered",
+    "-m",
+    "not live",
+]
+markers = ["live: 调用真实接口的实测，默认不运行"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+xfail_strict = true
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+branch = true
+source_pkgs = ["pyqbot"]
+
+[tool.coverage.report]
+fail_under = 95
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "@overload",
+]

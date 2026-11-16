@@ -11,7 +11,7 @@ uv sync                                         # 安装依赖
 uv run ruff check --fix && uv run ruff format   # lint + 格式化
 uv run pyright                                  # 类型检查（strict）
 uv run pytest                                   # 本地测试，含覆盖率门槛
-uv run --env-file .env pytest -m live           # 实测，须先获用户同意
+uv run --env-file .env pytest -m live --no-cov  # 实测，须先获用户同意
 ```
 
 交付前，前四条必须全部通过。
