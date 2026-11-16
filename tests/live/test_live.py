@@ -8,6 +8,8 @@
 `raw/` 是去掉 token 的原始数据，含 openid 与消息内容，只留在本机。
 """
 
+import asyncio
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -36,6 +38,8 @@ from pyqbot._redact import redact
 pytestmark = pytest.mark.live
 
 OUTPUT_DIR = Path(__file__).parents[2] / ".cache" / "live"
+API_BASE = "https://api.bot.qq.com"
+TOKEN_URL = API_BASE + "/app/getAppAccessToken"
 WRONG_SECRET = "pyqbot-live-test-wrong-secret"
 REPLY_TIMEOUT = 15.0  # 秒：等网关对 Identify / Resume 的答复
 C2C_MESSAGE_EVENT = "C2C_MESSAGE_CREATE"
@@ -187,6 +191,87 @@ async def test_wrong_secret_error(app_id: str) -> None:
             "message": redact(error.message, WRONG_SECRET),
         },
     )
+
+
+async def test_token_refresh_window(app_id: str, app_secret: str) -> None:
+    """观察 token 临近过期时的换发行为；要跑到当前 token 过期为止，最长两个多小时。
+
+    每次请求记一行到 `token_window.jsonl`：已过去的秒数、token 的指纹、`expires_in`，
+    换发之后再加上旧 token 是否还能用。
+    """
+    require_flag("LIVE_TOKEN_WINDOW")
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    log = OUTPUT_DIR / "token_window.jsonl"
+    started = monotonic()
+    first_token: str | None = None
+    first_remaining = 7200.0
+    changed_at: float | None = None
+
+    async with httpx2.AsyncClient() as http:
+        while True:
+            elapsed = monotonic() - started
+            response = await http.post(
+                TOKEN_URL, json={"appId": app_id, "clientSecret": app_secret}, timeout=30
+            )
+            body = cast(dict[str, object], response.json())
+            token = body.get("access_token")
+            remaining = _as_seconds(body.get("expires_in"))
+            entry: dict[str, object] = {
+                "elapsed": round(elapsed, 1),
+                "token": _fingerprint(token),
+                "expires_in": body.get("expires_in"),
+                "code": body.get("code"),
+            }
+            if isinstance(token, str) and first_token is None:
+                first_token, first_remaining = token, remaining or first_remaining
+            if isinstance(token, str) and first_token is not None and token != first_token:
+                changed_at = elapsed if changed_at is None else changed_at
+                old = await http.get(
+                    API_BASE + "/users/@me",
+                    headers={"Authorization": f"QQBot {first_token}"},
+                    timeout=30,
+                )
+                entry["since_change"] = round(elapsed - changed_at, 1)
+                entry["old_token_status"] = old.status_code
+                entry["old_token_body"] = outline(
+                    _json_or_none(old), app_secret, token, first_token
+                )
+            with log.open("a", encoding="utf-8") as lines:
+                lines.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+            if changed_at is not None and elapsed - changed_at > 150:
+                break
+            if elapsed > first_remaining + 400:
+                break
+            await asyncio.sleep(_poll_delay(remaining, changed=changed_at is not None))
+
+
+def _poll_delay(remaining: float | None, *, changed: bool) -> float:
+    if changed:
+        return 5
+    if remaining is None:  # 限频等失败响应
+        return 15
+    if remaining > 180:
+        return min(300, remaining - 150)
+    return 10 if remaining > 75 else 5
+
+
+def _as_seconds(value: object) -> float | None:
+    try:
+        return float(cast(str, value))
+    except TypeError, ValueError:
+        return None
+
+
+def _fingerprint(token: object) -> str | None:
+    return hashlib.sha256(token.encode()).hexdigest()[:8] if isinstance(token, str) else None
+
+
+def _json_or_none(response: httpx2.Response) -> object:
+    try:
+        return response.json()
+    except ValueError:
+        return None
 
 
 async def test_gateway_identify_wait_for_message_then_resume(app_id: str, app_secret: str) -> None:
