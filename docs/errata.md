@@ -298,6 +298,8 @@
 
 以下频道相关的条目目前都不能实测：`AGENTS.md` 只允许对测试用户发单聊消息。共同的前提是一个机器人所在的测试频道（沙箱频道即可），多数还要由另一个人在频道里操作，会影响其他用户，须单独征得同意。私域事件（`GUILD_MESSAGES`、`FORUMS_EVENT`）另需私域机器人。
 
+管理接口（`client.guilds`、`client.channels`）另需：机器人在测试频道里是管理员；成员列表、身份组成员列表、移出成员、创建/修改/删除子频道要私域机器人，且开通私域后要把机器人移出频道再重新添加；禁言、移出成员、改身份组与权限须有一个同意配合的测试成员（不能是管理员）；子频道在线人数要有音视频或直播子频道；授权链接每个频道每天只能发 3 条。这些操作都会影响频道里的其他人，每次须单独征得同意，用完把测试成员与子频道恢复原状。
+
 ### 子频道全量消息 `MESSAGE_CREATE` 的 Intent
 
 - **位置**：`server-inter/channel/message/event.md` 的 `MESSAGE_CREATE` 标题；`dev-prepare/event-emit/payload.md`「事件订阅 Intents」。
@@ -397,6 +399,64 @@
 - **含糊**：`GUILD_MEMBER_*` 可以用 `event_id` 被动回复，但发消息接口的路径要 `channel_id`，事件里只有 `guild_id`。
 - **当前做法**：`GuildMember*` 继承 `ChannelReplyTarget`，回复时由调用方指定子频道（见 `design.md`「事件」）。
 - **怎么测**：由人加入测试频道，用事件 ID 被动回复到任一子频道，看是否被接受、是否限定子频道。
+
+### 频道、子频道、成员列表：响应是对象还是裸数组
+
+- **位置**：`autogen/api/users_me_guilds.get.md`、`autogen/api/guilds_guild_id_channels.get.md` 的响应体与示例；`server-inter/channel/role/member/get_members.md`。
+- **矛盾**：两个 `autogen` 页的表格说响应是 `{guilds: [...]}`、`{channels: [...]}`，示例（以及旧版的 `openapi/user/guilds.md`）都是裸数组；成员列表只说「返回 Member 对象数组」。
+- **当前做法**：三者都两种形状都认（成员列表按 `{members: [...]}` 推测），对象里没有可用的列表时为空；根既不是数组也不是对象时抛 `APIError`，见 `design.md`「频道管理」。
+- **怎么测**：各调一次，记下响应的形状。
+
+### 频道成员列表：重复与结束
+
+- **位置**：`role/member/get_members.md`「有关返回结果的说明」。
+- **含糊**：说翻页时「可能会返回上一次请求已经返回过的 member」，要调用方按 user id 去重；没说重复只来自上一页还是可能来自更早的页。
+- **当前做法**：按文档字面只记上一页的用户 ID 去重；以最后一个成员的 user id 作 `after`，空页结束。没有 user id 的成员跳过；最后一个成员没有 user id 时无法继续，抛 `APIError`。
+- **怎么测**：在成员较多的频道用小的 `limit`（如 2）翻完，统计重复的 user id 出现在第几页。
+
+### 身份组成员列表：`next` 的结束标志
+
+- **位置**：`role/member/get_role_members.md`。
+- **含糊**：没说最后一页的 `next` 是什么；唯一的示例只有一个成员、`next` 是 `"0"`，而 `"0"` 也是第一次请求的 `start_index`。
+- **当前做法**：`data` 为空或 `next` 为 `"0"` 时结束。
+- **怎么测**：对人数多于 `limit` 的身份组翻完，记下最后一页的 `next`。
+
+### 身份组：`hoist` 的类型
+
+- **位置**：`role-group/post_guild_role.md`、`patch_guild_role.md`。
+- **矛盾**：参数表说 `hoist` 是 int32，两页的请求示例都是字符串 `"1"`；响应里是整数。
+- **当前做法**：公共参数是 `bool`，按参数表发整数 0 / 1。
+- **怎么测**：创建一个 `hoist=True` 的身份组，看响应里的 `hoist` 是否为 1，再删除它。
+
+### 禁言：全员与批量共用一个接口，两个时间字段
+
+- **位置**：`speak/patch_guild_mute.md`、`patch_guild_mute_multi_member.md`、`patch_guild_member_mute.md`。
+- **含糊**：
+  - `PATCH /guilds/{guild_id}/mute` 在两页里分别是全员禁言（成功 204）和带 `user_ids` 的批量禁言（成功 200，返回 `{user_ids}`）。
+  - `mute_end_timestamp` 与 `mute_seconds`「二选一」，同时传「以 `mute_end_timestamp` 为准」；没说只传 `mute_seconds` 时缺省的 `mute_end_timestamp` 会不会被当成 0（解除）。解除时说「任一传 `'0'` 即可」。
+- **当前做法**：全员与单个成员不解码响应；批量解成 `{user_ids}`。禁言只发 `mute_end_timestamp`（`timedelta` 在本地换算成时刻），解除时两个字段都发 `"0"`。
+- **怎么测**：对测试成员分别禁言、批量禁言并解除，看是否生效、批量的响应是否有 `user_ids`；全员禁言要另征得同意。
+
+### 子频道在线人数：空对象还是 `{online_nums}`
+
+- **位置**：`role/get_online_nums.md`「返回」。
+- **矛盾**：说「成功返回空对象」，紧接着的代码块与示例都是 `{"online_nums": 1}`。
+- **当前做法**：返回整数，没有 `online_nums` 时为 0（推测是 0 被省略）。
+- **怎么测**：在没人与有人的音视频子频道各查一次。
+
+### 消息频率设置：字段的类型与含义
+
+- **位置**：`speak/setting/model.md`、`message_setting.md`。
+- **矛盾**：`disable_create_dm`、`disable_push_msg` 在表格里是字符串，示例里是布尔；说明写「是否允许」，字段名却是 `disable_*`。`channel_push_max_num` 只说「每个子频道允许主动推送消息最大消息条数」，没说按天还是别的周期。
+- **当前做法**：两种都收，字符串 `true` / `1`、`false` / `0` 换成布尔，其它为 `None`；docstring 按字段名解释为「是否禁止」。
+- **怎么测**：查一次测试频道的设置，对照管理端的开关与主动消息限额的说明，确认 `channel_push_max_num` 的周期。
+
+### 管理接口的成功响应
+
+- **位置**：`autogen/api/channels_channel_id.delete.md`；`role-group/`、`role/member/delete_member.md` 等。
+- **含糊**：删除子频道说「成功返回 HTTP 200」、响应「无」，示例却是 `{}`；其余增删改多是 204，没有响应体。
+- **当前做法**：这些接口都不解码响应（`type_=None`），200、204、空对象都算成功。
+- **怎么测**：随上面各条实测时一并记下状态码与响应体。
 
 ### 频道里的互动事件能否被动回复
 

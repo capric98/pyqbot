@@ -134,6 +134,13 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
   - 调用方传入的时刻是带时区的 `datetime`，没有时区抛 `ValueError`（无法知道指哪个时区）；时长用 `timedelta`，须为正数。一个参数两种都收时（如 `mute(..., until)`、`create(expire_at=...)`），`timedelta` 表示从现在起算。都由 `rfc3339()` 先转成 UTC（带秒级偏移的时区直接输出不是合法的 RFC3339），再把不足一秒的部分向上取整（截止时刻晚不到一秒无害，截掉则可能早于现在），编码成 `2026-08-05T03:23:05+00:00` 这样的字符串。当前时间取自 `params.utc_now()`，测试替换它来固定时钟。响应里的时间照「事件」的时间戳规则解码。
   - 接受多个 ID 的参数写成 `str | Iterable[str]`，单个字符串当作一个元素（`str_list()`），免得被拆成字符；QQ 号、群号这类整数同理写 `int | Iterable[int]`。单次数量上限写在 docstring 里，本地不检查，也不自动拆成多次请求（部分失败难以表达）。
   - 接口里的 `on|off`、`add|del` 之类，公共签名用 `bool`（如 `enabled=`）或分开的方法（如 `add_to_blacklist` / `remove_from_blacklist`）表达，请求体里用 `OpenStrEnum`；响应模型保留接口原样的字段，字段类型是从顶层导出的枚举（如 `JoinStrategyStatus`，否则调用方无法标注或构造），另给便捷属性（如 `JoinStrategy.enabled`）。
+- **频道管理**（`_api/guilds.py`、`_api/channels.py`，模型在 `_models/guild.py` 与 `guild_manage.py`）：
+  - **分组边界**：路径以 `/guilds/{guild_id}` 或 `/users/@me/guilds` 开头的挂在 `client.guilds`：频道列表与详情、子频道的列出与创建、成员、身份组（含成员加入、移出身份组）、禁言、接口权限、消息频率设置。路径以 `/channels/{channel_id}` 开头的挂在 `client.channels`：子频道的详情、修改、删除、在线人数，以及子频道的用户、身份组权限；频道消息与内容的接口也加在这个类里。资源本身的读写叫 `get` / `update` / `delete`，其余方法名带上资源（`list_roles`、`add_member_role`）。
+  - **权限位**：子频道权限是 `ChannelPermission`（`enum.IntFlag`，未知位保留），接口里的十进制字符串由 SDK 转换：查询返回 `ChannelPermission`（十进制字符串在解码阶段校验，`int()` 失败也映射成 `APIError`），修改是 `update_*_permissions(..., add=, remove=)`，不传的一侧发 `"0"`。`Channel.permissions` 是数据模型的原样字段（字符串），要用位时写 `ChannelPermission(int(channel.permissions))`。
+  - **列表的两种形状**：表格是 `{guilds: [...]}`、示例是裸数组的接口（频道、子频道、成员列表），经 `request_decoded()` 解成任意 JSON，数组与对象都包成 `{key: [...]}` 交给 `decode()`，坏条目只丢它自己（对象里 `key` 缺失或类型不对时为空列表）；根既不是数组也不是对象时，经 `failure()` 抛「响应无法识别」的 `APIError`（带状态码与 trace_id）。
+  - **翻页**：频道列表与成员列表以本页最后一条的 ID（成员是 `user.id`）作 `after`，空页结束；最后一条解不出非空 ID 时抛 `APIError`，不当作结束（否则漏掉后面的条目）。没有 `user.id` 的成员跳过；平台会重复上一页的成员，迭代器只记上一页的用户 ID 去重，内存不随人数增长。身份组成员以 `next` 作 `start_index`，空页或 `next` 为 `"0"` 时结束。
+  - **禁言**：时间参数照「时间与批量参数」，编码成 Unix 秒的字符串（`params.unix_seconds()`，与 `rfc3339()` 共用 `deadline()` 的校验与取整），只发 `mute_end_timestamp`；解除是单独的 `unmute_*`，两个字段都发 `"0"`。全员、批量、单个成员各一对方法（`mute_all`、`mute_members`、`mute_member`），批量的返回设置成功的用户 ID。
+  - **前提**：私域、管理员等前提写在各方法 docstring 的摘要里，本地不检查。
 
 ## 网关连接（已落地）
 
@@ -230,7 +237,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 
 - **其余事件**：单聊、群聊、频道的事件和 `INTERACTION_CREATE` 都已落地，见「事件」。频道的发送接口、各事件的 `reply()` 与 `Interaction.reply()` 的频道分支随频道消息接口补上，要接的点见「事件」的「留给频道消息接口的」。
 - **群管理与入群自动审批策略**（已落地）：见「请求层与接口分组」，文档出入与待实测项见 `errata.md`，实测用例在 `tests/live/test_live_groups.py`（须用户提供测试群并单独同意）。
-- **其余接口**：`server-inter/channel/` 下的频道接口，照约定 5 按资源分组。机器人自身、分享链接、自定义菜单、指令面板已落地。
+- **其余接口**：频道与子频道的管理接口已落地（见「请求层与接口分组」的「频道管理」）；频道消息与内容接口加在 `client.channels` 上。机器人自身、分享链接、自定义菜单、指令面板已落地。
 - **其它消息类型**（已落地）：Markdown、键盘、富媒体、卡片、引用、正在输入、互动召回、撤回、流式消息，见「请求层与接口分组」。剩下：文本里的 `<qqbot-at-user>` 等交互标签（`trans/text-chain.md`）现在由调用方自己拼。
 - **富媒体上传与素材库**（已落地）：见「请求层与接口分组」，文档出入与待实测项见 `errata.md`，实测用例在 `tests/live/test_live_upload.py`。
 - **Webhook**（未确认）：见上。
