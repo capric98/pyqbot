@@ -84,6 +84,7 @@ class HTTP:
                 params=params,
                 headers=headers,
                 timeout=config.timeout,
+                auth=None,  # 注入的客户端若配了 auth，会覆盖上面的 QQBot 鉴权头
             )
         except httpx2.RequestError as exc:
             raise _network_error(f"{method} {path}", exc, secrets) from safe_cause(exc, *secrets)

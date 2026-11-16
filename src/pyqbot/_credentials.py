@@ -92,10 +92,12 @@ class AccessTokenManager:
         config = self._config
         sent_monotonic, sent_wall = monotonic(), wall_time()
         try:
-            response = await self._http_client.post(
+            response = await self._http_client.request(
+                "POST",
                 config.base_url + TOKEN_PATH,
                 json={"appId": config.app_id, "clientSecret": config.app_secret},
                 timeout=config.timeout,
+                auth=None,  # 不把注入的客户端自带的凭证发给开放平台
             )
         except httpx2.RequestError as exc:
             secrets = self.known_secrets()

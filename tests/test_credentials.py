@@ -108,6 +108,21 @@ async def test_first_call_fetches_token_from_the_documented_endpoint() -> None:
     assert request.extensions["timeout"]["read"] == 7
 
 
+async def test_token_request_does_not_carry_the_injected_clients_auth() -> None:
+    server = TokenServer()
+
+    async with (
+        httpx2.AsyncClient(
+            transport=httpx2.MockTransport(server.handle), auth=("user", "pass")
+        ) as http_client,
+        pyqbot.Client(APP_ID, APP_SECRET, http_client=http_client) as client,
+    ):
+        await client.get_access_token()
+
+    [request] = server.requests
+    assert "Authorization" not in request.headers
+
+
 async def test_custom_base_url_is_used_for_the_token_endpoint() -> None:
     server = TokenServer()
 

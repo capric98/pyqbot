@@ -88,6 +88,21 @@ async def test_user_message_is_posted_with_auth_header_and_timeout() -> None:
     assert request.extensions["timeout"]["read"] == 7
 
 
+async def test_injected_clients_auth_does_not_replace_the_qqbot_header() -> None:
+    platform = Platform()
+
+    async with (
+        httpx2.AsyncClient(
+            transport=httpx2.MockTransport(platform.handle), auth=("user", "pass")
+        ) as http_client,
+        pyqbot.Client("app-id", APP_SECRET, http_client=http_client) as client,
+    ):
+        await client.users.send_message(OPENID, "你好")
+
+    [request] = platform.requests
+    assert request.headers["Authorization"] == f"QQBot {TOKEN}"
+
+
 async def test_group_message_goes_to_the_group_endpoint() -> None:
     platform = Platform()
 
