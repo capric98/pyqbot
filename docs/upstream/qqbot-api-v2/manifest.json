@@ -1,0 +1,2061 @@
+{
+  "source": "https://bot.q.qq.com/wiki/develop/api-v2/",
+  "captured_at": "2026-11-16T00:15:21+00:00",
+  "route_bundle": {
+    "url": "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/js/app.7cfaa63a.js",
+    "sha256": "f92d70be2c85ffb4fe05f4e5efb04393c1a615390809a72200ca32372771f0e2"
+  },
+  "route_count": 192,
+  "page_count": 192,
+  "pages": [
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/channels_channel_id.delete.html",
+      "path": "autogen/api/channels_channel_id.delete.md",
+      "title": "删除子频道",
+      "upstream_last_updated": "7/22/2026, 6:23:09 PM",
+      "html_sha256": "8412ae368b34d687b1e3226ba11a26af657c3bb517c032eecc46e549f0ef532e",
+      "markdown_sha256": "7d3adaa132ea37411a44c3a422b9b9cc943e8531d31e80dafb00fe2b19befead"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/channels_channel_id.get.html",
+      "path": "autogen/api/channels_channel_id.get.md",
+      "title": "获取子频道详情",
+      "upstream_last_updated": "7/22/2026, 6:23:09 PM",
+      "html_sha256": "7529f6d20348cd7d05928ad63dd8cdb9a937a241654d0dd91968446d2912d4a5",
+      "markdown_sha256": "055e9b2a499465b775db9b8ee965fbbd8d20c10eb880fb3e168ebb332ccbb807"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/channels_channel_id.patch.html",
+      "path": "autogen/api/channels_channel_id.patch.md",
+      "title": "修改子频道",
+      "upstream_last_updated": "7/22/2026, 6:23:09 PM",
+      "html_sha256": "b792781e82a55ca2a6554a9aad87b9520eb8dedb9430e64e01e0ed851d431025",
+      "markdown_sha256": "a3e4c0946cb1d1bf454ca6813260f0e25437dd6ea9f1fff9b89384db95eb04d9"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/gateway.get.html",
+      "path": "autogen/api/gateway.get.md",
+      "title": "获取通用 WSS 接入点",
+      "upstream_last_updated": "7/22/2026, 6:23:09 PM",
+      "html_sha256": "2f0c5a53d601deb692a3bde0adcde54d33a985246ea4c15679a076e60c8dd24a",
+      "markdown_sha256": "aea64f0b817c1c40c798c8fdf7bd37cb94202249dde9276900d61883603722fc"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/guilds_guild_id.get.html",
+      "path": "autogen/api/guilds_guild_id.get.md",
+      "title": "获取频道详情",
+      "upstream_last_updated": "7/22/2026, 6:23:09 PM",
+      "html_sha256": "477d318b0483952c9f9bf3aeaf6d6e70ef60598b8a8bf0b7daa47bee29181003",
+      "markdown_sha256": "049ee3157b4e5af9105660abc85c1e417cc36c5dbaaaa732fdaded5b9c5c5111"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/guilds_guild_id_channels.get.html",
+      "path": "autogen/api/guilds_guild_id_channels.get.md",
+      "title": "获取子频道列表",
+      "upstream_last_updated": "7/22/2026, 6:23:09 PM",
+      "html_sha256": "4c5e2d0073a0403a4b8cbafd92d7debdf7cdf28b9f95c2748588ce53cf867046",
+      "markdown_sha256": "01b33c9aa331777d6e684223309cbda9f30163f648099c7fe021ece099654bae"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/guilds_guild_id_channels.post.html",
+      "path": "autogen/api/guilds_guild_id_channels.post.md",
+      "title": "创建子频道",
+      "upstream_last_updated": "7/22/2026, 6:23:09 PM",
+      "html_sha256": "5a5bee1d2f88bb8dd484b7936fef1800fa0ad8484f66dfd70202ce8c253150dc",
+      "markdown_sha256": "cadcccc1ccf3a78d0b7b75e70daa19c2539cefe1b54cd0beac37c891a44aa6c3"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/interactions_interaction_id.put.html",
+      "path": "autogen/api/interactions_interaction_id.put.md",
+      "title": "互动事件响应",
+      "upstream_last_updated": "8/12/2026, 8:53:07 PM",
+      "html_sha256": "400ddc02f4b12eda476a0354e3975a2b665703deeae9ae65fb33fc08bd9f0b19",
+      "markdown_sha256": "8450ab3f5113a5133416a4cc43476fdf19e8f4f9ff4318403e5ccae6ee586b58"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/users_me.get.html",
+      "path": "autogen/api/users_me.get.md",
+      "title": "获取机器人详情",
+      "upstream_last_updated": "7/22/2026, 6:23:09 PM",
+      "html_sha256": "07cdaba9a2fb61ce44ed9e70c0075af2559303334804800f5e8b4af2db1759cd",
+      "markdown_sha256": "5a1497f1705e4981f05acaadfab66a2c52014e50cb3ada0c7e311cff5b4f542d"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/users_me_guilds.get.html",
+      "path": "autogen/api/users_me_guilds.get.md",
+      "title": "获取机器人频道列表",
+      "upstream_last_updated": "9/16/2026, 8:01:05 PM",
+      "html_sha256": "530adf219a6d96405e4047726857e75f1d4b593ba8854df66b233c1ca5e00665",
+      "markdown_sha256": "aaabba3cf6754903d0e0c177e9532e92584930ad049e22667858a8f2929114a3"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_generate_url_link.post.html",
+      "path": "autogen/api/v2_generate_url_link.post.md",
+      "title": "生成分享链接",
+      "upstream_last_updated": "9/16/2026, 8:01:05 PM",
+      "html_sha256": "50589cd3446ee894cbf4b67c01ff61cca5751b5b15f1e953614656cd2633bde7",
+      "markdown_sha256": "5e4d19a2a53fd6f8d9501a6920617352a6039e1732c9b37603888f55c23b52e9"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_id_upload_part_finish.post.html",
+      "path": "autogen/api/v2_groups_group_id_upload_part_finish.post.md",
+      "title": "群聊分片上传完成",
+      "upstream_last_updated": "7/22/2026, 6:23:09 PM",
+      "html_sha256": "e7bc96cb52e9518b9051169fe42aa84f22291e71f6241d3e0212e00f3be90d7c",
+      "markdown_sha256": "5cb11364484ae71ea750e93c8895e08d67c054c4aeea0461ab8d6e373f9eafbf"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_id_upload_prepare.post.html",
+      "path": "autogen/api/v2_groups_group_id_upload_prepare.post.md",
+      "title": "群聊富媒体预上传",
+      "upstream_last_updated": "8/10/2026, 12:16:46 PM",
+      "html_sha256": "b8a535e0b7d0a70ca6ff9614dbafbef851c3851a0076d05742ce9d4850db0960",
+      "markdown_sha256": "27ba44839768dcb7ee74b78549337f2265d72859e8f7f484bb880903fd3beb6c"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_approval_join_request_member_openid.post.html",
+      "path": "autogen/api/v2_groups_group_openid_approval_join_request_member_openid.post.md",
+      "title": "入群申请审批",
+      "upstream_last_updated": "8/11/2026, 12:53:33 PM",
+      "html_sha256": "9c9181b6d80fcb2d1cac659a4cbe5a3e56042bbc0c3065d6480deaed5ee36990",
+      "markdown_sha256": "b798991b3725f07a69d471ab76f0f50a2e1afa0f4add1211729d2bea3166e185"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_batch_remove_members.post.html",
+      "path": "autogen/api/v2_groups_group_openid_batch_remove_members.post.md",
+      "title": "群成员批量移除",
+      "upstream_last_updated": "9/3/2026, 5:58:28 PM",
+      "html_sha256": "f2fc844342a9ecf8daa112b0a5dd109ed77301dd271bddce3d716e23f0629936",
+      "markdown_sha256": "1c085fba2810b682e200f05a32366d2e5efc35463bd4df9659365abcadbce214"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_bot_state.get.html",
+      "path": "autogen/api/v2_groups_group_openid_bot_state.get.md",
+      "title": "获取机器人群内状态",
+      "upstream_last_updated": "8/10/2026, 12:16:46 PM",
+      "html_sha256": "e953d0e6fa73e6604419f707a899153901d9656a15d67dc4d2f057e3553b3f65",
+      "markdown_sha256": "34c2f98d490e4d2dcf2df342e7f78ce55ad5fecf41972c82b9b6304849ce7760"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_files.post.html",
+      "path": "autogen/api/v2_groups_group_openid_files.post.md",
+      "title": "群聊富媒体上传",
+      "upstream_last_updated": "10/9/2026, 6:37:20 PM",
+      "html_sha256": "6c247d2a91a7894a737388eb755fc4a467ad9708b56937c7c38c9f7ea32e62d9",
+      "markdown_sha256": "6e867ae8c675289d62e4e2f66b1c12062416a41a14d806a35016cddcbf7a1429"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_info.get.html",
+      "path": "autogen/api/v2_groups_group_openid_info.get.md",
+      "title": "获取群基本信息",
+      "upstream_last_updated": "8/10/2026, 12:16:46 PM",
+      "html_sha256": "cf4378494deb536869fbd22a94d205b7903589004153edc7a1a937ce1047788a",
+      "markdown_sha256": "3d4139ba020513e49889aecf311890a1e946a66b94982ee09730bc9c00967cd4"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_join_request_list.get.html",
+      "path": "autogen/api/v2_groups_group_openid_join_request_list.get.md",
+      "title": "入群申请列表拉取",
+      "upstream_last_updated": "9/3/2026, 5:58:32 PM",
+      "html_sha256": "b58351fcfedf3315aa178610558c168f6b5e4a24dc9188e655adeeac9014a9cd",
+      "markdown_sha256": "633e054f9961dffc79e37cc7d517b7b9510d8b8850d94e3e274e9ab0308210c6"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_member_blacklist.get.html",
+      "path": "autogen/api/v2_groups_group_openid_member_blacklist.get.md",
+      "title": "群黑名单查询",
+      "upstream_last_updated": "9/3/2026, 5:58:29 PM",
+      "html_sha256": "0e00a059f61b007d6d113f72aae7a67d7d26e925ac33acdf5b7cf1c0a7dde593",
+      "markdown_sha256": "e8f64375bf5d1a7738201333a5c505843abe43df14011bbbf0789786b6822e1e"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_member_blacklist.post.html",
+      "path": "autogen/api/v2_groups_group_openid_member_blacklist.post.md",
+      "title": "群黑名单操作",
+      "upstream_last_updated": "9/3/2026, 5:58:30 PM",
+      "html_sha256": "b2ffb0ae6ab0d51c307ded2aba2a3d6178f7c6502579c9a09deb77d1c37bbe67",
+      "markdown_sha256": "e03dac8cadb68a2340953091aef797e03fb9a703979a5cfc06cb7bea0554236f"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_members.get.html",
+      "path": "autogen/api/v2_groups_group_openid_members.get.md",
+      "title": "获取群成员列表",
+      "upstream_last_updated": "9/3/2026, 5:57:51 PM",
+      "html_sha256": "a36ccfeadf93cbfa41b69c08888d1902aaee63e1477fe67afab5e2ba107faccc",
+      "markdown_sha256": "009aa86d79dca40203f6b1305f4bbc591f008e61f4b47a0debc5077dadbe95ae"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_members_member_openid.get.html",
+      "path": "autogen/api/v2_groups_group_openid_members_member_openid.get.md",
+      "title": "获取群成员信息",
+      "upstream_last_updated": "9/3/2026, 5:58:30 PM",
+      "html_sha256": "68ae3ea8ed4abb75ec43868d0d21932469411310941c6ab64d093be8d9f9a31d",
+      "markdown_sha256": "8b9211b2dd0065c02704b67de35f3ecf19410477640d3235bfc35312b762288d"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_messages.post.html",
+      "path": "autogen/api/v2_groups_group_openid_messages.post.md",
+      "title": "发送群聊消息",
+      "upstream_last_updated": "10/28/2026, 12:08:50 PM",
+      "html_sha256": "7539fd7631394692b9ab56566788ed862c256ce431e909d5676db700558e05fe",
+      "markdown_sha256": "650ece57f28b70d7623bba96f51a9ebd4dddde676b042d3784167a5d766014dc"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_messages_message_id.delete.html",
+      "path": "autogen/api/v2_groups_group_openid_messages_message_id.delete.md",
+      "title": "撤回群聊消息",
+      "upstream_last_updated": "8/12/2026, 8:40:14 PM",
+      "html_sha256": "6b255561eeb589f2fddbfe0b2784af0df82cd39d0cdc56469ceaa4f01ec12a12",
+      "markdown_sha256": "9ba8cc8ca29b958e76545e7964459b3d509cb33c096634ac172134282e3a1e21"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_restrict_chat_setting.get.html",
+      "path": "autogen/api/v2_groups_group_openid_restrict_chat_setting.get.md",
+      "title": "查询群禁言状态",
+      "upstream_last_updated": "8/10/2026, 7:29:39 PM",
+      "html_sha256": "667d83266a0d7b17a334325403dea3308e93568ca5233d97e748bb49d7f9327a",
+      "markdown_sha256": "4afe64a98ebb4e06b2402ce252362a65f2f8f68951ba61bb149452d64c365e7a"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_group_openid_restrict_chat_setting.post.html",
+      "path": "autogen/api/v2_groups_group_openid_restrict_chat_setting.post.md",
+      "title": "设置群成员禁言",
+      "upstream_last_updated": "9/3/2026, 5:58:33 PM",
+      "html_sha256": "6712c8c3d66435829de36da8ef7212cc76092cf1f315b73e26dbdb8199b58aa6",
+      "markdown_sha256": "19df4ed0bcc1e49caca70ecf098b775733e32271a4b767ac91aafeb2136a177c"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_join_approval_strategy.get.html",
+      "path": "autogen/api/v2_groups_join_approval_strategy.get.md",
+      "title": "查询入群自动审批策略列表",
+      "upstream_last_updated": "9/3/2026, 5:58:34 PM",
+      "html_sha256": "4ed18e692e5015d7893ef1f389bf662280303d14925225b9642f57e893360085",
+      "markdown_sha256": "8dd868751e68cf268d5715a040ed7248f513575ef9193085285088103289adb5"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_join_approval_strategy.post.html",
+      "path": "autogen/api/v2_groups_join_approval_strategy.post.md",
+      "title": "创建入群自动审批策略",
+      "upstream_last_updated": "8/10/2026, 7:29:39 PM",
+      "html_sha256": "f6416cb7ecd9180d16a28950ead29cd3d73ecb1cc0cf54a01fd9c7bcdf6a7cd0",
+      "markdown_sha256": "6eb456f2d46a06984fba5455c97401b37c030d16b55c79aefe8009e30303f517"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_join_approval_strategy_strategy_id.delete.html",
+      "path": "autogen/api/v2_groups_join_approval_strategy_strategy_id.delete.md",
+      "title": "删除入群自动审批策略",
+      "upstream_last_updated": "8/3/2026, 2:40:34 PM",
+      "html_sha256": "e516a7a6a745aa84c3d0c5aeb137a50dac9a0297ffb2d1bd7407a4b4962c7f87",
+      "markdown_sha256": "13b5034d523091ab1109354fe19f918640f24b79a9d87d74386ca5b9e342d40b"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_join_approval_strategy_strategy_id.patch.html",
+      "path": "autogen/api/v2_groups_join_approval_strategy_strategy_id.patch.md",
+      "title": "修改入群自动审批策略",
+      "upstream_last_updated": "8/3/2026, 2:40:34 PM",
+      "html_sha256": "eb44860f7ecf74de1e63c51f33fc46c5ab62d44399a1234d647202c40a1aad9a",
+      "markdown_sha256": "9b8f4a01b56fbd5c2ae25ab7ca21f919f0cf5de15e31c0e13615080f06b9907a"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_join_approval_strategy_strategy_id_execute.post.html",
+      "path": "autogen/api/v2_groups_join_approval_strategy_strategy_id_execute.post.md",
+      "title": "执行入群自动审批策略",
+      "upstream_last_updated": "8/3/2026, 2:40:34 PM",
+      "html_sha256": "6af27b279c98a15ecfb5ba60cf8473bfdc5cb9c27c39c0ee3f51a713fbfd9961",
+      "markdown_sha256": "ba82d7d245f021e2ab009bddf9b4399078520bd12eef1dcdb9c9aa6133bca16b"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_groups_join_approval_strategy_strategy_id_whitelist_users.post.html",
+      "path": "autogen/api/v2_groups_join_approval_strategy_strategy_id_whitelist_users.post.md",
+      "title": "修改入群自动审批策略的白名单号码",
+      "upstream_last_updated": "8/10/2026, 12:16:46 PM",
+      "html_sha256": "9dda34f19e5660ad6a8ffe4b1f62410d88fbd29c86f2e78eaee298e634974ecc",
+      "markdown_sha256": "4fe48aca2b0441ad71173e8ce28fb5f8f996e7d0406bf4683dd0db2fb3fc6ae6"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_menu.get.html",
+      "path": "autogen/api/v2_menu.get.md",
+      "title": "查询全局自定义菜单",
+      "upstream_last_updated": "10/9/2026, 6:46:49 PM",
+      "html_sha256": "385aee5f230455ceae2c483ed5d95e8f35cd06d216823d675b69be8fb91cbdc4",
+      "markdown_sha256": "d78c19cae945673eca86c5db14a1ea871f1b7a7196c7186dad6df9c8eb6f48da"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_menu.put.html",
+      "path": "autogen/api/v2_menu.put.md",
+      "title": "修改全局自定义菜单",
+      "upstream_last_updated": "10/9/2026, 6:46:49 PM",
+      "html_sha256": "96fd5e9b4ffce888d01ba1c8fde3bf4fffea382821054bbb9b760d32649714f9",
+      "markdown_sha256": "0a932d990ee19820ca98d57dbbb68d036e0832dd5c6b7e0dcd79bf6f88ffd10d"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_panels.get.html",
+      "path": "autogen/api/v2_panels.get.md",
+      "title": "查询指令面板列表",
+      "upstream_last_updated": "8/13/2026, 1:20:14 PM",
+      "html_sha256": "4007f96e1b398c20fde4d5103a82625e3575cdabd109ce9d7200e14e07b1639e",
+      "markdown_sha256": "4a31a1443896341a7635cbc05d344cab7d46cc92f5def7dc58d9d6693d98b57c"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_panels.post.html",
+      "path": "autogen/api/v2_panels.post.md",
+      "title": "创建指令面板",
+      "upstream_last_updated": "8/13/2026, 1:20:14 PM",
+      "html_sha256": "02b6c008db19549a50e5a7966bd5bb93f785c69e3a7b4ec774d726111d093dd4",
+      "markdown_sha256": "7f805287b7e8e37df99db3f8b8d3e26f1f051292f7566c3612b507ed48762643"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_panels_panel_id.delete.html",
+      "path": "autogen/api/v2_panels_panel_id.delete.md",
+      "title": "删除指令面板",
+      "upstream_last_updated": "8/13/2026, 1:20:14 PM",
+      "html_sha256": "4dcc364ffa46f52d0f2348f65065ffb2612b7df630286d3384d1180141631531",
+      "markdown_sha256": "a0ba93acf12a20f1dfca68733af98f2fb665e5313c1acd9ae57b12046c3a3d0e"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_panels_panel_id.get.html",
+      "path": "autogen/api/v2_panels_panel_id.get.md",
+      "title": "查询指令面板详情",
+      "upstream_last_updated": "8/13/2026, 1:20:14 PM",
+      "html_sha256": "560d18ac320bb50c74d2acd515b13e626b3358c6ef6e2a8955b012f48e4a2939",
+      "markdown_sha256": "ab7b9e2e93abcea995bb5ab8b0c8fc436cb1f3325d91c2b6be631ab7851ce530"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_panels_panel_id.put.html",
+      "path": "autogen/api/v2_panels_panel_id.put.md",
+      "title": "修改指令面板",
+      "upstream_last_updated": "8/13/2026, 1:20:14 PM",
+      "html_sha256": "d68a7720283eebc66bc2cc406bdbffaf8b48099296525d9362f7294665a41098",
+      "markdown_sha256": "d972bdfbf82ee207c94d963e20c3d06fd889996793df01b36cddcc9e0a6d9688"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_panels_panel_id_target.put.html",
+      "path": "autogen/api/v2_panels_panel_id_target.put.md",
+      "title": "修改指令面板关联对象",
+      "upstream_last_updated": "8/13/2026, 1:20:14 PM",
+      "html_sha256": "1e6a7c7921addf5372b86ffc9a2b0bd99440e7402d25202bbc25542c40cf17ee",
+      "markdown_sha256": "a488abe9be67adf4a06ab81ea1d6d17af384e37e53e0018f8e49e0f8707d633f"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_users_user_id_upload_part_finish.post.html",
+      "path": "autogen/api/v2_users_user_id_upload_part_finish.post.md",
+      "title": "单聊分片上传完成",
+      "upstream_last_updated": "7/22/2026, 6:23:09 PM",
+      "html_sha256": "4f1bc4228e9fca0e0ad89be97973e12bea1e492c9cb1400af752db558cf90510",
+      "markdown_sha256": "c3aee234573792affeaf817a9ebb1f753a880840e5905a0fea851519d4432426"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_users_user_id_upload_prepare.post.html",
+      "path": "autogen/api/v2_users_user_id_upload_prepare.post.md",
+      "title": "单聊富媒体预上传",
+      "upstream_last_updated": "8/10/2026, 12:16:46 PM",
+      "html_sha256": "c6ea865ad720894bf245b006a0981139e8cb8fd9f1d44fd387417023c95c0f84",
+      "markdown_sha256": "9b12c86956ecb06051502aecf115c96b27cd07a6e730ab7048053fa40d083518"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_users_user_openid_files.post.html",
+      "path": "autogen/api/v2_users_user_openid_files.post.md",
+      "title": "单聊富媒体上传",
+      "upstream_last_updated": "10/9/2026, 6:37:20 PM",
+      "html_sha256": "f9831a94a4a2e64f65b0314967c6ced5f4ccfdba054ba6fa820a39f090940200",
+      "markdown_sha256": "90b69c8f2d5dcdb9394a2093f630fd7b7f59b0c20be93ad60208c6d6a9e3e198"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_users_user_openid_messages.post.html",
+      "path": "autogen/api/v2_users_user_openid_messages.post.md",
+      "title": "发送单聊消息",
+      "upstream_last_updated": "10/28/2026, 11:59:59 AM",
+      "html_sha256": "837abcdc7ef6a4a9217be784cbb268c82b2ad612c94c5500306747de7084bd65",
+      "markdown_sha256": "45a554a48aabb0cdc206c53ffc7f3badefeb945373ea548907a01d2be29de31d"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_users_user_openid_messages_message_id.delete.html",
+      "path": "autogen/api/v2_users_user_openid_messages_message_id.delete.md",
+      "title": "撤回单聊消息",
+      "upstream_last_updated": "7/22/2026, 6:23:09 PM",
+      "html_sha256": "281c0f772032e8cb7835d3c2011647c60e2fd75abcc01a7cbdb85832bd3eca62",
+      "markdown_sha256": "5fffc6e13fca28831fa4119e75594fb03c4ff8390d3c08e32fdb1f84b89580de"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_users_user_openid_stream_messages.post.html",
+      "path": "autogen/api/v2_users_user_openid_stream_messages.post.md",
+      "title": "流式发送单聊消息",
+      "upstream_last_updated": "7/22/2026, 6:23:09 PM",
+      "html_sha256": "beac1ac6dd91f73fb12a35de33b4f5c203f1777309b4f573532374134df01c70",
+      "markdown_sha256": "2ecb6d8408e204dae26610446ffea622a65f0d4f52fa876bddf30d0dd60a858b"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/c2c_message_create.html",
+      "path": "autogen/event/c2c_message_create.md",
+      "title": "单聊消息事件",
+      "upstream_last_updated": "9/16/2026, 8:01:05 PM",
+      "html_sha256": "4fad1f0631607fb354a302e80cc10fdfe93c2a4bc1110fd48975ad8a621174cb",
+      "markdown_sha256": "78269803d55ed24283b7272273876aabcd4508a0c5c4a61493032f74450d0854"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/c2c_msg_receive.html",
+      "path": "autogen/event/c2c_msg_receive.md",
+      "title": "单聊消息接收开启",
+      "upstream_last_updated": "7/21/2026, 4:27:59 PM",
+      "html_sha256": "587212adae6bf86849490598564f32b596d2d1ce325ba8517eeabf0c843995ea",
+      "markdown_sha256": "056f9d225300de9e00d82e48d2ba9bf5131df388787666a4bd12de6f4d98cc64"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/c2c_msg_reject.html",
+      "path": "autogen/event/c2c_msg_reject.md",
+      "title": "单聊消息接收关闭",
+      "upstream_last_updated": "7/21/2026, 4:27:59 PM",
+      "html_sha256": "60ae654b87601374a31bbae7e6721d54103e774a5a37eb010c514cd321547b71",
+      "markdown_sha256": "78688b79f88945c58f446be4479aa3b94b73ecd766c98bb5fc3098d186e1950c"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/channel_create.html",
+      "path": "autogen/event/channel_create.md",
+      "title": "子频道创建",
+      "upstream_last_updated": "7/21/2026, 3:25:45 AM",
+      "html_sha256": "4e2ca292d033bc90c605e68866325a37378c2e77d1431af383faeca165866bd3",
+      "markdown_sha256": "254c166915af17a8e047ac9d2c9f9c9032b112737662d48ebf1678fa14086573"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/channel_delete.html",
+      "path": "autogen/event/channel_delete.md",
+      "title": "子频道删除",
+      "upstream_last_updated": "7/21/2026, 3:25:45 AM",
+      "html_sha256": "68df11ad67d9c85bd27e701a8eefe5cbed383adf0dea209b6fc51055f81aa875",
+      "markdown_sha256": "82adc695c7f031f9008022f11a06aa6c682b68246f51c6b1b2c2ddee686c586f"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/channel_update.html",
+      "path": "autogen/event/channel_update.md",
+      "title": "子频道更新",
+      "upstream_last_updated": "7/21/2026, 3:25:45 AM",
+      "html_sha256": "6ec8d82d8cce51bff05bf65ddb42bca4edf25c99682dca9d0cd5babb0b81ecd1",
+      "markdown_sha256": "d8530c985da62de7dd9d3e4e0480cf777fd483ba19f9297072d586a1f9b7d104"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/friend_add.html",
+      "path": "autogen/event/friend_add.md",
+      "title": "用户添加好友",
+      "upstream_last_updated": "8/13/2026, 12:37:16 PM",
+      "html_sha256": "fd0a9ad6616d510e3e9714f68dac350dd2fe4a39a92c381c0d03294f9f6aa0b9",
+      "markdown_sha256": "c9112d1e6b67a5e68df480f51c1affa043460df5d1a378439260ff397fe35bc8"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/friend_del.html",
+      "path": "autogen/event/friend_del.md",
+      "title": "用户删除好友",
+      "upstream_last_updated": "7/21/2026, 4:27:59 PM",
+      "html_sha256": "fef06989dd70b6ca58a3f85a95019d0c308736fa034ece3e439c34c35c0fdd0c",
+      "markdown_sha256": "d0b36bb521e4acc6382401f0102776914d1c1390c7ed910011cbfb89a5cf759f"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/group_add_robot.html",
+      "path": "autogen/event/group_add_robot.md",
+      "title": "机器人加入群聊",
+      "upstream_last_updated": "7/21/2026, 3:25:45 AM",
+      "html_sha256": "295d2cc8671605b8af33101e0fa47362dab707397c575769b579f5c9aa8240d7",
+      "markdown_sha256": "7e2f09059c7aabe2e6a623539d07606620b3ecb0cce1d35c39e68f9c963d8b4f"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/group_at_message_create.html",
+      "path": "autogen/event/group_at_message_create.md",
+      "title": "群@机器人消息",
+      "upstream_last_updated": "9/16/2026, 8:01:05 PM",
+      "html_sha256": "6930f647e24260fd210bdb2b857958899776424bcc1aefdb1bf657423eae8c5a",
+      "markdown_sha256": "bbf403b1565743ddffb1584a299d0aa115b6d17802cd0530292fcbdb7217b624"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/group_del_robot.html",
+      "path": "autogen/event/group_del_robot.md",
+      "title": "机器人退出群聊",
+      "upstream_last_updated": "7/21/2026, 3:25:45 AM",
+      "html_sha256": "c5705757c4986ba69d142c188e5266c18c655b982aa949bb583a1f2000693300",
+      "markdown_sha256": "f3dbdd35a1460388dc58d262ec5ff05a66be84ed35425e6f798febe27f9eab12"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/group_join_request.html",
+      "path": "autogen/event/group_join_request.md",
+      "title": "用户申请加群事件",
+      "upstream_last_updated": "9/3/2026, 5:58:35 PM",
+      "html_sha256": "aaf0d9c846798fcbc03f67986b2a08acf1045b86efe259f7e3df64f716eebf45",
+      "markdown_sha256": "4be4ecc36a37894b924949c72158e056f299c8f337f2fdab3a79eb28e0cbed29"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/group_member_add.html",
+      "path": "autogen/event/group_member_add.md",
+      "title": "群成员加入",
+      "upstream_last_updated": "10/9/2026, 6:37:20 PM",
+      "html_sha256": "c91414938f65634b7590f2f753e4bc6b60cf6d733eeb79eb42028f39f81cd1cf",
+      "markdown_sha256": "72de54bad5b883a5fee8b5ce8e2548ea96d2ed5dcd693d2689c6e46335fe9947"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/group_member_remove.html",
+      "path": "autogen/event/group_member_remove.md",
+      "title": "群成员退出",
+      "upstream_last_updated": "8/11/2026, 12:53:33 PM",
+      "html_sha256": "145a5f5627c930f1dab0adc22c7652638dc284906fc981b2894eb8011c04e26f",
+      "markdown_sha256": "9c20183a479894147d72e55b392246775a13cea8808226161135a21104b43ce2"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/group_message_create.html",
+      "path": "autogen/event/group_message_create.md",
+      "title": "群消息（全量模式）",
+      "upstream_last_updated": "10/21/2026, 6:27:26 PM",
+      "html_sha256": "afc6b35565e13d541ba7124fa4226124b9bcbf577feb5d6592152dc4d6ec47c8",
+      "markdown_sha256": "8249b591b4ac4419906f46f80ff9ddfc0e3754dbd0d7754315136430f1538276"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/group_msg_receive.html",
+      "path": "autogen/event/group_msg_receive.md",
+      "title": "群聊消息接收开启",
+      "upstream_last_updated": "7/21/2026, 4:27:59 PM",
+      "html_sha256": "b2b3a7869934cc3434bbe8a424ea92c5cefe231e9c3ee70ced0dc917aa526195",
+      "markdown_sha256": "7b09827c695e5883519cbb194e88c4df9e5db9dd1baaaa30c39b190ed9f28115"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/group_msg_reject.html",
+      "path": "autogen/event/group_msg_reject.md",
+      "title": "群聊消息接收关闭",
+      "upstream_last_updated": "7/21/2026, 4:27:59 PM",
+      "html_sha256": "995107515b19445acd4f12fd7fee8076be099cee55605eb4de074d5b90828fba",
+      "markdown_sha256": "45c32d608e6fc49376913364b241a4252b4625474491046db7008e1c2b68d801"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/guild_create.html",
+      "path": "autogen/event/guild_create.md",
+      "title": "频道创建",
+      "upstream_last_updated": "7/21/2026, 3:25:45 AM",
+      "html_sha256": "6dfd5aca4f113b898deb36419ab67d40a552f015dc6cb6ec386f49393e788550",
+      "markdown_sha256": "9bea5291be1eefe5a92045a71549ade78b365b879ca1b5f83d5561ac55b7cb18"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/guild_delete.html",
+      "path": "autogen/event/guild_delete.md",
+      "title": "频道解散",
+      "upstream_last_updated": "7/21/2026, 3:25:45 AM",
+      "html_sha256": "8382c064f2ab00f109fd33fcf115aca38a5cedad410801cc32256d87aaad4107",
+      "markdown_sha256": "3c03550b12a19bd63fb0e5e59403c5d2a159dfb0d60bd178f5106632c0763bcf"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/guild_update.html",
+      "path": "autogen/event/guild_update.md",
+      "title": "频道更新",
+      "upstream_last_updated": "7/21/2026, 3:25:45 AM",
+      "html_sha256": "d740eec9f8e050cd456600f411a366fdce2139d6ad4330cce081f085c261c01c",
+      "markdown_sha256": "02018787b147f654a32742deef97f488720a21ee416ce0c2a67c9a2794dfb72b"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/interaction_create.html",
+      "path": "autogen/event/interaction_create.md",
+      "title": "互动事件",
+      "upstream_last_updated": "7/23/2026, 4:23:02 PM",
+      "html_sha256": "7ba44ca0da96104241709f5923fb1daa722e8791358bcb9d38b5f20ad1c51f6e",
+      "markdown_sha256": "3e7c5f5ef751283fda602c3bd7544e72277e1c7d899a1badc813241c73c3437d"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/subscribe_message_status.html",
+      "path": "autogen/event/subscribe_message_status.md",
+      "title": "订阅消息授权状态变更",
+      "upstream_last_updated": "7/21/2026, 4:27:59 PM",
+      "html_sha256": "a342dcbc6104a895de51e78366dba881f7a376b87ae259319e9e2d9d799dbeba",
+      "markdown_sha256": "19dd9e08cd9dab0c3f31a6b67ed551ae217eae28280365d31980740538ec89c1"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/autogen/",
+      "path": "autogen/index.md",
+      "title": "接口文档索引",
+      "upstream_last_updated": "10/28/2026, 12:08:50 PM",
+      "html_sha256": "5aa8a55e6fb5be0168a7a4b560cf189e56ee7bc8e8ab951a07803cdffecabe28",
+      "markdown_sha256": "944e83da9aaee3565567184185b6a9a9f179def960e05f927f75f5d5f0b946ec"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/changelog.html",
+      "path": "changelog.md",
+      "title": "变更记录",
+      "upstream_last_updated": "10/28/2026, 2:14:06 PM",
+      "html_sha256": "f82561c56846de9dbccc60298d2f9c22238a49c43227b38c8fcc9de32e16f04f",
+      "markdown_sha256": "0c0793264049d0268d621fbe7c27abac0761e8336b3fd6ac98563a2eb543db1c"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/access-token.html",
+      "path": "dev-prepare/access-token.md",
+      "title": "获取访问凭证",
+      "upstream_last_updated": "9/16/2026, 8:01:05 PM",
+      "html_sha256": "a4de47b8ea4eb84758c3f6bf0e2cf00a20dc18177423548bf4460332fc6f1a65",
+      "markdown_sha256": "fbf7e31ffbd18dadf6e833197fd31c9fcdcb4c594c6390dc8651800cdb3da50b"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/api-call-guide.html",
+      "path": "dev-prepare/api-call-guide.md",
+      "title": "API 调用指南",
+      "upstream_last_updated": "9/17/2026, 11:37:24 AM",
+      "html_sha256": "ae65d742f670f8ffd99f6db30c4037ce8a60f120f900ae9aa75124aff4ceb9e3",
+      "markdown_sha256": "473c147b80d5418a37363fa766e89e5f9b9acbc0762825eb6ad04df6a6be6572"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/error-trace/",
+      "path": "dev-prepare/error-trace/index.md",
+      "title": "错误与调试",
+      "upstream_last_updated": "12/20/2023, 4:46:30 PM",
+      "html_sha256": "c50865fe30a68b57a4581cfdff2ff4cc106fcc020f58da51da39b5e255f5b649",
+      "markdown_sha256": "96d6ddfe67e4609845624fb6bd8945582df6a7da2923af96ce31f72f1af2a562"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/error-trace/websocket.html",
+      "path": "dev-prepare/error-trace/websocket.md",
+      "title": "WebSocket",
+      "upstream_last_updated": "7/21/2026, 9:50:42 PM",
+      "html_sha256": "a518de1782d38ad33c82d5d4aa6e4e2a35f7684ce1980c1056e84054e962d277",
+      "markdown_sha256": "5557ad1ef770542759f0b3375713248a3aba4ebb022b1f92557fd57d55e38a6a"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/event-emit/payload.html",
+      "path": "dev-prepare/event-emit/payload.md",
+      "title": "通用数据结构",
+      "upstream_last_updated": "7/21/2026, 9:50:42 PM",
+      "html_sha256": "0c718a7327e3456b962874c0d65704627203fffd359695c1c64648e4f7398f5a",
+      "markdown_sha256": "3f59b89121936dbafdf2c69fe8f7df49804f0ed16497c1a083bd5de8e16bfb29"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/event-emit/webhook.html",
+      "path": "dev-prepare/event-emit/webhook.md",
+      "title": "Webhook 方式",
+      "upstream_last_updated": "9/11/2026, 7:11:03 PM",
+      "html_sha256": "6a84ef0a94e548dc5a001b1b6bda62f2a65df3ddcc8df203a6fb937c0045033b",
+      "markdown_sha256": "b183465dc603a25820c6e307c45533d20c2a5406e140833d8aa86c61fe2612be"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/event-emit/websocket.html",
+      "path": "dev-prepare/event-emit/websocket.md",
+      "title": "WebSocket 方式",
+      "upstream_last_updated": "7/30/2026, 10:21:27 PM",
+      "html_sha256": "af0234a2f35093449d06a4fcd3c51656210e75a1ddd67a54084e842fc7ba1434",
+      "markdown_sha256": "f2a737c787ee88aab78bee756610259d89fdbe637fb20c9c3fa84981b0c20c7a"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/getting-started.html",
+      "path": "dev-prepare/getting-started.md",
+      "title": "启动接入",
+      "upstream_last_updated": "7/21/2026, 10:16:06 PM",
+      "html_sha256": "f69e61d98fe74cb9a3a86c48ab62ebcd6b96615be3e600818058057ab8ac9ad7",
+      "markdown_sha256": "bc160fd91ac856a67fe9d75d24dc9b4c721754fcd45a1f4cd9462200eae14905"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/api-use.html",
+      "path": "dev-prepare/interface-framework/api-use.md",
+      "title": "接口调用与鉴权",
+      "upstream_last_updated": "7/30/2026, 10:21:27 PM",
+      "html_sha256": "c23b30785fd89dd71377f9af0882aeba983df87b5a9d639b1c9e9673164b4747",
+      "markdown_sha256": "c3e57bde628128fe9137587d37a8b50f777df0b2e9263603a7b6157dee76fbc5"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/event-emit.html",
+      "path": "dev-prepare/interface-framework/event-emit.md",
+      "title": "事件订阅与通知",
+      "upstream_last_updated": "9/11/2026, 6:09:37 PM",
+      "html_sha256": "b10d0492fff7859b3db4cd6f60250809699415c0d988167e4ea205d78c04363f",
+      "markdown_sha256": "4912150ab36767cc08ed37c5cc59ef807d0b3acebb12d8b255926131694768e2"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/",
+      "path": "dev-prepare/interface-framework/index.md",
+      "title": "接口通信基础框架",
+      "upstream_last_updated": "5/20/2026, 8:38:10 PM",
+      "html_sha256": "4d81795b7b09a53e14ce53a66e1fffb3be714201cf31bbdaf615068d263373c8",
+      "markdown_sha256": "802ac2fc6592cd6abba482afcf867d87822302e40d7dcb7bf003a014c9707d84"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/opcode.html",
+      "path": "dev-prepare/interface-framework/opcode.md",
+      "title": "opcode",
+      "upstream_last_updated": "9/12/2024, 9:12:52 PM",
+      "html_sha256": "966ffcda011875a257cd0cf224b1fdb45b2a7174929327ad2809b8ce717ecd49",
+      "markdown_sha256": "4f6be05a4dd76e1ae3ae1673a7f97c39b659ba98f2d7ae179e57ae84c7a413ee"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/reference.html",
+      "path": "dev-prepare/interface-framework/reference.md",
+      "title": "使用 Websocket 接入",
+      "upstream_last_updated": "7/30/2026, 10:21:27 PM",
+      "html_sha256": "4c3ca35c9d81726e1b5a22cd9c828f357d96552eda15cb328005a880ab20cabb",
+      "markdown_sha256": "53e0eefe641e25a0dca7cac4346371da3a8fbad788ba7a0e2cd7a9bec8b342c8"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/sign.html",
+      "path": "dev-prepare/interface-framework/sign.md",
+      "title": "安全和授权",
+      "upstream_last_updated": "9/12/2024, 9:12:52 PM",
+      "html_sha256": "30bb906a1e8636645a16ab575ee955e6718c05ff3f93c801d6e3646173dfaee3",
+      "markdown_sha256": "7ea51edb5a6cb7d145e9760993ad6fa518a7a985d4ef0547c56295af4ec96bab"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/gateway/error/data/model.html",
+      "path": "gateway/error/data/model.md",
+      "title": "业务报错返回的数据信息(Data)",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "abfe87c1982be883a2069373b05971fc7771c2bc4d2027e4be073954a12fa671",
+      "markdown_sha256": "d3f36bcfd9a319ede0aad425608b2340d79f91d64ca2cad8ac2a679b5caf3da9"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/gateway/error/error.html",
+      "path": "gateway/error/error.md",
+      "title": "websocket 错误",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "02385e0f3d8a6dbeb70f09c3c95c227c27dca06069486077f99aafe08353a4ec",
+      "markdown_sha256": "7cac1df71fa07c3c896ad6bd45d501d8e8a4210025ed30c0b22e3799bcf95429"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/",
+      "path": "index.md",
+      "title": "启动接入",
+      "upstream_last_updated": "7/21/2026, 10:16:06 PM",
+      "html_sha256": "d8c80c8a9202502f9dc1cd735105816456e1cc8c16a5f133c41e976e917bc559",
+      "markdown_sha256": "3a7d14a4faaf6aa34f2560bced2ab1f60806d60e461a8c8db9534db28814675b"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/emoji/model.html",
+      "path": "openapi/emoji/model.md",
+      "title": "表情对象",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "e9af9420ba1e1f0e037093be9e9f0db06b7bfb15dbe24c63c719e03accf77c7f",
+      "markdown_sha256": "83e2879ec9c23a383da1e6672f7abf53f680493101389104c59a824e047bf7c8"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/error/data/model.html",
+      "path": "openapi/error/data/model.md",
+      "title": "业务报错返回的数据信息(Data)",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "05e9d4ba3342ad089264453aecc61d830ed1bf3eac1a603a4c42b9bcaddb1f1b",
+      "markdown_sha256": "81ccadfbcfe0b3dcb3c20da1bfa699e3ab3b59b5bf1242426cf678bcaf21ae73"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/error/error.html",
+      "path": "openapi/error/error.md",
+      "title": "错误与调试",
+      "upstream_last_updated": "7/21/2026, 9:50:42 PM",
+      "html_sha256": "e86cf729bf3367fd673834f444b8614b4cb3e38450dc6bfe228b33fb2a669ac8",
+      "markdown_sha256": "8260936c4ea695e2d3f846ec3e7f2fd26c2759cbc7a9b193d8ea554d04667473"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/member/delete_member.html",
+      "path": "openapi/member/delete_member.md",
+      "title": "删除频道成员",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "e6b5ee078ef79ab15650d0139ab1a176fb40ba4169ddb44d8d47fe1a6755d80a",
+      "markdown_sha256": "db2a9c3662302c041140d9b0158f8eb2cc5f48168915d1e1870755fb49b8cab8"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/member/get_member.html",
+      "path": "openapi/member/get_member.md",
+      "title": "获取成员详情",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "43507aefb48adb784a3846b2d561264fe8ed3af186c97558f9eb4a9d5446f9ca",
+      "markdown_sha256": "bdd48a0c374843a6ee61365bbfe62399537afb3254a0637a30e69d6543af3c5b"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/member/get_members.html",
+      "path": "openapi/member/get_members.md",
+      "title": "获取频道成员列表",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "cfdc7aa3d790b4d7645bebaa3608c884ea6f7e3b2c2bc6d7f705a108fb999266",
+      "markdown_sha256": "d1c1a9d47d7b465b3a1d7bde168148576ac3a9996e8a529b2f6c314e6833555d"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/member/model.html",
+      "path": "openapi/member/model.md",
+      "title": "成员对象(Member)",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "7a288b9031d4f7b5f427081af89607bfe33f15ea5c8d7ab8233b9464928e059e",
+      "markdown_sha256": "10624eed764bd599536c528a8a5542f7fd4e317cac5a3ddf0af2b9b2edc984b0"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/reaction/model.html",
+      "path": "openapi/reaction/model.md",
+      "title": "表情表态对象",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "86491eea4a480fcd44924ddb5f0e784f39abafba08ed7a303c13df248a935944",
+      "markdown_sha256": "0b0d767c25cbdef573d0daf9d9bed90ced1b41b22045e12cfc198be5455d03a7"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/user/guilds.html",
+      "path": "openapi/user/guilds.md",
+      "title": "获取用户频道列表",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "d775757f71dc384e8ecd9d9d0941fe0b4a4788db73b7ba9811adbd1c1012faa0",
+      "markdown_sha256": "881bb88d9806239b635f4a7909336eaa031f9c5deaf0d6f3c81697cdda6ff2b4"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/user/me.html",
+      "path": "openapi/user/me.md",
+      "title": "获取用户详情",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "b21a77c7e3938434cdf419034d891a8353af1ba05c172ba9b47ed77c498796bb",
+      "markdown_sha256": "d6f4ea026df75ecc16be4b867656840b42ac39b357537f03d7e6158f8054e42b"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/user/model.html",
+      "path": "openapi/user/model.md",
+      "title": "用户对象(User)",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "869893be3c96df03eae639fbb27ed922e6ad3452525f3b9a3d65ed564982897a",
+      "markdown_sha256": "53791119c426d74401f4d7cf0e0cdc40fe14ed6cb3278dd32d324c98e21aa322"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/wss/shard_url_get.html",
+      "path": "openapi/wss/shard_url_get.md",
+      "title": "获取带分片 WSS 接入点",
+      "upstream_last_updated": "7/30/2026, 10:21:27 PM",
+      "html_sha256": "3374f4872da9d67274608313229889e6c79bdce13c3d805f446073403adaaf1b",
+      "markdown_sha256": "eb4d1bf8aba57133c7503414621461b9468c6c52babedcbcfdf86a3044e16bb4"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/wss/url_get.html",
+      "path": "openapi/wss/url_get.md",
+      "title": "获取通用 WSS 接入点",
+      "upstream_last_updated": "7/30/2026, 10:21:27 PM",
+      "html_sha256": "a5d23350b8e41b8831a7d0f23ca922745ca05f7953eb21b17df8988d3b69cadf",
+      "markdown_sha256": "b80618cc9ab485a24c1ea7ce4e2d0c51fe782d351d4a8c2f297014793f833fa4"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/api_permissions/get_guild_api_permission.html",
+      "path": "server-inter/channel/api_permissions/get_guild_api_permission.md",
+      "title": "获取机器人在频道可用权限列表",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "36cb471bb4e5d6ee1c7018a6a743efb0eee946df45121d273676faefb2e3ffed",
+      "markdown_sha256": "c4954d457da7c25a3bd54037ea8d0a4d612281ae5341aae81311a561b3e0bae5"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/api_permissions/",
+      "path": "server-inter/channel/api_permissions/index.md",
+      "title": "频道模块",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "e05c6578022430f21aa84f71d0807cbeb2075ae9d46e01c8a5bdd03b4ae8bde2",
+      "markdown_sha256": "087fcd7883538c4332a97870cb7c34923b899259c577c5dfba70b5e92ae9f184"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/api_permissions/model.html",
+      "path": "server-inter/channel/api_permissions/model.md",
+      "title": "接口权限对象",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "71119ec4fc061a380e1ad9aa3beda8d66a22928f919abd430934511153dfac35",
+      "markdown_sha256": "82af8f0a971ddb48028ce376825ef4b87f2768ca53c19fa26fda5b2aa578afff"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/api_permissions/post_api_permission_demand.html",
+      "path": "server-inter/channel/api_permissions/post_api_permission_demand.md",
+      "title": "发送机器人在频道接口权限的授权链接",
+      "upstream_last_updated": "5/20/2026, 8:38:10 PM",
+      "html_sha256": "25fcac6ec8b30341009934d831a164c3edd423bf494aa66ac5bc3c7bf2af2a88",
+      "markdown_sha256": "cdf10b2f103486c75959a9bb003617935cc4cc6f51b2306577eeb5c0108ec79f"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/announces/delete_channel_announces.html",
+      "path": "server-inter/channel/content/announces/delete_channel_announces.md",
+      "title": "删除子频道公告（2022年3月15日后废弃）",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "7af554a92a849cf226426f37636a46810a58c77c8f9f220bb77dfe82450cab8c",
+      "markdown_sha256": "96b4a9bf3d8da3d90d8a4ae9af040ee72436a4310db82a3d7b06c21b5aaf1c7c"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/announces/delete_guild_announces.html",
+      "path": "server-inter/channel/content/announces/delete_guild_announces.md",
+      "title": "删除频道公告",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "efbaf0e48afc34e5a9448f8edc6d71ce6526763015f755f60bd926d21dbd8b98",
+      "markdown_sha256": "ab7811adebf0e01ada440c19564cacca7b1ca864e21a8eb660871b3f6c6668f3"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/announces/model.html",
+      "path": "server-inter/channel/content/announces/model.md",
+      "title": "公告对象(Announces)",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "73edcd875b2fe714e2cdb2bd255fa4d69fbc2b4cf332cb683ed4fac5948bd2c2",
+      "markdown_sha256": "18ecbc94193c2dbda34e9f967e8f4b031d1ca85cce99483d3411b5c7627016dd"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/announces/post_channel_announces.html",
+      "path": "server-inter/channel/content/announces/post_channel_announces.md",
+      "title": "创建子频道公告（2022年3月15日后废弃）",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "eb96786cf537d0b44fcec22ad0a7c9adac9ca5e0ba85c0d0813f25d927fc106e",
+      "markdown_sha256": "af0290b9a10d03b4943a3efb0bc795e14f4dae9a23525abbd86f4ffb3a642ead"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/announces/post_guild_announces.html",
+      "path": "server-inter/channel/content/announces/post_guild_announces.md",
+      "title": "创建频道公告",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "8917bd736d88b5c3ac0994da1104b2dc1cd9d251076b4f15f31c4fbb6299ee68",
+      "markdown_sha256": "144da1d241f4a587607e5f0c5e817a8e1a3b910ff102b3f617d71133348e503d"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/audio/audio_control.html",
+      "path": "server-inter/channel/content/audio/audio_control.md",
+      "title": "音频控制",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "8f914634133255f8281a1d35b60e325869c1d725bf95bc597007ccb6c58f762b",
+      "markdown_sha256": "4b6d2314db7c65730384a5ae3b11bc77fe034b2cae1cef6523f0510e9d0fd031"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/audio/delete_mic.html",
+      "path": "server-inter/channel/content/audio/delete_mic.md",
+      "title": "机器人下麦",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "5b685aa5c900da38559dda30ca152a615c07d190c613d65dd118f17d7350d4b0",
+      "markdown_sha256": "fb2dbb13c161eb2c3c8a35f354e3f4b65f2d916200f8ff590dd26482b0406459"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/audio/model.html",
+      "path": "server-inter/channel/content/audio/model.md",
+      "title": "语音对象",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "5d078731ad2a6bac645f4941b8f6bf815931576e905996131576e671422cb288",
+      "markdown_sha256": "8cca59d2911ed5ce37053a896de88d8ead9d3ae38519b7595396da600accc771"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/audio/put_mic.html",
+      "path": "server-inter/channel/content/audio/put_mic.md",
+      "title": "机器人上麦",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "bf203d58384b4f9bd29f5942d6ba1026d95619e47fb76b3fb575c5e8116794f8",
+      "markdown_sha256": "fea4fd29d85b057f631cb4ece8f1f64b040f2e2d1053a3802cb50889cce762cd"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/delete_thread.html",
+      "path": "server-inter/channel/content/forum/delete_thread.md",
+      "title": "删除帖子",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "dc7d1a714838926a0eb5f4c58be2a9a548fb26d5cd4c46563cafd7e1e077d2e1",
+      "markdown_sha256": "fda04cd4758e290e86244a51d9b1c37c77ef8be71bcf3faf7e75ea28a6263dcc"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/forum.html",
+      "path": "server-inter/channel/content/forum/forum.md",
+      "title": "论坛事件对象(ForumEvent)",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "b219ce119911c6760fcd5d398cd29009310d0ab051ad14ec81ef7a8b775c5095",
+      "markdown_sha256": "59160b1d4553e62bb71a432f7c6ff26784241a9c627fe304f3c73e1ad739ba9a"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/get_thread.html",
+      "path": "server-inter/channel/content/forum/get_thread.md",
+      "title": "获取帖子详情",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "b5601258851d0d73e459894bb7f0bc9d0c7186c9dc5967ee44ec8cba5e0ac263",
+      "markdown_sha256": "2b8314934ec1334e53e653bc51969910781b4814ec31a05f22479a171c8f9140"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/get_threads_list.html",
+      "path": "server-inter/channel/content/forum/get_threads_list.md",
+      "title": "获取帖子列表",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "1d8a98fa04c4120f340dc3e443214ad72236cf0b7d56721798aa6c8d8d3fc4a6",
+      "markdown_sha256": "e502864bd1720b8ad7e45924664450a9088bd06751bf03f388d94ccedaf14952"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html",
+      "path": "server-inter/channel/content/forum/model.md",
+      "title": "论坛对象(forum)",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "9719f26fbf0d36399032a4c45fa0d2f2d99d6bf16cd4110a785c8ef6ae7bfa82",
+      "markdown_sha256": "41ecf89d1e45fb290679bbed68a60b7fe3393421dbac328719e19ef4382a9979"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/open_forum.html",
+      "path": "server-inter/channel/content/forum/open_forum.md",
+      "title": "开放论坛事件对象(OpenForumEvent)",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "9ae4d1960fc3f6eec79a88ab5ed24dfc4ffb7b984bfc03a2a6d5fc673287c7b1",
+      "markdown_sha256": "93180e821946157c20ae4f2d8bf6b096861da28bf146e673b30a736dfbde6714"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/put_thread.html",
+      "path": "server-inter/channel/content/forum/put_thread.md",
+      "title": "发表帖子",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "e0c46a1d887971cd22e81ce6894ab70ee623ca22144ea8b896e2ee56fc990438",
+      "markdown_sha256": "cec5ccdf84eacc84255368567635f2828fe412d795baa9ca760b50cec03d97be"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/",
+      "path": "server-inter/channel/content/index.md",
+      "title": "频道模块",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "79d3cae2ff212b3d463e26c742dd15d888fea9069c5bd8376773b0e42318c4c4",
+      "markdown_sha256": "718423acdf3efa4ab38c4fe48725d68608770d816132551275c02880db41d81c"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/pins/delete_pins_message.html",
+      "path": "server-inter/channel/content/pins/delete_pins_message.md",
+      "title": "删除精华消息",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "1aca95b793bc3414034227d4626e1e366eaec56275eada6cb86cc29b6030eda7",
+      "markdown_sha256": "b20b006083eb20e496649c0a1d5a98594b9f11b42481fcdd11266c2344b3e69f"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/pins/get_pins_message.html",
+      "path": "server-inter/channel/content/pins/get_pins_message.md",
+      "title": "获取精华消息",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "ba5a356ef877748106be8f6e62c0e5fefe031a2bb693c3fed726196582ead574",
+      "markdown_sha256": "7aeea7889e54c55437fa9b403cb0269d7a8d47fc650067d174802e4f3e90015b"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/pins/model.html",
+      "path": "server-inter/channel/content/pins/model.md",
+      "title": "精华消息对象(PinsMessage)",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "d622d37da2893ea470edda68e61fe54a549a4b9ee8106be1826b2e74a98dcb0e",
+      "markdown_sha256": "9da405a88d167653760391d1640613f512c1c7dbb9a8ea27a09a8add9888bcfb"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/pins/put_pins_message.html",
+      "path": "server-inter/channel/content/pins/put_pins_message.md",
+      "title": "添加精华消息",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "6db921e8220c89d9f6b1f18fe3bacf1ac3fb243b08adfcf305222eccfd0daf5e",
+      "markdown_sha256": "fdbb7803894be3b623438b042b6d20b698e68badf606d53fc9371929b8dbf63a"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/schedule/delete_schedule.html",
+      "path": "server-inter/channel/content/schedule/delete_schedule.md",
+      "title": "删除日程",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "b07746d40d01b0c078867bf5430b0c85bf7ad55f5e2765b8f1841dedc9a1bf30",
+      "markdown_sha256": "2c77768c2c9b3875ae3ac1b7c5fab4747fa13966389d0bf6bed8147e0236227f"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/schedule/get_schedule.html",
+      "path": "server-inter/channel/content/schedule/get_schedule.md",
+      "title": "获取日程详情",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "4a17ceb2aa8295ff61ef2d23210b87e1d3ef05e4ed3d184d5b82768ba5a4c8a5",
+      "markdown_sha256": "124bd45e4dc471567e89ed79232b97284fd9ea3e7b9883e0dee79636818811eb"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/schedule/get_schedules.html",
+      "path": "server-inter/channel/content/schedule/get_schedules.md",
+      "title": "获取频道日程列表",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "60cdd76eeea018c4c2d4f01d41c5fc197a9b646e1639816477b19ed47856a224",
+      "markdown_sha256": "af3fe7b39a91ef8592ae7d458335ba03f7ede678db38edc6d34be29f590255e3"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/schedule/model.html",
+      "path": "server-inter/channel/content/schedule/model.md",
+      "title": "日程对象(Schedule)",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "e1d8535663fdff8b49238669a04d8bbee99d2156e9b8be36f8549696b1cec568",
+      "markdown_sha256": "66e1795e637c0aea845e3de8d90495694d447843ced0ccbcb3ec0cec6e5782a8"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/schedule/patch_schedule.html",
+      "path": "server-inter/channel/content/schedule/patch_schedule.md",
+      "title": "修改日程",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "16343d1568c04da0dce7b45aff21d1daafee95e32ba1b67c93b377f741dbf75d",
+      "markdown_sha256": "b8ce4e0184af522ea48e41af9895bcbf21a668f2d1df5bd0e1b1209502e6a4b5"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/schedule/post_schedule.html",
+      "path": "server-inter/channel/content/schedule/post_schedule.md",
+      "title": "创建日程",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "287c8a22a089daec98691de200340592d83853f83e64bdc06b707965a4ebe979",
+      "markdown_sha256": "848d34d17a2c5255b744fd08552e0ea1ebe41716d16d0446a4b68c4c162081eb"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/",
+      "path": "server-inter/channel/index.md",
+      "title": "频道模块",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "8a135b3a08573649342e1498e69da9d918d852817b6cb02f50dc70ffc73dc0b2",
+      "markdown_sha256": "99ca0dacdf0d556f1639468489a255b984a0e54aafd711faf19b7d1fc8646fed"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/manage/channel/model.html",
+      "path": "server-inter/channel/manage/channel/model.md",
+      "title": "子频道对象(Channel)",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "eb3c3a9ca3cae62a55783d2b2d83c8d7e0978fdb29589130f046edb11efb6281",
+      "markdown_sha256": "87c3d527b8d2bceaa4b9fb517bdbb367623f3099e8d9c796f395e2689b1eb9e6"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/manage/guild/model.html",
+      "path": "server-inter/channel/manage/guild/model.md",
+      "title": "频道对象(Guild)",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "4e9426c9392271a495d205569aa18eefc2afd8065702b062539b6607c8489372",
+      "markdown_sha256": "fdae80347045750d6b2b5330874c20b1cc7d702987855a4e171b5fefbd08b0d5"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/manage/",
+      "path": "server-inter/channel/manage/index.md",
+      "title": "频道模块",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "5f5595dac7df923f7c71d02d3ece4e1de45af4a33e70472d5bc52a90d04c7c2b",
+      "markdown_sha256": "79ebd2f0632f90795b62956cf7ddbdc08a1b4b6bf370cd2cc736ab2701e8fb18"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/manage/user/model.html",
+      "path": "server-inter/channel/manage/user/model.md",
+      "title": "用户对象(User)",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "4c996e367998094f26dec5a5800290e4bbfa7a373b89bad9cad1d8e571d34269",
+      "markdown_sha256": "e855d446f9317f13983ef9593b8f73f50a12879e623ef1808b495cd71b1bb2b0"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/message/dms.html",
+      "path": "server-inter/channel/message/dms.md",
+      "title": "频道私信",
+      "upstream_last_updated": "7/21/2026, 3:25:45 AM",
+      "html_sha256": "658c11e04dc133e2f9f826cf9b3e840b31d88539425fc82df8f863ebda293106",
+      "markdown_sha256": "2381e98609a84a063bbd82876b09ad6405f12a030340e8d15e752c7fe62859f6"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/message/event.html",
+      "path": "server-inter/channel/message/event.md",
+      "title": "频道消息事件",
+      "upstream_last_updated": "7/21/2026, 3:25:45 AM",
+      "html_sha256": "5061fdac3434a9a2c415d9e95972befa005dc981ef19ac40638af7de730049c0",
+      "markdown_sha256": "990a5ce3ca086f71e79f919922c0efa7390e91307bb5bf1e42b9305e6c155403"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/message/format.html",
+      "path": "server-inter/channel/message/format.md",
+      "title": "内嵌格式",
+      "upstream_last_updated": "7/21/2026, 3:25:45 AM",
+      "html_sha256": "a2710fab99c1ed66150263199c1f5bc2568118c07d95ea0e9f6ab3acef512280",
+      "markdown_sha256": "cc15ece44bf1f570c930f117689dfec8e2f55643a22cb8cce7c6f7382444ad03"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/message/recall.html",
+      "path": "server-inter/channel/message/recall.md",
+      "title": "撤回子频道消息",
+      "upstream_last_updated": "7/21/2026, 3:25:45 AM",
+      "html_sha256": "62fbadc0dc6d40f6af186d7e373c2332970c7ef53133d8c3f014efc55e44af76",
+      "markdown_sha256": "fbc2799e6ef361ff951bb85b9c9d2a600c68d2133ac960bfa95adb7289005741"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/message/send.html",
+      "path": "server-inter/channel/message/send.md",
+      "title": "发送子频道消息",
+      "upstream_last_updated": "7/21/2026, 3:25:45 AM",
+      "html_sha256": "7fe2b6593a7700d442a88fe2d5dcf74ca86a46b11a4c8fc85189aaa0fc763e3a",
+      "markdown_sha256": "98e0694ed20f854c60c806f2690425f2485597db3e036818a7eec729588a02eb"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/miniapp/",
+      "path": "server-inter/channel/miniapp/index.md",
+      "title": "频道模块",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "e258fd8831f771798523293a71b7e4e18926f680dbaf7267b1563f7edb906eb9",
+      "markdown_sha256": "9ad8626ec383507793a03980339df469f4aa8c54db152df29de53be572eb0907"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/miniapp/interface.html",
+      "path": "server-inter/channel/miniapp/interface.md",
+      "title": "获取频道和当前人信息",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "3a23c4abff0822dfd65a8567f786d310e55ad9a21c9da5ba3f1623218296d52f",
+      "markdown_sha256": "e502e5dcb4fcc4afbba950c99de0bd2a5cffe0877213d4b271c12d74f3f3dd4f"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/miniapp/opendata.html",
+      "path": "server-inter/channel/miniapp/opendata.md",
+      "title": "开放数据域加密",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "95ad86b42c3d1cb2d2f7f77d5ba9951a3613ee8f4df4b48b01f6b6aa286da152",
+      "markdown_sha256": "a9f49e3954c84efb6d428330a3f0d9f032228123bf65f7d20179fcce107bcf01"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role-group/channel_permissions/get_channel_permissions.html",
+      "path": "server-inter/channel/role-group/channel_permissions/get_channel_permissions.md",
+      "title": "获取子频道用户权限",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "4d9b7fa7e81f8cfd1a26629cb4961c2f89b832750b337f33e21733d042c17d50",
+      "markdown_sha256": "9116121e252e0b0fe0e8f0ca66b03c912548e85e2b241b06936362a41950621c"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role-group/channel_permissions/get_channel_roles_permissions.html",
+      "path": "server-inter/channel/role-group/channel_permissions/get_channel_roles_permissions.md",
+      "title": "获取子频道身份组权限",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "ea2c1212e10a1f7c63e64a7ac706ec6c691f018e6fb4583aac1b9d5180aa713c",
+      "markdown_sha256": "d7cfae976a2beaeec33e77d6b78edf922862bc9c1fc9055a2b955eee4d702a80"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role-group/channel_permissions/model.html",
+      "path": "server-inter/channel/role-group/channel_permissions/model.md",
+      "title": "子频道权限对象(ChannelPermissions)",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "edcdc9cfe7da32a9660171c9ff0c51e5d146ccb049ac64da2d96392786d61c93",
+      "markdown_sha256": "3300408385b493722ce87331e7fdd61c31e08d41548216e84bec089b494f3b91"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role-group/channel_permissions/put_channel_permissions.html",
+      "path": "server-inter/channel/role-group/channel_permissions/put_channel_permissions.md",
+      "title": "修改子频道用户权限",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "44537953a5d1abab8b2faa9bf40df16f7fc526a1e395c02919c423f16f37266c",
+      "markdown_sha256": "4a9f40033afa15dc39d06749f0a0d3b1bc511b7b4066d9c1752d013a66463b8c"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role-group/channel_permissions/put_channel_roles_permissions.html",
+      "path": "server-inter/channel/role-group/channel_permissions/put_channel_roles_permissions.md",
+      "title": "修改子频道身份组权限",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "6e99565a8655fc102e563f044f64cafeb3cacf025a68ef4862664316a4d8629b",
+      "markdown_sha256": "fe7daa5220ed824febb2b211c9de2e36b5499b91d18771b08fe54f162c2dc8ac"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role-group/delete_guild_member_role.html",
+      "path": "server-inter/channel/role-group/delete_guild_member_role.md",
+      "title": "删除频道身份组成员",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "12788dd1e648643c8cef020234af6009b128727df25a925c428f38987a6f2ad0",
+      "markdown_sha256": "a3849c3bb20737c8824261ae99d71207a8de656b1a026ac843e4d880656f847b"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role-group/delete_guild_role.html",
+      "path": "server-inter/channel/role-group/delete_guild_role.md",
+      "title": "删除频道身份组",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "8d3fd4d9e8dd0b850637294c63bee240edb2e0d2e76859d4ddebdd4070c3e165",
+      "markdown_sha256": "66abdff2f935dd1d5b91ed015e88ef089663f953e970439ce25a645854d62b3e"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role-group/get_guild_roles.html",
+      "path": "server-inter/channel/role-group/get_guild_roles.md",
+      "title": "获取频道身份组列表",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "bc224d1d55998a798b9576abb31d19a491b938785440232e411b6a884701d521",
+      "markdown_sha256": "49e6194067f021f2a6caffd9b553adb7c50ca30870db535994a60421b5fd0589"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role-group/",
+      "path": "server-inter/channel/role-group/index.md",
+      "title": "频道模块",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "84b7e2669bb1d1e7e5bce85a9aaab936cb18dc0939ba7a3928c58d8ccd932808",
+      "markdown_sha256": "5608069e554d16b8a052ada26d7665686c76f90030e429a921263fa8e165b280"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role-group/patch_guild_role.html",
+      "path": "server-inter/channel/role-group/patch_guild_role.md",
+      "title": "修改频道身份组",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "9a4ee9219321ac7095c922ccfc6b8b6af526da809edf4aa1b3d6aeb9a7ff7620",
+      "markdown_sha256": "976a798a0740be8800db1f9e4a871af520aeb2023b14cfa48312567e067f925a"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role-group/post_guild_role.html",
+      "path": "server-inter/channel/role-group/post_guild_role.md",
+      "title": "创建频道身份组",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "6f0bceee314175a2b2311bb65f8fd2df93a54884448798b5dc3341c731681c95",
+      "markdown_sha256": "1db22773e964777160ddacc1ce5dd176e8df5d7ae797b4b50a7b47402c08c914"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role-group/put_guild_member_role.html",
+      "path": "server-inter/channel/role-group/put_guild_member_role.md",
+      "title": "创建频道身份组成员",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "febbb6a7893cb015e3f2d75043af5cd9a425f11a04dd618b2fc9ef3c7843cc59",
+      "markdown_sha256": "219a2ab36e96b7a305d9a80f439d028e6392f5ce6e14624aec1b46a3dbae61e1"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role/audio_or_live_channel_member.html",
+      "path": "server-inter/channel/role/audio_or_live_channel_member.md",
+      "title": "音视频/直播子频道成员进出事件",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "e7bddaf686a02df47612f9a2aa8479b3bd5d8056942ba9ae67deb16588c2e5a4",
+      "markdown_sha256": "679e1b2d0456322a5949536ff83d825615c995ee8f4860836724706e6320b78b"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role/get_online_nums.html",
+      "path": "server-inter/channel/role/get_online_nums.md",
+      "title": "获取子频道在线成员数",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "ea9e68b4058930bfb790ece78b3fa2a31cf416eebc3f983d6fb331ef5d44a153",
+      "markdown_sha256": "c0ee1a447c68d2da46a1bb8b3e391ec5eb50be3066eb385807b9e34a0a6335cb"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role/guild_member.html",
+      "path": "server-inter/channel/role/guild_member.md",
+      "title": "频道成员事件",
+      "upstream_last_updated": "7/22/2024, 10:40:23 AM",
+      "html_sha256": "8e6a1837c116671f93f2c67409ef6c500b1a49669b27ac362585d54f9fe643bd",
+      "markdown_sha256": "6f49008378697d106a6480e649acc7e4bdefbeb2495bf114d02ab067cc2c9f42"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role/",
+      "path": "server-inter/channel/role/index.md",
+      "title": "频道模块",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "09ba7818f87617e254cb393cd03d2d45cc3b421543b3cd42ab7655dbeddf4e4f",
+      "markdown_sha256": "bd3d7f85a7e73df89bd17343c4e3eb560045a5000e484a33fb9eeeb4a7661f76"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role/member/delete_member.html",
+      "path": "server-inter/channel/role/member/delete_member.md",
+      "title": "删除频道成员",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "bba07077b1728b2793554b12bf75b493eb2cba088e882621c4ad42dc31f2109b",
+      "markdown_sha256": "ed4e17306113b3e156cec926b93d3fe04cbdbfc60053db0bd2feabd563fc7012"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role/member/get_member.html",
+      "path": "server-inter/channel/role/member/get_member.md",
+      "title": "获取频道成员详情",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "ef939659901de4583735ae4ac13e2664c551d4065e0ba269f07bf3b4f23ccacb",
+      "markdown_sha256": "507a11965ef724884ebabf2601be99b4b77ceef55a8f497c5e72638ec0c035fc"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role/member/get_members.html",
+      "path": "server-inter/channel/role/member/get_members.md",
+      "title": "获取频道成员列表",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "11cba620afa127a97c97838b7eaa1b25a914889d3a9b0768016f5fdc0c0b3512",
+      "markdown_sha256": "df23baaff78ab2a3159c6e0c74acd369cd93404fbc2988ff0b944600995f19fc"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role/member/get_role_members.html",
+      "path": "server-inter/channel/role/member/get_role_members.md",
+      "title": "获取频道身份组成员列表",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "86ad1af104e85ca4ef840e07b14664406a1a5cf96e5d88ecf708f71db201c4e2",
+      "markdown_sha256": "08a311548b64bd190f3581a1053594d3b51dddeccafabd8b6c3b36b1baa856cc"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role/member/model.html",
+      "path": "server-inter/channel/role/member/model.md",
+      "title": "成员对象(Member)",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "919c4ce6d19983ced4a692dd6dd0e37af639ede7fb67da81f550d2de99101d85",
+      "markdown_sha256": "953900ec3630f61d44184467e01d5db8caf6dbd7875dcd75ff353df71479527c"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role/member/role_model.html",
+      "path": "server-inter/channel/role/member/role_model.md",
+      "title": "频道身份组对象(Role)",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "e093fcdb7216d7c186d38e28a00dc8bdd4d78e849a6330e99f524ab623f29885",
+      "markdown_sha256": "00c4f1d414828643dcd9f6c2ac6a6984399c8458c052891ada37f701488aafe5"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/speak/",
+      "path": "server-inter/channel/speak/index.md",
+      "title": "频道模块",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "6e7775461e95f324fe9361a7581f7535d63651ca588177ccc4d30d4cf39633c2",
+      "markdown_sha256": "0c86047fe9922b1c6859a83dedbc9de9e5bf39841baf8a55ff3d58504e553981"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/speak/patch_guild_member_mute.html",
+      "path": "server-inter/channel/speak/patch_guild_member_mute.md",
+      "title": "频道指定成员禁言",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "c63bb8c5734243aa4e4e9076c0835ee07d9612fd0cc552aa5b55e5b99f7bebe9",
+      "markdown_sha256": "41f0cf378d1f1c5f964f42a5f3f27d4715567fba1ca7682914a5d9cbefee0527"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/speak/patch_guild_mute.html",
+      "path": "server-inter/channel/speak/patch_guild_mute.md",
+      "title": "频道全员禁言",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "e7dcc60026604b19782b4f52b321269ae0d7b7d5571c45282a2d8c9994a80694",
+      "markdown_sha256": "a7b277b609ce5b2f4154cc3b8af79ebe5e485d1111fe98ee8d117feef2b3d251"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/speak/patch_guild_mute_multi_member.html",
+      "path": "server-inter/channel/speak/patch_guild_mute_multi_member.md",
+      "title": "频道批量成员禁言",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "6c099105e13b1af7e4adf311f2233bfc7dec337aab240dcdc73f959d5de1c9db",
+      "markdown_sha256": "301e8cec2b56f1d9dedb1b5ef44406279ab9ccff43466e5f4b07bd0f7dd349f5"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/speak/setting/message_setting.html",
+      "path": "server-inter/channel/speak/setting/message_setting.md",
+      "title": "获取频道消息频率的设置详情",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "d74b52759c31516778d92b0aea80bf15fd343418f98eacde28c3be8aeb592d26",
+      "markdown_sha256": "8a29fffffab35e0dbf60e1d096dc88a0a8648f65ea1797a3616e98e64d6e60d4"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/speak/setting/model.html",
+      "path": "server-inter/channel/speak/setting/model.md",
+      "title": "频道消息频率设置对象 (MessageSetting)",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "bda54f2e12613229c1dafd647b838979443b8cec5a597b24f8d67d912504bdd4",
+      "markdown_sha256": "8e1f630e4f5a6a0d370445e88fa9a0de44cd448304d172e23ba9fc5c45138abc"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/group/",
+      "path": "server-inter/group/index.md",
+      "title": "群组模块",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "8df49ab1936ecda9ad45b22744d2a048b26b64dca605c55ab3225411ccdf7061",
+      "markdown_sha256": "4b898739f64659d43d2d6387d86c8b32ef78ff5e17d82cd2cb58599e0fa4cab7"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/group/manage/",
+      "path": "server-inter/group/manage/index.md",
+      "title": "群管理",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "5470eda15ab37016821d9de7a541745739b8d386372596831434f59cd5257e7b",
+      "markdown_sha256": "52ca2d27ecd1a71125b296f2fd4ca783431f7459f5cd1dc45d1eecb1c2689c6d"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/menu-panel/",
+      "path": "server-inter/menu-panel/index.md",
+      "title": "自定义菜单与指令面板",
+      "upstream_last_updated": "8/13/2026, 12:04:31 PM",
+      "html_sha256": "1ed11d4cbffa76105608bdf94da1cca8067e99ea5f2c8f3165d0d65883dc62ae",
+      "markdown_sha256": "1e1d37b6d6d34f67a2419abb5c0ec874ddc4fa655246c479afeb66fa73ae87d9"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/message/",
+      "path": "server-inter/message/index.md",
+      "title": "消息相关",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "99de4672772d0901536f4400080a0b5acfd492844d1b9039ad780c5590351567",
+      "markdown_sha256": "301a691cb3c80378a7169b6ac94f72ab925fe5915aa25142462027e95c39a5bd"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/message/material-management.html",
+      "path": "server-inter/message/material-management.md",
+      "title": "素材管理",
+      "upstream_last_updated": "10/21/2026, 7:35:14 PM",
+      "html_sha256": "360458e2211b75e5c9d83f4611fd1436709e862de8a52d8907e44457a95d6ac4",
+      "markdown_sha256": "9a021a1d3fee2c3cddba8c0351518805bf88c0e0a4bbf41f05d8b1b119b3da0c"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/message/overview.html",
+      "path": "server-inter/message/overview.md",
+      "title": "消息收发概述",
+      "upstream_last_updated": "7/21/2026, 11:01:44 PM",
+      "html_sha256": "68751a6bd5090c1700190e24ac1061dd0e52376e626b26ca0e8c1e1092eabb0f",
+      "markdown_sha256": "7115063f807190ab77f68c276db5d835620418f342658aa880e7e1a50e5673ab"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/message/rich-media.html",
+      "path": "server-inter/message/rich-media.md",
+      "title": "富媒体消息概述",
+      "upstream_last_updated": "7/21/2026, 9:50:42 PM",
+      "html_sha256": "3acda0ac461877b4d95605408594829fd646ae108503ece59b08d08cd717961d",
+      "markdown_sha256": "a95cfeaa74796b1d85ffedac9d5b0ac8201c4699ba2a758c2622919d43bdf7b6"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/message/template/model.html",
+      "path": "server-inter/message/template/model.md",
+      "title": "消息对象(Message)",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "bdb28fbd986749c023a67ed652626ea4fbdc29b2e79bb7124fd3a3bbae425e60",
+      "markdown_sha256": "49f4a54ddedba5637ecf8ae94e736174eddc200d05616062a982c3e2c0986d5d"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/message/trans/emoji.html",
+      "path": "server-inter/message/trans/emoji.md",
+      "title": "表情表态",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "fad11856a9c891831e82d71dd59beb7619f774c319c72eec333503f7ee78ffe7",
+      "markdown_sha256": "f5711ab38141ff88149e1b704622e744c7a2b65637931aebaa7228683947430c"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/message/trans/msg-btn.html",
+      "path": "server-inter/message/trans/msg-btn.md",
+      "title": "消息按钮",
+      "upstream_last_updated": "7/21/2026, 3:25:45 AM",
+      "html_sha256": "508061da0639bbab7cacd45641f86fd5b020853d16869d30e1aacb6abfee26d9",
+      "markdown_sha256": "0731940471ee0c8f05bd410dacb82468c65f161b7d4aef7109b169a6905135d7"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/message/trans/overview.html",
+      "path": "server-inter/message/trans/overview.md",
+      "title": "消息交互概述",
+      "upstream_last_updated": "7/21/2026, 9:50:42 PM",
+      "html_sha256": "e5cde7253f517a78f76af5962d14b4c093c0049b4108ac7962ed299d6beb2a29",
+      "markdown_sha256": "433b7d74ea99a28632b1f3fa5622dd94a314f128317d5e54f5c8672ba36989d6"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/message/trans/text-chain.html",
+      "path": "server-inter/message/trans/text-chain.md",
+      "title": "文本交互",
+      "upstream_last_updated": "10/26/2026, 5:41:55 PM",
+      "html_sha256": "25643cc3d2c6c404162dd0810082955b12920066f584318e25142a7205f367cb",
+      "markdown_sha256": "171d5716095b134aa2c484f08fa4a0a987ee3fbc646696a0fc61d9c47eec5423"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/message/type/ark.html",
+      "path": "server-inter/message/type/ark.md",
+      "title": "结构化卡片消息",
+      "upstream_last_updated": "7/22/2026, 8:51:48 PM",
+      "html_sha256": "af45f2c7bf585bc21f03f65e6601636d6c59aff66fd42d26bc4b233d1bce5c15",
+      "markdown_sha256": "d31e6ddc6f4cd3ac32f7b780a3104854dbd6c5b3167ea6be83fd8d16868e1994"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/message/type/embed.html",
+      "path": "server-inter/message/type/embed.md",
+      "title": "Embed 消息",
+      "upstream_last_updated": "5/20/2026, 8:38:10 PM",
+      "html_sha256": "21c25217eb4e1653c01f2ea7da6dfdd6a783b14592f127c047750ad15d664912",
+      "markdown_sha256": "b70679fdded95172973f6b2fd7e5b6b9547796d741cd35f96177fec202847ce9"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/message/type/markdown.html",
+      "path": "server-inter/message/type/markdown.md",
+      "title": "Markdown 消息",
+      "upstream_last_updated": "10/21/2026, 7:35:14 PM",
+      "html_sha256": "1c5e9c8ea93a0052db3e5b7c1f3c8489c75c33e2632c94eec0e3555c86f89dcb",
+      "markdown_sha256": "f6c1b0274678bbb285365da307f271da797bc9bad66bf6d882cbc783172afd5e"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/message/type/overview.html",
+      "path": "server-inter/message/type/overview.md",
+      "title": "消息类型",
+      "upstream_last_updated": "7/23/2026, 4:32:35 PM",
+      "html_sha256": "6675d8455e926b06c340b72227ff2f865cd679ffe32f0203c1774cbe0ae57547",
+      "markdown_sha256": "88a59c411dcbdffc5da9a36c63b1c71117c2e4dfcd14e5ed4b503d2c4de96ad2"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/user/",
+      "path": "server-inter/user/index.md",
+      "title": "用户模块",
+      "upstream_last_updated": "1/12/2026, 12:07:20 PM",
+      "html_sha256": "9275ba4dd090c2ad98d96cae8bccb49d1a2741bd1b1a3b3c48cf688d7783572e",
+      "markdown_sha256": "2070b4f64cd9f0e85ad740d76117da227d819ec08108290bc1c02f824e9bebbd"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/user/manage/event.html",
+      "path": "server-inter/user/manage/event.md",
+      "title": "事件",
+      "upstream_last_updated": "1/15/2026, 4:08:29 PM",
+      "html_sha256": "48c699e54cfa0ced0bde18e18d022e4d898139205e31e0791f2dfd95141dcd3a",
+      "markdown_sha256": "3db9a7c7ae9a63e91937334809c351bde56fe08767fb09595bf3617055989ca7"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/user/manage/",
+      "path": "server-inter/user/manage/index.md",
+      "title": "用户管理",
+      "upstream_last_updated": "11/22/2023, 4:19:57 PM",
+      "html_sha256": "8c6189094330b6ee9e3b8a70fc91312df4f28f51ffc8289d503047f20e7b880a",
+      "markdown_sha256": "303ff38dc22e53c96bf58038d84e3ba04c6752bc618609d1411ef212034edd36"
+    }
+  ],
+  "image_mode": "remote",
+  "images": [
+    {
+      "url": "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/23.dcdba41f.png",
+      "pages": [
+        "server-inter/message/type/ark.md"
+      ]
+    },
+    {
+      "url": "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/24.4656049a.png",
+      "pages": [
+        "server-inter/message/type/ark.md"
+      ]
+    },
+    {
+      "url": "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/37.2955062b.png",
+      "pages": [
+        "server-inter/message/type/ark.md"
+      ]
+    },
+    {
+      "url": "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/chat-c2c.33e2820c.jpg",
+      "pages": [
+        "server-inter/message/overview.md"
+      ]
+    },
+    {
+      "url": "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/chat-group.d5318db5.jpg",
+      "pages": [
+        "server-inter/message/overview.md"
+      ]
+    },
+    {
+      "url": "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/chat-single.c4f33531.jpg",
+      "pages": [
+        "server-inter/message/overview.md"
+      ]
+    },
+    {
+      "url": "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/chat-text-channel.6dfae006.jpg",
+      "pages": [
+        "server-inter/message/overview.md"
+      ]
+    },
+    {
+      "url": "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/command-panel.4fde9574.png",
+      "pages": [
+        "server-inter/menu-panel/index.md"
+      ]
+    },
+    {
+      "url": "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/custom-menu.674eb658.png",
+      "pages": [
+        "server-inter/menu-panel/index.md"
+      ]
+    },
+    {
+      "url": "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/image-send.35813305.jpg",
+      "pages": [
+        "server-inter/message/rich-media.md"
+      ]
+    },
+    {
+      "url": "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/interface-base-framework.d01e0c4a.png",
+      "pages": [
+        "dev-prepare/interface-framework/index.md"
+      ]
+    },
+    {
+      "url": "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/large-file-transfer.f49ff1e2.jpg",
+      "pages": [
+        "server-inter/message/rich-media.md"
+      ]
+    },
+    {
+      "url": "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/message-btn.94002609.jpg",
+      "pages": [
+        "server-inter/message/trans/overview.md"
+      ]
+    },
+    {
+      "url": "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/message-embed.18d8bc6d.jpg",
+      "pages": [
+        "server-inter/message/type/embed.md"
+      ]
+    },
+    {
+      "url": "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/post_api_permission_demand.0e7274cb.png",
+      "pages": [
+        "server-inter/channel/api_permissions/post_api_permission_demand.md"
+      ]
+    },
+    {
+      "url": "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/text-chain.b2f9b0fb.jpg",
+      "pages": [
+        "server-inter/message/trans/overview.md"
+      ]
+    },
+    {
+      "url": "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/video-send.9416079c.jpg",
+      "pages": [
+        "server-inter/message/rich-media.md"
+      ]
+    },
+    {
+      "url": "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/voice-send.21dce8bf.jpg",
+      "pages": [
+        "server-inter/message/rich-media.md"
+      ]
+    },
+    {
+      "url": "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/webhook_new.b24ed4d6.png",
+      "pages": [
+        "dev-prepare/event-emit/webhook.md",
+        "dev-prepare/interface-framework/event-emit.md"
+      ]
+    }
+  ],
+  "inline_images": [
+    {
+      "page": "dev-prepare/getting-started.md",
+      "alt": "QQ 机器人反馈助手",
+      "source_page": "https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/getting-started.html"
+    },
+    {
+      "page": "index.md",
+      "alt": "QQ 机器人反馈助手",
+      "source_page": "https://bot.q.qq.com/wiki/develop/api-v2/"
+    }
+  ],
+  "unavailable_pages": [
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/gateway/message/model.html",
+      "reason": "The server returns the API landing page for this missing document"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/guild/model.html",
+      "reason": "The server returns the API landing page for this missing document"
+    },
+    {
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/guild/role_model.html",
+      "reason": "The server returns the API landing page for this missing document"
+    }
+  ],
+  "normalized_links": [
+    {
+      "page": "dev-prepare/interface-framework/reference.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/event-emit.html#分片连接LoadBalance",
+      "local_target": "dev-prepare/interface-framework/event-emit.md#分片连接loadbalance"
+    },
+    {
+      "page": "openapi/reaction/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/emoji/model.html#Emoji",
+      "local_target": "openapi/emoji/model.md#emoji"
+    },
+    {
+      "page": "server-inter/channel/content/announces/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/announces/model.html#RecommendChannel",
+      "local_target": "server-inter/channel/content/announces/model.md#recommendchannel"
+    },
+    {
+      "page": "server-inter/channel/content/announces/post_channel_announces.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/announces/model.html#Announces",
+      "local_target": "server-inter/channel/content/announces/model.md#announces"
+    },
+    {
+      "page": "server-inter/channel/content/announces/post_guild_announces.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/announces/model.html#RecommendChannel",
+      "local_target": "server-inter/channel/content/announces/model.md#recommendchannel"
+    },
+    {
+      "page": "server-inter/channel/content/announces/post_guild_announces.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/announces/model.html#Announces",
+      "local_target": "server-inter/channel/content/announces/model.md#announces"
+    },
+    {
+      "page": "server-inter/channel/content/forum/forum.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#Thread",
+      "local_target": "server-inter/channel/content/forum/model.md#thread"
+    },
+    {
+      "page": "server-inter/channel/content/forum/forum.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#Post",
+      "local_target": "server-inter/channel/content/forum/model.md#post"
+    },
+    {
+      "page": "server-inter/channel/content/forum/forum.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#Reply",
+      "local_target": "server-inter/channel/content/forum/model.md#reply"
+    },
+    {
+      "page": "server-inter/channel/content/forum/forum.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#AuditResult",
+      "local_target": "server-inter/channel/content/forum/model.md#auditresult"
+    },
+    {
+      "page": "server-inter/channel/content/forum/get_thread.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#ThreadInfo",
+      "local_target": "server-inter/channel/content/forum/model.md#threadinfo"
+    },
+    {
+      "page": "server-inter/channel/content/forum/get_thread.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#RichText",
+      "local_target": "server-inter/channel/content/forum/model.md#richtext"
+    },
+    {
+      "page": "server-inter/channel/content/forum/get_threads_list.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#Thread",
+      "local_target": "server-inter/channel/content/forum/model.md#thread"
+    },
+    {
+      "page": "server-inter/channel/content/forum/get_threads_list.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#RichText",
+      "local_target": "server-inter/channel/content/forum/model.md#richtext"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#ThreadInfo",
+      "local_target": "server-inter/channel/content/forum/model.md#threadinfo"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#PostInfo",
+      "local_target": "server-inter/channel/content/forum/model.md#postinfo"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#ReplyInfo",
+      "local_target": "server-inter/channel/content/forum/model.md#replyinfo"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#AuditType",
+      "local_target": "server-inter/channel/content/forum/model.md#audittype"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#RichType",
+      "local_target": "server-inter/channel/content/forum/model.md#richtype"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#TextInfo",
+      "local_target": "server-inter/channel/content/forum/model.md#textinfo"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#AtInfo",
+      "local_target": "server-inter/channel/content/forum/model.md#atinfo"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#URLInfo",
+      "local_target": "server-inter/channel/content/forum/model.md#urlinfo"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#EmojiInfo",
+      "local_target": "server-inter/channel/content/forum/model.md#emojiinfo"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#ChannelInfo",
+      "local_target": "server-inter/channel/content/forum/model.md#channelinfo"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#AtType",
+      "local_target": "server-inter/channel/content/forum/model.md#attype"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#AtUserInfo",
+      "local_target": "server-inter/channel/content/forum/model.md#atuserinfo"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#AtRoleInfo",
+      "local_target": "server-inter/channel/content/forum/model.md#atroleinfo"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#AtGuildInfo",
+      "local_target": "server-inter/channel/content/forum/model.md#atguildinfo"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#Paragraph",
+      "local_target": "server-inter/channel/content/forum/model.md#paragraph"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#Elem",
+      "local_target": "server-inter/channel/content/forum/model.md#elem"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#ParagraphProps",
+      "local_target": "server-inter/channel/content/forum/model.md#paragraphprops"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#TextElem",
+      "local_target": "server-inter/channel/content/forum/model.md#textelem"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#ImageElem",
+      "local_target": "server-inter/channel/content/forum/model.md#imageelem"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#VideoElem",
+      "local_target": "server-inter/channel/content/forum/model.md#videoelem"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#URLElem",
+      "local_target": "server-inter/channel/content/forum/model.md#urlelem"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#ElemType",
+      "local_target": "server-inter/channel/content/forum/model.md#elemtype"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#TextProps",
+      "local_target": "server-inter/channel/content/forum/model.md#textprops"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#PlatImage",
+      "local_target": "server-inter/channel/content/forum/model.md#platimage"
+    },
+    {
+      "page": "server-inter/channel/content/forum/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#Alignment",
+      "local_target": "server-inter/channel/content/forum/model.md#alignment"
+    },
+    {
+      "page": "server-inter/channel/content/forum/put_thread.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/put_thread.html#Format",
+      "local_target": "server-inter/channel/content/forum/put_thread.md#format"
+    },
+    {
+      "page": "server-inter/channel/content/forum/put_thread.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/forum/model.html#RichText",
+      "local_target": "server-inter/channel/content/forum/model.md#richtext"
+    },
+    {
+      "page": "server-inter/channel/content/pins/get_pins_message.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/pins/model.html#PinsMessage",
+      "local_target": "server-inter/channel/content/pins/model.md#pinsmessage"
+    },
+    {
+      "page": "server-inter/channel/content/pins/put_pins_message.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/content/pins/model.html#PinsMessage",
+      "local_target": "server-inter/channel/content/pins/model.md#pinsmessage"
+    },
+    {
+      "page": "server-inter/channel/manage/channel/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role-group/channel_permissions/model.html#Permissions",
+      "local_target": "server-inter/channel/role-group/channel_permissions/model.md#permissions"
+    },
+    {
+      "page": "server-inter/channel/message/format.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/emoji/model.html#Emoji列表",
+      "local_target": "openapi/emoji/model.md#emoji列表"
+    },
+    {
+      "page": "server-inter/channel/message/send.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/event-emit.html#事件订阅Intents",
+      "local_target": "dev-prepare/interface-framework/event-emit.md#事件订阅intents"
+    },
+    {
+      "page": "server-inter/channel/role-group/channel_permissions/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role-group/channel_permissions/model.html#Permissions",
+      "local_target": "server-inter/channel/role-group/channel_permissions/model.md#permissions"
+    },
+    {
+      "page": "server-inter/channel/role-group/delete_guild_member_role.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/manage/channel/model.html#Channel",
+      "local_target": "server-inter/channel/manage/channel/model.md#channel"
+    },
+    {
+      "page": "server-inter/channel/role-group/put_guild_member_role.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/manage/channel/model.html#Channel",
+      "local_target": "server-inter/channel/manage/channel/model.md#channel"
+    },
+    {
+      "page": "server-inter/channel/role/guild_member.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role/member/model.html#MemberWithGuildID",
+      "local_target": "server-inter/channel/role/member/model.md#memberwithguildid"
+    },
+    {
+      "page": "server-inter/channel/speak/setting/message_setting.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/speak/setting/model.html#MessageSetting",
+      "local_target": "server-inter/channel/speak/setting/model.md#messagesetting"
+    },
+    {
+      "page": "server-inter/message/overview.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/message/rich-media.html#分片上传（推荐）",
+      "local_target": "server-inter/message/rich-media.md#分片上传-推荐"
+    },
+    {
+      "page": "server-inter/message/template/model.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/message/template/model.html#MessageMarkdownParams",
+      "local_target": "server-inter/message/template/model.md#messagemarkdownparams"
+    },
+    {
+      "page": "server-inter/message/trans/emoji.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/emoji/model.html#EmojiType",
+      "local_target": "openapi/emoji/model.md#emojitype"
+    },
+    {
+      "page": "server-inter/message/trans/emoji.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/emoji/model.html#Emoji 列表",
+      "local_target": "openapi/emoji/model.md#emoji列表"
+    },
+    {
+      "page": "server-inter/message/trans/emoji.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/emoji/model.html#EmojiType",
+      "local_target": "openapi/emoji/model.md#emojitype"
+    },
+    {
+      "page": "server-inter/message/trans/emoji.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/emoji/model.html#Emoji 列表",
+      "local_target": "openapi/emoji/model.md#emoji列表"
+    },
+    {
+      "page": "server-inter/message/trans/emoji.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/reaction/model.html#MessageReaction",
+      "local_target": "openapi/reaction/model.md#messagereaction"
+    },
+    {
+      "page": "server-inter/message/trans/text-chain.md",
+      "original": "https://bot.q.qq.com/wiki/develop/api-v2/openapi/emoji/model.html#Emoji 列表",
+      "local_target": "openapi/emoji/model.md#emoji列表"
+    }
+  ],
+  "unresolved_anchors": [
+    {
+      "page": "dev-prepare/interface-framework/reference.md",
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/dev-prepare/interface-framework/event-emit.html#事件类型Intents",
+      "reason": "Anchor not found in the upstream document"
+    },
+    {
+      "page": "openapi/user/guilds.md",
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/#票据",
+      "reason": "Anchor not found in the upstream document"
+    },
+    {
+      "page": "server-inter/channel/api_permissions/get_guild_api_permission.md",
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/api_permissions/model.html#APIPermission",
+      "reason": "Anchor not found in the upstream document"
+    },
+    {
+      "page": "server-inter/channel/api_permissions/model.md",
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/api_permissions/model.html#APIPermissionDemandIdentify",
+      "reason": "Anchor not found in the upstream document"
+    },
+    {
+      "page": "server-inter/channel/api_permissions/post_api_permission_demand.md",
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/api_permissions/model.html#APIPermissionDemandIdentify",
+      "reason": "Anchor not found in the upstream document"
+    },
+    {
+      "page": "server-inter/channel/api_permissions/post_api_permission_demand.md",
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/api_permissions/model.html#APIPermissionDemand",
+      "reason": "Anchor not found in the upstream document"
+    },
+    {
+      "page": "server-inter/channel/manage/channel/model.md",
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role-group/channel_permissions/put_channel_permissions.html#修改子频道权限",
+      "reason": "Anchor not found in the upstream document"
+    },
+    {
+      "page": "server-inter/channel/manage/channel/model.md",
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role-group/channel_permissions/put_channel_permissions.html#修改子频道权限",
+      "reason": "Anchor not found in the upstream document"
+    },
+    {
+      "page": "server-inter/channel/role-group/channel_permissions/put_channel_permissions.md",
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role-group/channel_permissions/model.html#permission",
+      "reason": "Anchor not found in the upstream document"
+    },
+    {
+      "page": "server-inter/channel/role-group/channel_permissions/put_channel_permissions.md",
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role-group/channel_permissions/model.html#permission",
+      "reason": "Anchor not found in the upstream document"
+    },
+    {
+      "page": "server-inter/channel/role-group/channel_permissions/put_channel_roles_permissions.md",
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role-group/channel_permissions/model.html#permission",
+      "reason": "Anchor not found in the upstream document"
+    },
+    {
+      "page": "server-inter/channel/role-group/channel_permissions/put_channel_roles_permissions.md",
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role-group/channel_permissions/model.html#permission",
+      "reason": "Anchor not found in the upstream document"
+    },
+    {
+      "page": "server-inter/channel/role/member/model.md",
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/channel/role/member/role_model.html#DefaultRoles",
+      "reason": "Anchor not found in the upstream document"
+    },
+    {
+      "page": "server-inter/message/template/model.md",
+      "url": "https://bot.q.qq.com/wiki/develop/api-v2/server-inter/message/template/model.html#messageobjkv",
+      "reason": "Anchor not found in the upstream document"
+    }
+  ]
+}
