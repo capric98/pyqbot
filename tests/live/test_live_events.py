@@ -839,10 +839,11 @@ async def test_group_admin_session(
     - 成员 @机器人：记下 openid、昵称与身份（追加进 `.cache/live/test_group.env`，供禁言、移出用例挑选），
       回复「pyqbot：记下了 …」；`LIVE_GROUP_RECALL=1` 时再以管理员身份撤回普通成员的这条消息。
     - 有人申请加群：记下 `GROUP_JOIN_REQUEST` 的字段（原始事件见 `.cache/live/raw/`），然后拒绝，
-      理由「pyqbot 实测」，不拉黑。
+      理由「pyqbot 实测」，不拉黑；`LIVE_JOIN_DECISION=approve` 时改为通过。
     """
     group = group_or_skip()
     recall = os.environ.get("LIVE_GROUP_RECALL") == "1"
+    approve = os.environ.get("LIVE_JOIN_DECISION") == "approve"
     bot = pyqbot.Bot(app_id, app_secret)
     record_event_ids(bot, monkeypatch)
     members: list[object] = []
@@ -882,11 +883,12 @@ async def test_group_admin_session(
             "verify_method": event.verify_info.method if event.verify_info else None,
         }
         requests.append(seen)
+        decision = "approve" if approve else "decline"
         try:
-            await event.decline(reason="pyqbot 实测")
-            seen["decline"] = "被接受"
+            await (event.approve() if approve else event.decline(reason="pyqbot 实测"))
+            seen[decision] = "被接受"
         except pyqbot.APIError as error:
-            seen["decline"] = api_outcome(error)
+            seen[decision] = api_outcome(error)
 
     await run_until_closed(bot, wait_seconds, outcome)
 

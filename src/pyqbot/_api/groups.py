@@ -262,7 +262,8 @@ class Groups:
 
         Raises:
             PartialFailureError: 成员已移出，但有的没能加入黑名单（`failed_ids`）。
-            APIError: 平台拒绝，例如没有接口权限（40012010），或 `remove_members_result` 不是 `success`。
+            APIError: 平台拒绝，例如没有接口权限（40012010）、机器人的操作权限已关闭（40103011），
+                或 `remove_members_result` 不是 `success`。
             NetworkError: 没有拿到平台的响应。
             ValueError: `group_openid` 为空。
             RuntimeError: 客户端已关闭。
@@ -383,10 +384,11 @@ class Groups:
     async def mute_members(
         self, group_openid: str, member_openids: str | Iterable[str], until: datetime | timedelta
     ) -> None:
-        """禁言群成员，最长 30 天（超出由平台拒绝）。已在禁言中的成员要改到期时间用 `update_member_mutes()`。
+        """禁言群成员，最长 30 天（超出由平台拒绝）。
 
         机器人须是群管理员；只能禁言普通成员，不能禁言群主、管理员和机器人。
-        对已在禁言中的成员再调用 `mute_members()`（即再发一次 `add`）是否等同于 `update_member_mutes()`，尚待实测。
+        对已在禁言中的成员再调用 `mute_members()`（再发一次 `add`）不报错，到期时间改为新的，等同于
+        `update_member_mutes()`（实测）。
 
         对应官方接口 `POST /v2/groups/{group_openid}/restrict_chat_setting`（`op` 为 `add`）。
 
@@ -424,7 +426,7 @@ class Groups:
             until: 新的到期时间，写法同 `mute_members()`。
 
         Raises:
-            APIError: 平台拒绝，例如机器人不是管理员（`err_code` 40011030），或成员没在禁言中（是否如此尚待实测）。
+            APIError: 平台拒绝，例如机器人不是管理员（`err_code` 40011030）。
             NetworkError: 没有拿到平台的响应。
             ValueError: 同 `mute_members()`。
             RuntimeError: 客户端已关闭。

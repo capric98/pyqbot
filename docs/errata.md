@@ -88,20 +88,6 @@
 - **已知**：不带 `msg_id` 的召回消息（`wakeup=True`）被接受，测试用户收到了（2026-11-16，`test_wakeup`）。
 - **不主动实测**：与 `msg_id` / `event_id` 同传的情况；召回消息每个周期只能发一条，测一次就占掉一个周期。
 
-### 撤回：能撤回哪些消息
-
-- **位置**：`server-inter/message/overview.md`「撤回消息」；`autogen/api/v2_groups_group_openid_messages_message_id.delete.md`。
-- **矛盾**：概述只说「机器人可撤回自己发送的消息」，群聊撤回页说机器人是群管理员时还能撤回普通成员的消息（`d.id`）。两处都说超过 2 分钟不可撤回。
-- **已知**：机器人在群里撤回自己 10 秒前发的消息成功（2026-11-16，`test_group_message_features`）。
-- **当前做法**：`client.groups.recall_message()` 也接受收到的 `GroupMessage`（含 `GroupAtMessage`）；时限不在本地判断，由平台拒绝（40064004）。
-
-### 入群申请 `GROUP_JOIN_REQUEST` 的字段
-
-- **位置**：`autogen/event/group_join_request.md`。
-- **矛盾**：`VerifyInfo` 的字段叫 `method`，`verify_message`、`review_qa_list` 的说明却写「仅 `auth_type=...` 时」；`auto_approved` 的结构名拼成 `AutoAppproved`；申请时间是 RFC3339 字符串 `apply_at`，其它群事件都是整数秒的 `timestamp`。
-- **当前做法**：按字段表与示例：`verify_info.method`（`JoinRequestVerifyMethod`），`auto_approved.strategy_id`，`apply_at` 解成 `datetime`（不是 RFC3339 时退回 `None`，不让整条事件丢掉）。`group_openid`、`join_request_id` 与 `member_openid` 必填：后者是审批接口 `POST /v2/groups/{group_openid}/approval_join_request/{member_openid}` 的路径参数，三个示例都有。
-- **怎么测**：要一个机器人是管理员的测试群，再请人申请加群，会影响其他用户，须单独征得同意；记下 `verify_info` 的键名与 `apply_at` 的格式。
-
 ### 全量群消息与 @ 消息会不会重复推送
 
 - **位置**：`autogen/event/group_message_create.md`；`group_at_message_create.md`。
@@ -310,28 +296,24 @@
 - **位置**：`autogen/api/` 下 `v2_groups_group_openid_members.get.md`、`..._member_blacklist.get.md`、`..._join_request_list.get.md`、`v2_groups_join_approval_strategy.get.md` 的「请求体」表格；`..._restrict_chat_setting.get.md`、`v2_groups_join_approval_strategy.get.md`、`v2_groups_join_approval_strategy_strategy_id.delete.md` 的请求示例。
 - **矛盾**：`cursor`、`limit` 列在 GET 的「请求体」里，成员列表的示例却写成查询串 `?cursor=`；禁言查询、策略列表的 GET 与策略删除的 DELETE 示例各带了一个 `{}` 请求体。
 - **当前做法**：`cursor`、`limit` 一律作为查询参数，GET 与 DELETE 不发请求体。翻页时 `limit` 取文档给的最大值（黑名单 100，入群申请与策略 50；成员列表没有 `limit`）。
+- **已知**：不带请求体的禁言查询、入群申请列表、策略列表的 GET 与策略删除的 DELETE 都成功（2026-11-16）。成员列表与黑名单报 40012010，翻页没测到。
 - **怎么测**：实测用例 `test_iter_members_and_get_member` 在超过 30 人的群里翻页，成员不重复、总数与群人数一致即确认 `cursor` 在查询串里生效；`test_get_mute_settings` 成功即确认 GET 不需要请求体。
-
-### 禁言：`add` 对已禁言的成员，`del` 的 `mute_expire_at`
-
-- **位置**：`autogen/api/v2_groups_group_openid_restrict_chat_setting.post.md` 的 `SetMemberMuteState`。
-- **含糊**：`op` 分 `add`（增加）与 `update`（更新到期时间），没说对已在禁言中的成员 `add` 会怎样；`mute_expire_at` 说「`op=del` 时可传空串表示立即解除」，没说不传或传一个时刻会怎样。
-- **当前做法**：`client.groups.mute_members()` 发 `add`，`update_member_mutes()` 发 `update`，两者的 docstring 都写明「再次 `add` 是否等于 `update`」尚待实测；`unmute_members()` 发 `del` 并带 `mute_expire_at: ""`。
-- **怎么测**：实测用例 `test_mute_twice_with_add` 对同一成员连续 `add` 两次，看第二次是报错还是改写到期时间；`test_mute_update_then_unmute` 确认 `update` 与带空串的 `del`。
 
 ### 群黑名单：在群里的用户怎么拉黑失败
 
 - **位置**：`autogen/api/v2_groups_group_openid_member_blacklist.post.md`。
 - **含糊**：只有不在群里的用户才能加入黑名单，但没说对在群里的用户 `add` 时，是放进响应的 `fail_openids` 还是整个请求报错；`op=del` 时 `fail_openids`「同义」也没说清。批量移出成员的响应同理：`add_to_member_blacklist_fail_openids` 是拉黑失败的成员，`remove_members_result` 只说「成功时返回 success」，没有逐个的移出结果，也没说失败时是什么。
 - **当前做法**：`fail_openids` 非空时 `add_to_blacklist()`、`remove_from_blacklist()` 抛 `PartialFailureError`（`failed_ids` 即它）；`remove_members()` 在拉黑失败清单非空时同样抛它，`remove_members_result` 是字符串但不是 `success` 时抛 `APIError`，缺失或 `null` 算没有报告。失败清单缺失或为 `null` 算没有失败，不是字符串列表时按「响应无法识别」抛 `APIError`，不退回空清单；`remove_members_result` 不是字符串也不是 `null` 时同样按「响应无法识别」处理。
-- **怎么测**：实测用例 `test_blacklist_add_only_works_for_users_outside_the_group`。
+- **已知**（2026-11-16，机器人是管理员）：查黑名单仍报 40012010，用例第一步就停了，拉黑没有发出；移出成员报 40103011「操作失败, 机器人已经关闭操作权限」。
+- **怎么测**：开通黑名单接口、打开机器人的操作权限后，再跑实测用例 `test_blacklist_add_only_works_for_users_outside_the_group`、`test_remove_member_and_blacklist`。
 
 ### 入群申请审批：`join_request_id` 标为可选
 
 - **位置**：`autogen/api/v2_groups_group_openid_approval_join_request_member_openid.post.md`。
 - **含糊**：`join_request_id` 标为非必填，没说不传时审批的是哪条申请；`add_to_member_blacklist` 的说明写「`action=decline` 时可填」，字段名其实是 `op`。
 - **当前做法**：`join_request_id` 是可选的关键字参数，不传就不发；事件上的 `approve()` / `decline()` 总是带上事件里的申请 ID。`decline_join_request()` 总是发出 `add_to_member_blacklist`（默认 `false`），`approve` 不发。
-- **怎么测**：实测用例 `test_decline_a_join_request`；要验证不传 ID 的效果须再有一条申请。
+- **已知**：带上事件里的 `join_request_id` 时，拒绝（带理由、不拉黑）与通过都被接受（2026-11-16，`test_group_admin_session`）。
+- **怎么测**：不传 `join_request_id` 审批一次，看是否生效。
 
 ### 入群自动审批策略：`group_ids` 的类型与创建示例
 
@@ -343,8 +325,8 @@
   - 创建的响应只回了 `strategy_id`、`is_enable`、`expire_at`。
   - 列表里有 `group_openids`，`group_ids` 是空的；`whitelist_user_count` 是 1（加两个、删一个）。
   - `expire_at` 按秒原样保存，返回时换成 +08:00；`created_at`、`updated_at` 是 RFC3339。
-  - 执行接口发 `{}`，平台报 50105002「处理失败，请稍后重试」，可能是因为策略停用或机器人不是管理员。
-- **怎么测**：要确认 `group_ids`，须用户另给一个测试群的群号，看创建能否成功、列表里返回什么类型、是否打码；执行接口要机器人是管理员、策略启用时再试。
+  - 执行接口发 `{}`：策略停用、机器人不是管理员时报 50105002「处理失败，请稍后重试」；策略启用、机器人是管理员时被接受。
+- **怎么测**：要确认 `group_ids`，须用户另给一个测试群的群号，看创建能否成功、列表里返回什么类型、是否打码。
 
 ### 频道发消息：没有 `msg_seq`
 
@@ -603,6 +585,7 @@
   - 成员列表与黑名单报 `err_code` 40012010，文案同样是「应用无接口访问权限」：40012010 是现行错误码，11253 是旧式的。
   - 禁言设置与入群申请列表报 40011030「机器人不是群管理员」。
   - `bot_state` 的响应是合法的 JSON（文档示例少了引号），字段与字段表一致：`allow_proactive_msg` 为 false，`recv_msg_setting` 是空串（不在文档列的三个取值里），`member_role` 是 `member`，`joined_at` 是 RFC3339。
+- **机器人是管理员之后**：禁言设置与入群申请列表可以查；成员列表、查单个成员、黑名单仍报 40012010（内邀能力，与身份无关）；批量移出成员报 40103011「操作失败, 机器人已经关闭操作权限」。
 - **实现**：错误码写进各接口的 docstring；`recv_msg_setting` 的空串由 `RecvMsgSetting` 原样保留。
 
 ### 网关：Resume 时积压的事件先于 `RESUMED` 补发
@@ -718,3 +701,29 @@
   - 一段一片地发，用了 125 个请求、58.3 秒，测试用户明显感到间隔长。
   - 改成合并分片后，同样的内容按每 0.05 秒一段产生，只发了 16 个请求、7.4 秒发完，基本跟上了生成速度；测试用户感觉顺畅，渲染正常。
 - **实现**：`StreamMessage` 默认合并分片（`coalesce=True`）：同时只有一个请求在路上，期间追加的内容攒成下一片；`coalesce=False` 保留逐片发送。
+
+### 入群申请 `GROUP_JOIN_REQUEST`：字段与审批
+
+- **位置**：`autogen/event/group_join_request.md`；审批接口 `POST /v2/groups/{group_openid}/approval_join_request/{member_openid}`。
+- **结论**（`test_group_admin_session`，机器人是管理员，群设为加群需回答问题由管理员审核）：
+  - 事件体有 `apply_at`（RFC3339，`+08:00`）、`apply_source`（`self_apply`）、`group_openid`、`join_request_id`（约 200 字符的字符串）、`member_openid`、`username` 与 `verify_info`。
+  - `verify_info` 是 `{"method": "admin_review_qa", "review_qa_list": [{"question": ..., "answer": ...}]}`，键名是 `method`，不是说明里的 `auth_type`；没有 `auto_approved`。
+  - 申请人的 `member_openid` 与他之前在群里 @机器人、退群时的 `member_openid` 相同：同一个人退群重进，群成员 openid 不变。
+  - 用事件的 `decline(reason="pyqbot 实测")` 与 `approve()` 审批都被接受；通过后紧接着推送 `GROUP_MEMBER_ADD`。
+- **实现**：不变。
+
+### 禁言：再次 `add` 等于 `update`，空串的 `del` 立即解除
+
+- **位置**：`autogen/api/v2_groups_group_openid_restrict_chat_setting.post.md` 的 `SetMemberMuteState`。
+- **结论**（`test_mute_update_then_unmute`、`test_mute_twice_with_add`，机器人是管理员，对象是普通成员）：
+  - `add` 禁言 2 分钟后用 `update` 改为 5 分钟，查询到的到期时间随之改变。
+  - 对已在禁言中的成员再 `add` 一次也不报错，到期时间改为新的，效果同 `update`。
+  - `del` 带 `mute_expire_at: ""` 立即解除。
+  - 禁言查询里的成员带 `username` 与 `union_openid`（空串）。
+- **实现**：`mute_members()` 的 docstring 写明再次调用会改写到期时间。
+
+### 撤回：管理员能撤回普通成员的消息
+
+- **位置**：`server-inter/message/overview.md`「撤回消息」只说能撤回自己的；群聊撤回页说管理员还能撤回普通成员的消息。
+- **结论**：机器人撤回自己 10 秒前发的群消息成功（`test_group_message_features`）；机器人是管理员时，用 `recall_message(group, message)` 撤回普通成员刚 @ 它的消息也成功（`test_group_admin_session`）。
+- **实现**：不变，`client.groups.recall_message()` 接受收到的 `GroupMessage`。
