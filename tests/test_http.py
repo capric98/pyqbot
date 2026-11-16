@@ -281,6 +281,13 @@ FAILURES = {
     ),
     "2xx-wrong-shape": (httpx2.Response(200, json=[SENT]), 200, None, None, "响应无法识别"),
     "2xx-empty-body": (httpx2.Response(204), 204, None, None, "响应无法识别"),
+    "2xx-without-message-id": (
+        httpx2.Response(200, json={"timestamp": "2026-07-21T10:30:00+08:00"}),
+        200,
+        None,
+        None,
+        "响应无法识别",
+    ),
     "2xx-deeply-nested": (
         httpx2.Response(200, content=b'{"message": ' + b"[" * 100_000 + b"]" * 100_000 + b"}"),
         200,

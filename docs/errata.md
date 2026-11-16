@@ -143,7 +143,7 @@
 
 - **位置**：`autogen/api/v2_users_user_openid_messages.post.md`。
 - **结论**：被动回复（`msg_id` 取自收到的消息，`msg_seq` 为 1）被接受，HTTP 200，响应是 `{"id": "ROBOT1.0_...", "timestamp": "2026-11-16T12:35:16+08:00", "ext_info": {"ref_idx": "REFIDX_..."}}`。用的是 `tests/live/test_live.py::test_bot_replies_to_a_c2c_message`：真实的 `Bot` 连上网关，收到单聊消息后回复。
-- **实现**：`SentMessage`。fixture：`message_sent.json`。
+- **实现**：`SentMessage`，其中 `id` 必填，响应里没有它时抛 `APIError`。fixture：`message_sent.json`。
 
 ### 获取 token：换发窗口与旧 token 的有效期
 

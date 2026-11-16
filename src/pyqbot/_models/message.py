@@ -42,7 +42,7 @@ class SentMessage(Model):
         ext_info: 扩展信息。
     """
 
-    id: str | None = None
+    id: str
     timestamp: datetime | None = None
     ext_info: MessageExtInfo | None = None
 

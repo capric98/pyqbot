@@ -147,7 +147,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 2. **地址与超时只认 `Config`**：请求一律用 `config.base_url + "/path"` 的绝对地址，并显式传 `timeout=config.timeout`；不依赖 `httpx2.AsyncClient` 自身的 `base_url` / `timeout`，这样自建与注入的客户端行为一致。所有网络 IO（含 WebSocket）都走 `client.http_client`，任何模块不得另建 `httpx2` 客户端。
 3. **异常**：运行期失败只抛 `QQBotError` 的子类，新增的类都放 `_errors.py` 并导出。只有基类带 `QQBot`，子类不加前缀、以 `Error` 结尾，且不与内置异常重名。`httpx2`、`msgspec` 的异常（含超深嵌套 JSON 引起的 `RecursionError`）不得漏给用户，包装后用 `raise ... from` 保留原因。响应体里 `err_code` 与 `code` 任一个非零就算失败（获取 token 的接口只有 `code`，且业务失败时 HTTP 仍是 200）；两个都有时异常的 `err_code` 取响应体的 `err_code`，`code` 是旧式错误码（见 `errata.md`）；`trace_id` 优先取响应头 `X-Tps-trace-ID`，其次响应体。用法错误（参数不合法、关闭后再用）抛内置的 `ValueError` / `RuntimeError`。
 4. **模型**：继承 `Model`。可选字段写 `X | None = None`，不向外暴露 `msgspec.UNSET`；集合字段用 `tuple[X, ...]`、默认 `()`（写 `= []` 会触发 ruff RUF012）；接口字段名不是 snake_case 时用 `msgspec.field(name=...)`。内部可以随意用 msgspec，但公共签名里不出现它的类型。
-   - **宽容解码落到字段级**：只有 SDK 自己要用的字段才写成必填；其余字段都给默认值。解码一律经 `_model.decode()`：有默认值的字段类型不符时退回默认值（嵌套模型逐层处理；`tuple[模型, ...]` 逐个元素处理，清理后仍不合法的元素只丢掉它自己），只有必填字段缺失或类型不符才让整条数据失败。
+   - **宽容解码落到字段级**：只有 SDK 自己要用的字段，以及调用方拿不到就没法继续的字段（如 `SentMessage.id`）才写成必填；其余字段都给默认值。解码一律经 `_model.decode()`：有默认值的字段类型不符时退回默认值（嵌套模型逐层处理；`tuple[模型, ...]` 逐个元素处理，清理后仍不合法的元素只丢掉它自己），只有必填字段缺失或类型不符才让整条数据失败。
    - **枚举容忍未知取值**：取值互斥的枚举继承 `OpenIntEnum`，字段直接写枚举类型。未知的整数得到伪成员：是该枚举的实例，`name` 为 `"UNKNOWN"`，`value`、比较与 `to_dict()` 都是原值；每次得到的是不同对象，只用 `==` / `match` 的值模式比较，不用 `is`。msgspec 解码按 JSON 类型严格校验（`true`、`1.0` 不算整数）；直接调用 `MyEnum(True)` 则按标准库语义命中值相等的成员。
    - 位标志用标准库 `enum.IntFlag`：它默认保留未知位，例如 `Intents`。不用 `MyEnum | int` 这类联合类型：调用方每处都要再判断一次类型。
 5. **接口封装**：每组一个 `_api/<组>.py`，写成持有请求层的小类，由 `Client` 在构造时创建成属性（`self.groups = Groups(self._http)`）；不用 mixin。只经请求层发请求，不直接碰 `httpx2`。
