@@ -10,14 +10,6 @@
 - **含糊**：密钥错误时用 `code` + `message`（已确认，见下）。平台自身出错（限频、内部错误）时用 `code` 还是通用结构的 `err_code`，没有测到。
 - **当前做法**：两种都认，`err_code` 优先取 `code`。
 
-### 单聊被动回复的有效期：5 分钟还是 60 分钟
-
-- **位置**：`autogen/api/v2_users_user_openid_messages.post.md` 的页首说明与请求体 `msg_id` 一行；`server-inter/message/overview.md`「被动消息」表格。
-- **矛盾**：接口页的 `msg_id` 写「5 分钟内有效」，同一页的页首和 `overview.md` 的表格都写单聊 60 分钟。群聊三处都是 5 分钟，没有矛盾。
-- **当前做法**：SDK 不在本地判断是否过期，照常发送，由平台拒绝（如 `40034005`、`304103`）后抛 `APIError`。
-- **已知**：隔约 10 分钟被动回复成功（2026-11-16，`test_c2c_reply_after_10_and_55_minutes`），所以不是 5 分钟。
-- **怎么测**：同一用例隔约 55 分钟的那次。
-
 ### HTTP 201、202：「成功」但带失败结构
 
 - **位置**：`dev-prepare/api-call-guide.md`「HTTP 状态码」。
@@ -701,3 +693,9 @@
   - `GROUP_DEL_ROBOT` 有 `group_openid`、`op_member_openid`、`timestamp`；拉回后的 `GROUP_ADD_ROBOT` 同前，用它回复成功。
 - **没有测**：群级的主动消息开关（`GROUP_MSG_REJECT` / `RECEIVE`，或 `type` 19 的授权互动），以及各种需要管理员的接口。
 - **实现**：`GroupMemberAdd`、`GroupMemberRemove` 补上 `union_openid`。fixture：`gateway_group_member_add.json`、`gateway_group_member_remove.json`。
+
+### 单聊被动回复的有效期：至少 55 分钟
+
+- **位置**：`autogen/api/v2_users_user_openid_messages.post.md` 的 `msg_id` 一行写「5 分钟内有效」，同页页首与 `server-inter/message/overview.md` 的表格写单聊 60 分钟。
+- **结论**（`test_c2c_reply_after_10_and_55_minutes`）：收到单聊消息后断开网关，隔约 10 分钟、约 55 分钟各用它被动回复一次，都被接受。「5 分钟」不对，与 60 分钟的说法一致。
+- **实现**：不变，SDK 不在本地判断是否过期。
