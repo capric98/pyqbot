@@ -8,10 +8,12 @@ import asyncio
 import itertools
 import json
 import logging
+import traceback
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator, MutableMapping
 from contextlib import asynccontextmanager
 from typing import Any, cast
 
+import anyio  # 只用来构造传输层会抛的异常类型，SDK 自身不依赖它
 import httpx2
 import pytest
 from httpx2.websockets import ASGIWebSocketTransport
@@ -169,6 +171,8 @@ class Injected:
         self.tokens: list[str] = []
         self.dispatched: list[GatewayPayload] = []
         self.fail_on: set[int] = set()  # 这些 s 的事件让 on_dispatch 抛异常
+        self.peek_seq: Callable[[], object] = lambda: None
+        self.seq_during_dispatch: list[object] = []  # 每次回调执行时连接记着的 seq
 
     async def get_url(self) -> str:
         self.url_calls += 1
@@ -188,6 +192,7 @@ class Injected:
 
     def on_dispatch(self, payload: GatewayPayload) -> None:
         self.dispatched.append(payload)
+        self.seq_during_dispatch.append(self.peek_seq())
         if payload.s in self.fail_on:
             raise RuntimeError(f"处理失败，当时的 token 是 {self.tokens[-1]}")
         if payload.t == self._finish_on:
@@ -202,12 +207,93 @@ class RefusingTransport(httpx2.AsyncBaseTransport):
         raise httpx2.ConnectError("连接被拒绝", request=request)
 
 
+class BuggyTransport(httpx2.AsyncBaseTransport):
+    async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
+        raise RuntimeError("传输层自身的 bug")
+
+
+_TEXT_FRAME = 0x1
+_CLOSE_FRAME = 0x8
+
+
+class StreamFault:
+    """注入到某一条连接底层流上的故障：卡住写入、让关闭流时出错。"""
+
+    def __init__(
+        self,
+        *,
+        block_text_from: int | None = None,
+        block_close: bool = False,
+        aclose_error: Exception | None = None,
+    ) -> None:
+        self.block_text_from = block_text_from  # 从客户端发的第几个文本帧（从 1 数）起卡住
+        self.block_close = block_close  # 卡住客户端的关闭帧
+        self.aclose_error = aclose_error
+        self.blocked = asyncio.Event()  # 有一次写入被卡住了
+        self.release = asyncio.Event()  # 放行被卡住的写入
+        self.aclosed = False
+        self._texts = 0
+
+    def blocks(self, frame: bytes) -> bool:
+        opcode = frame[0] & 0x0F  # WebSocket 帧头第一个字节的低 4 位
+        if opcode == _TEXT_FRAME:
+            self._texts += 1
+            return self.block_text_from is not None and self._texts >= self.block_text_from
+        return opcode == _CLOSE_FRAME and self.block_close
+
+
+class FaultyStream:
+    """包在 httpx2 网络流外面，按 `StreamFault` 注入故障，其余原样转发。"""
+
+    def __init__(self, inner: Any, fault: StreamFault) -> None:
+        self._inner = inner
+        self._fault = fault
+
+    # 签名要与 httpx2 的网络流一致，所以保留 timeout 参数。
+    async def read(self, max_bytes: int, timeout: float | None = None) -> bytes:  # noqa: ASYNC109
+        return await self._inner.read(max_bytes, timeout)
+
+    async def write(self, buffer: bytes, timeout: float | None = None) -> None:  # noqa: ASYNC109
+        if self._fault.blocks(buffer):
+            self._fault.blocked.set()
+            await self._fault.release.wait()
+        await self._inner.write(buffer, timeout)
+
+    async def aclose(self) -> None:
+        self._fault.aclosed = True
+        await self._inner.aclose()
+        if self._fault.aclose_error is not None:
+            raise self._fault.aclose_error
+
+
+class FaultyTransport(ASGIWebSocketTransport):
+    """给第 n 次建连（从 0 数）的网络流注入故障。"""
+
+    def __init__(self, app: FakeGateway, faults: dict[int, StreamFault]) -> None:
+        super().__init__(app)
+        self._faults = faults
+        self._connections = 0
+
+    async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
+        response = await super().handle_async_request(request)
+        fault = self._faults.get(self._connections)
+        self._connections += 1
+        if fault is not None:
+            # httpx2 的会话从响应扩展里的 network_stream 读写，这是唯一能插进去的地方。
+            stream = response.extensions["network_stream"]
+            response.extensions["network_stream"] = FaultyStream(stream, fault)
+        return response
+
+
 @asynccontextmanager
-async def open_client(gateway: FakeGateway) -> AsyncGenerator[httpx2.AsyncClient]:
+async def open_client(
+    gateway: FakeGateway, faults: dict[int, StreamFault] | None = None
+) -> AsyncGenerator[httpx2.AsyncClient]:
     """打开挂着假网关的客户端；必须在测试函数体内使用，见 `docs/design.md`「测试约定」。"""
     mounts: dict[str, httpx2.AsyncBaseTransport] = {
-        "wss://gateway.test": ASGIWebSocketTransport(gateway),
+        "wss://gateway.test": FaultyTransport(gateway, faults or {}),
         "wss://refused.test": RefusingTransport(),
+        "wss://buggy.test": BuggyTransport(),
     }
     async with httpx2.AsyncClient(mounts=mounts) as client:
         yield client
@@ -219,22 +305,30 @@ def make_connection(
     client: httpx2.AsyncClient,
     injected: Injected,
     *,
+    get_token: Callable[[], Awaitable[str]] | None = None,
     handshake_timeout: float = 10.0,
+    send_timeout: float = 10.0,
+    close_timeout: float = 10.0,
     reconnect_delay: float = 0.0,
     max_reconnect_delay: float = 0.0,
     identify_interval: float = 0.0,
 ) -> GatewayConnection:
-    return GatewayConnection(
+    connection = GatewayConnection(
         http_client=client,
         get_url=injected.get_url,
-        get_token=injected.get_token,
+        get_token=get_token or injected.get_token,
         intents=INTENTS,
         on_dispatch=injected.on_dispatch,
         handshake_timeout=handshake_timeout,
+        send_timeout=send_timeout,
+        close_timeout=close_timeout,
         reconnect_delay=reconnect_delay,
         max_reconnect_delay=max_reconnect_delay,
         identify_interval=identify_interval,
     )
+    # 只为断言回调执行期间 seq 还没推进；对外没有读 seq 的接口，也不该为测试加。
+    injected.peek_seq = lambda: vars(connection)["_seq"]
+    return connection
 
 
 async def run_until_done(connection: GatewayConnection, gateway: FakeGateway) -> None:
@@ -745,7 +839,28 @@ async def test_on_dispatch_error_does_not_break_the_connection() -> None:
         await run_until_done(make_connection(client, injected), gateway)
 
     assert injected.events() == ["READY", C2C, C2C, "RESUMED"]
-    assert gateway.sides[1].logins()[0]["d"]["seq"] == 3  # 出错的那条也算已交出
+    assert gateway.sides[1].logins()[0]["d"]["seq"] == 3
+
+
+async def test_seq_counts_an_event_once_handed_to_on_dispatch_even_if_it_fails() -> None:
+    async def first(side: GatewaySide) -> None:
+        await start_session(side, s=1)
+        await side.dispatch(C2C, {"id": "m1"}, 2)  # 断开前的最后一条，回调会抛异常
+        await side.close(4009)
+
+    async def second(side: GatewaySide) -> None:
+        await resume_session(side, s=3)
+        await side.serve()
+
+    gateway = FakeGateway(first, second)
+    injected = Injected(gateway, finish_on="RESUMED")
+    injected.fail_on = {2}
+    async with asyncio.timeout(TIMEOUT), open_client(gateway) as client:
+        await run_until_done(make_connection(client, injected), gateway)
+
+    assert gateway.sides[1].logins()[0]["d"]["seq"] == 2
+    # 回调执行时 seq 还是上一条的：交给回调之后才记。
+    assert injected.seq_during_dispatch == [None, 1, 2]
 
 
 async def test_undecodable_ready_leaves_no_session_to_resume() -> None:
@@ -866,7 +981,9 @@ async def test_close_interrupts_the_backoff_wait(reconnect_logged: LogWaiter) ->
     gateway = FakeGateway(script)
     async with asyncio.timeout(TIMEOUT):
         async with open_client(gateway) as client:
-            connection = make_connection(client, Injected(gateway), reconnect_delay=3600)
+            connection = make_connection(
+                client, Injected(gateway), reconnect_delay=3600, max_reconnect_delay=3600
+            )
             async with asyncio.TaskGroup() as tg:
                 tg.create_task(connection.run())
                 await reconnect_logged.seen.wait()
@@ -917,13 +1034,15 @@ async def test_tokens_never_reach_logs_or_errors(caplog: pytest.LogCaptureFixtur
 
     async def first(side: GatewaySide) -> None:
         await start_session(side)
-        await side.dispatch(C2C, {"id": "m1"}, 2)  # on_dispatch 抛出的异常文案带 token
-        await side.close(4009, f"token {injected.tokens[-1]} expired")
+        # 事件名和 on_dispatch 抛出的异常文案里都带 token。
+        await side.dispatch(f"EVENT_{injected.tokens[0]}", {"id": "m1"}, 2)
+        await side.close(4009, f"token {injected.tokens[0]} expired")
 
     async def second(side: GatewaySide) -> None:
         await side.hello()
         await side.login()
-        await side.close(4914, f"QQBot {injected.tokens[-1]} banned")
+        # token 已经换过，平台回显的却是换之前的。
+        await side.close(4914, f"QQBot {injected.tokens[0]} banned, now {injected.tokens[1]}")
 
     gateway = FakeGateway(first, second)
     injected = Injected(gateway)
@@ -933,9 +1052,261 @@ async def test_tokens_never_reach_logs_or_errors(caplog: pytest.LogCaptureFixtur
             await make_connection(client, injected).run()
 
     assert len(injected.tokens) == 2
+    shown = "".join(traceback.format_exception(caught.value))
     for token in injected.tokens:
         assert token not in caplog.text
-        assert token not in str(caught.value)
+        assert token not in shown
     assert caught.value.__cause__ is None  # 异常链里有 token，整条丢掉
-    assert "***" in caplog.text
+    assert "EVENT_***" in caplog.text
     assert "***" in str(caught.value)
+
+
+# 关闭的收尾：并发、再次取消、期限
+
+
+async def serve_after_login(side: GatewaySide) -> None:
+    await start_session(side)
+    await side.serve()
+
+
+async def test_concurrent_close_waits_for_the_same_cleanup() -> None:
+    gateway = FakeGateway(serve_after_login)
+    fault = StreamFault(block_close=True)
+    async with asyncio.timeout(TIMEOUT), open_client(gateway, {0: fault}) as client:
+        connection = make_connection(client, Injected(gateway, finish_on="READY"))
+        runner = asyncio.create_task(connection.run())
+        await gateway.done.wait()
+        first = asyncio.create_task(connection.close())
+        await fault.blocked.wait()  # 第一次 close() 已经在写关闭帧
+        second = asyncio.create_task(connection.close())
+        # call_soon 按先后执行：second 先跑到它的等待点，然后才放行写入。
+        asyncio.get_running_loop().call_soon(fault.release.set)
+        await first
+        await second
+        await runner
+
+    assert fault.aclosed  # 没被第二次 close() 打断
+
+
+async def test_cancelling_run_again_does_not_interrupt_the_cleanup() -> None:
+    gateway = FakeGateway(serve_after_login)
+    fault = StreamFault(block_close=True)
+    async with asyncio.timeout(TIMEOUT), open_client(gateway, {0: fault}) as client:
+        connection = make_connection(client, Injected(gateway, finish_on="READY"))
+        runner = asyncio.create_task(connection.run())
+        await gateway.done.wait()
+        runner.cancel()
+        await fault.blocked.wait()
+        runner.cancel()
+        asyncio.get_running_loop().call_soon(fault.release.set)
+        with pytest.raises(asyncio.CancelledError):
+            await runner
+
+    assert fault.aclosed
+
+
+async def test_close_gives_up_waiting_after_close_timeout() -> None:
+    gateway = FakeGateway(serve_after_login)
+    fault = StreamFault(block_close=True)  # 关闭帧永远写不出去
+    async with asyncio.timeout(TIMEOUT):
+        async with open_client(gateway, {0: fault}) as client:
+            connection = make_connection(
+                client, Injected(gateway, finish_on="READY"), close_timeout=0.05
+            )
+            runner = asyncio.create_task(connection.run())
+            await gateway.done.wait()
+            await connection.close()
+            assert await runner is None
+
+        assert asyncio.all_tasks() == {asyncio.current_task()}
+
+    assert not fault.aclosed  # 强制结束：底层流没能优雅关闭
+
+
+# 发送超时
+
+
+async def test_blocked_heartbeat_write_counts_as_missing_ack() -> None:
+    async def first(side: GatewaySide) -> None:
+        await start_session(side, s=4, interval_ms=20)
+        await side.serve(ack=False)
+
+    async def second(side: GatewaySide) -> None:
+        await resume_session(side, s=5)
+        await side.serve()
+
+    gateway = FakeGateway(first, second)
+    fault = StreamFault(block_text_from=2)  # 第 1 帧是 Identify，第 2 帧起是心跳
+    async with asyncio.timeout(TIMEOUT), open_client(gateway, {0: fault}) as client:
+        connection = make_connection(client, Injected(gateway, finish_on="RESUMED"))
+        await run_until_done(connection, gateway)
+
+    assert fault.blocked.is_set()
+    assert gateway.sides[1].logins()[0]["d"]["seq"] == 4
+
+
+async def test_blocked_login_write_times_out_and_reconnects() -> None:
+    async def first(side: GatewaySide) -> None:
+        await side.hello()
+        await side.serve(ack=False)  # Identify 永远到不了
+
+    async def second(side: GatewaySide) -> None:
+        await side.hello()
+        await side.login()
+        gateway.finish()
+        await side.serve()
+
+    gateway = FakeGateway(first, second)
+    fault = StreamFault(block_text_from=1)
+    async with asyncio.timeout(TIMEOUT), open_client(gateway, {0: fault}) as client:
+        connection = make_connection(client, Injected(gateway), send_timeout=0.05)
+        await run_until_done(connection, gateway)
+
+    assert gateway.sides[0].logins() == []
+    assert gateway.sides[1].logins()[0]["op"] == 2
+
+
+async def test_closing_a_dead_connection_is_bounded_before_reconnecting() -> None:
+    async def first(side: GatewaySide) -> None:
+        await start_session(side, s=4, interval_ms=20)
+        await side.serve(ack=False)
+
+    async def second(side: GatewaySide) -> None:
+        await resume_session(side, s=5)
+        await side.serve()
+
+    gateway = FakeGateway(first, second)
+    fault = StreamFault(block_text_from=2, block_close=True)  # 心跳和关闭帧都写不出去
+    async with asyncio.timeout(TIMEOUT), open_client(gateway, {0: fault}) as client:
+        connection = make_connection(
+            client, Injected(gateway, finish_on="RESUMED"), close_timeout=0.05
+        )
+        await run_until_done(connection, gateway)
+
+    assert gateway.sides[1].logins()[0]["d"]["seq"] == 4
+
+
+# WebSocket 上下文抛出的异常
+
+
+def broken_close() -> StreamFault:
+    # anyio 的 TLS 流关闭握手失败时抛的就是它；httpx2 会把它包进异常组。
+    return StreamFault(aclose_error=anyio.BrokenResourceError("TLS close broke"))
+
+
+async def test_cleanup_error_does_not_hide_a_resumable_close_code() -> None:
+    async def first(side: GatewaySide) -> None:
+        await start_session(side, s=6)
+        await side.close(4009)
+
+    async def second(side: GatewaySide) -> None:
+        await resume_session(side, s=7)
+        await side.serve()
+
+    async def same_token() -> str:
+        return "same-token"  # 两次取到同一个 token 也没关系
+
+    gateway = FakeGateway(first, second)
+    async with asyncio.timeout(TIMEOUT), open_client(gateway, {0: broken_close()}) as client:
+        connection = make_connection(
+            client, Injected(gateway, finish_on="RESUMED"), get_token=same_token
+        )
+        await run_until_done(connection, gateway)
+
+    assert gateway.sides[1].logins()[0]["d"]["seq"] == 6
+
+
+async def test_cleanup_error_does_not_hide_an_unrecoverable_close_code() -> None:
+    async def first(side: GatewaySide) -> None:
+        await start_session(side)
+        await side.close(4914)
+
+    gateway = FakeGateway(first)
+    async with asyncio.timeout(TIMEOUT), open_client(gateway, {0: broken_close()}) as client:
+        with pytest.raises(pyqbot.GatewayError) as caught:
+            await make_connection(client, Injected(gateway)).run()
+
+    assert caught.value.err_code == 4914
+
+
+async def test_cleanup_error_after_close_does_not_reconnect() -> None:
+    gateway = FakeGateway(serve_after_login)
+    fault = broken_close()
+    async with asyncio.timeout(TIMEOUT), open_client(gateway, {0: fault}) as client:
+        connection = make_connection(client, Injected(gateway, finish_on="READY"))
+        await run_until_done(connection, gateway)
+
+    assert fault.aclosed
+    assert len(gateway.sides) == 1
+
+
+async def test_programming_error_is_raised_as_is_not_in_a_group() -> None:
+    async def empty_token() -> str:
+        return ""  # 违反 get_token 的约定：encode_identify 会抛 ValueError
+
+    async def script(side: GatewaySide) -> None:
+        await side.hello()
+        await side.serve()
+
+    gateway = FakeGateway(script)
+    async with asyncio.timeout(TIMEOUT), open_client(gateway, {0: broken_close()}) as client:
+        connection = make_connection(client, Injected(gateway), get_token=empty_token)
+        with pytest.raises(ValueError, match="access_token 不能为空"):
+            await connection.run()
+
+
+async def test_unexpected_error_while_connecting_is_raised_as_is() -> None:
+    gateway = FakeGateway()
+    injected = Injected(gateway)
+    injected.urls = ["wss://buggy.test/websocket"]
+    async with asyncio.timeout(TIMEOUT), open_client(gateway) as client:
+        with pytest.raises(RuntimeError, match="传输层自身的 bug"):
+            await make_connection(client, injected).run()
+
+    assert injected.url_calls == 1  # 不当作网络错误重试
+
+
+async def test_worker_cancelled_by_someone_else_cancels_run() -> None:
+    # 例如事件循环关闭时取消所有任务；这时 run() 不能当作 close() 正常返回。
+    gateway = FakeGateway(serve_after_login)
+    async with asyncio.timeout(TIMEOUT), open_client(gateway) as client:
+        connection = make_connection(client, Injected(gateway, finish_on="READY"))
+        runner = asyncio.create_task(connection.run())
+        await gateway.done.wait()
+        cast(asyncio.Task[None], vars(connection)["_worker"]).cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await runner
+
+
+# 构造时校验
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"shard": (1, 1)}, "shard"),
+        ({"shard": (-1, 2)}, "shard"),
+        ({"connect_timeout": 0}, "connect_timeout"),
+        ({"handshake_timeout": -1}, "handshake_timeout"),
+        ({"send_timeout": float("nan")}, "send_timeout"),
+        ({"close_timeout": 0}, "close_timeout"),
+        ({"reconnect_delay": -1}, "reconnect_delay"),
+        ({"identify_interval": -0.1}, "identify_interval"),
+        ({"reconnect_delay": 2, "max_reconnect_delay": 1}, "max_reconnect_delay"),
+    ],
+)
+async def test_invalid_configuration_fails_at_construction(
+    overrides: dict[str, Any], message: str
+) -> None:
+    async def never() -> str:
+        raise AssertionError("不应被调用")
+
+    with pytest.raises(ValueError, match=message):
+        GatewayConnection(
+            http_client=cast(httpx2.AsyncClient, None),  # 校验在用到它之前
+            get_url=never,
+            get_token=never,
+            intents=INTENTS,
+            on_dispatch=lambda payload: None,
+            **overrides,
+        )

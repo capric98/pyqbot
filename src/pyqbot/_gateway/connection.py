@@ -4,6 +4,7 @@
 """
 
 import asyncio
+import contextlib
 import logging
 import random
 from collections.abc import Awaitable, Callable
@@ -59,7 +60,7 @@ class _DisconnectError(Exception):
 
 
 class _Heartbeat:
-    """一条连接上的心跳：到下一次该发时上一次还没有应答，就判定连接已死。"""
+    """一条连接上的心跳：到下一次该发时上一次还没有应答（包括还没发出去），就判定连接已死。"""
 
     def __init__(self, interval: float, beat: Callable[[], Awaitable[None]]) -> None:
         self.interval = interval
@@ -67,12 +68,18 @@ class _Heartbeat:
         self._beat = beat
 
     async def run(self) -> Never:
+        loop = asyncio.get_running_loop()
         while True:
             if not self.acked:
                 raise _DisconnectError(CloseAction.RESUME, "心跳没有应答")
             self.acked = False
-            await self._beat()
-            await asyncio.sleep(self.interval)
+            due = loop.time() + self.interval
+            try:
+                async with asyncio.timeout_at(due):
+                    await self._beat()
+            except TimeoutError as exc:
+                raise _DisconnectError(CloseAction.RESUME, "心跳没有应答（没能发出）") from exc
+            await asyncio.sleep(due - loop.time())
 
 
 class GatewayConnection:
@@ -89,10 +96,34 @@ class GatewayConnection:
         shard: tuple[int, int] = (0, 1),
         connect_timeout: float = 30.0,
         handshake_timeout: float = 30.0,
+        send_timeout: float = 10.0,
+        close_timeout: float = 5.0,
         reconnect_delay: float = 1.0,
         max_reconnect_delay: float = 60.0,
         identify_interval: float = 5.0,
     ) -> None:
+        if not 0 <= shard[0] < shard[1]:
+            raise ValueError(f"shard 必须满足 0 <= 序号 < 总数，收到：{shard!r}")
+        positive = {
+            "connect_timeout": connect_timeout,
+            "handshake_timeout": handshake_timeout,
+            "send_timeout": send_timeout,
+            "close_timeout": close_timeout,
+        }
+        for name, value in positive.items():
+            if not value > 0:  # 这样写 NaN 也会被拒绝
+                raise ValueError(f"{name} 必须大于 0，收到：{value!r}")
+        for name, value in {
+            "reconnect_delay": reconnect_delay,
+            "identify_interval": identify_interval,
+        }.items():
+            if not value >= 0:
+                raise ValueError(f"{name} 不能小于 0，收到：{value!r}")
+        if not max_reconnect_delay >= reconnect_delay:
+            raise ValueError(
+                f"max_reconnect_delay 不能小于 reconnect_delay，收到：{max_reconnect_delay!r}"
+            )
+
         self._http_client = http_client
         self._get_url = get_url
         self._get_token = get_token
@@ -101,21 +132,24 @@ class GatewayConnection:
         self._shard = shard
         self._connect_timeout = connect_timeout
         self._handshake_timeout = handshake_timeout
+        self._send_timeout = send_timeout
+        self._close_timeout = close_timeout
         self._reconnect_delay = reconnect_delay
         self._max_reconnect_delay = max_reconnect_delay
         self._identify_interval = identify_interval
 
         self._session_id: str | None = None
         self._seq: int | None = None
-        self._token: str | None = None  # 只用于脱敏
+        self._tokens: list[str] = []  # 取到过的所有 token，只用于脱敏：平台可能回显轮换前的
         self._last_identify: float | None = None
         self._delay = 0.0  # 不含抖动的退避间隔
         self._invalid_sessions = 0
         self._closed = False
         self._worker: asyncio.Task[Never] | None = None
+        self._shutdown: asyncio.Task[None] | None = None
 
     async def run(self) -> None:
-        """一直运行到 `close()`（正常返回）或连接无法恢复；`close()` 之后调用立即返回。
+        """一直运行到 `close()`（正常返回）或连接无法恢复；被取消时的行为见设计文档「关闭」。
 
         Raises:
             GatewayError: 连接无法恢复。
@@ -126,23 +160,41 @@ class GatewayConnection:
             return
         if self._worker is not None:
             raise RuntimeError("GatewayConnection.run() 只能调用一次")
-        # 真正的工作放进独立的任务：close() 只取消它，不碰调用 run() 的任务。
+        # 真正的工作放进独立的任务，收尾由 _stop_worker() 统一负责：
+        # 直接 await 它的话，调用方每次被取消都会转发成一次取消，打断正在进行的关闭。
         self._worker = worker = asyncio.create_task(self._run_forever())
         try:
-            await worker
+            await asyncio.shield(worker)
         except asyncio.CancelledError:
             task = asyncio.current_task()
-            if self._closed and task is not None and not task.cancelling():
-                return
-            raise
+            if task is not None and task.cancelling():
+                shutdown = self._shutdown_task()
+                while not shutdown.done():
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await asyncio.shield(shutdown)
+                raise
+            if not self._closed:
+                raise
 
     async def close(self) -> None:
-        """断开连接并等 `run()` 收尾。可重复调用，`run()` 之前调用也安全。"""
+        """断开连接并等收尾（有期限）；可重复、可并发调用，`run()` 之前调用也安全。"""
         self._closed = True
-        worker = self._worker
-        if worker is not None and not worker.done():
+        if self._worker is not None and not self._worker.done():
+            await asyncio.shield(self._shutdown_task())
+
+    def _shutdown_task(self) -> asyncio.Task[None]:
+        if self._shutdown is None:
+            self._shutdown = asyncio.create_task(self._stop_worker())
+        return self._shutdown
+
+    async def _stop_worker(self) -> None:
+        """取消 worker 并等它收尾；所有 `close()` 与被取消的 `run()` 共用这一次。"""
+        worker = cast(asyncio.Task[Never], self._worker)
+        # 只在到期时才再取消：第二次取消会打断 httpx2 正在进行的关闭，流就关不掉了。
+        worker.cancel()
+        while not (await asyncio.wait([worker], timeout=self._close_timeout))[0]:
+            logger.warning("网关连接没能在 %.1f 秒内关闭，强制结束", self._close_timeout)
             worker.cancel()
-            await asyncio.wait([worker])
 
     async def _run_forever(self) -> Never:
         delay = 0.0
@@ -178,23 +230,55 @@ class GatewayConnection:
         return max(0.0, self._identify_interval - elapsed)
 
     async def _connect(self) -> _DisconnectError:
-        """建一次连接并服务到它断开，返回断开原因。"""
+        """建一次连接并服务到它断开，返回断开原因。
+
+        WebSocket 上下文抛出的异常在这里统一处理：httpx2 的会话用 anyio 任务组，
+        关闭阶段的异常会被包成异常组，不能让它绕过重连与错误映射。
+        """
         try:
             url = await self._get_url()
-            self._token = token = await self._get_token()
+            token = await self._get_token()
         except NetworkError as exc:
             return self._outcome_of(exc)
+        if token not in self._tokens:
+            self._tokens.append(token)
+
+        outcome: _DisconnectError | None = None
+        bug: Exception | None = None
+        entered = False
+        closing = asyncio.timeout(None)  # 拿到断开原因之后才开始计时，限制关闭 WebSocket 的时间
         try:
-            async with self._http_client.websocket(
-                url,
-                max_message_size_bytes=_MAX_MESSAGE_BYTES,
-                # 存活由 OpCode 1 心跳判断；文档没说网关回不回 WebSocket Ping。
-                keepalive_ping_interval_seconds=None,
-                timeout=self._connect_timeout,
-            ) as ws:
-                return await self._serve(ws, token)
-        except (httpx2.HTTPError, HTTPXWSException) as exc:
-            return self._outcome_of(exc)
+            async with (
+                closing,
+                self._http_client.websocket(
+                    url,
+                    max_message_size_bytes=_MAX_MESSAGE_BYTES,
+                    # 存活由 OpCode 1 心跳判断；文档没说网关回不回 WebSocket Ping。
+                    keepalive_ping_interval_seconds=None,
+                    timeout=self._connect_timeout,
+                ) as ws,
+            ):
+                entered = True
+                try:
+                    outcome = await self._serve(ws, token)
+                except Exception as exc:  # noqa: BLE001 —— 编程错误：等连接关好再原样抛出
+                    bug = _first_leaf(exc)
+                closing.reschedule(asyncio.get_running_loop().time() + self._close_timeout)
+        except Exception as exc:  # 传输层的异常种类不固定，还可能被包成异常组
+            if outcome is not None or bug is not None:
+                # 已有断开原因（或要抛的编程错误），关闭阶段的错误不能覆盖它。
+                logger.debug("关闭 WebSocket 时出错（%s），已忽略", type(exc).__name__)
+            elif entered or isinstance(exc, httpx2.HTTPError | HTTPXWSException):
+                outcome = self._outcome_of(_first_leaf(exc))
+            else:
+                raise
+        task = asyncio.current_task()
+        if task is not None and task.cancelling():
+            # 关闭阶段的异常顶替了 close() 发来的取消，这里补回去。
+            raise asyncio.CancelledError
+        if bug is not None:
+            raise bug
+        return cast(_DisconnectError, outcome)
 
     async def _serve(self, ws: AsyncWebSocketSession, token: str) -> _DisconnectError:
         try:
@@ -277,9 +361,13 @@ class GatewayConnection:
 
     async def _send(self, ws: AsyncWebSocketSession, frame: str) -> None:
         try:
-            await ws.send_text(frame)
+            # httpx2 的写入没有超时，网络无响应时会一直等。
+            async with asyncio.timeout(self._send_timeout):
+                await ws.send_text(frame)
+        except TimeoutError as exc:
+            raise _DisconnectError(CloseAction.RESUME, "发送超时") from exc
         except Exception as exc:  # noqa: BLE001 —— 断开时 wsproto、anyio 的各种异常都可能出现
-            # 断开原因由读循环收到，收不到时心跳没有应答也会兜底；wsproto 的文案含整帧，不记。
+            # 连接已断：断开原因由读循环收到，收不到时心跳没有应答也会兜底；wsproto 的文案含整帧，不记。
             logger.debug("发送失败（%s），等待读循环得知断开原因", type(exc).__name__)
 
     def _login(self, token: str) -> str:
@@ -302,9 +390,9 @@ class GatewayConnection:
         except Exception as exc:
             logger.error(
                 "on_dispatch 处理 %s 时出错：%s",
-                payload.t,
+                self._redact(str(payload.t)),
                 self._redact(repr(exc)),
-                exc_info=safe_cause(exc, self._token),
+                exc_info=safe_cause(exc, *self._tokens),
             )
         if payload.s is not None:
             self._seq = payload.s
@@ -333,8 +421,15 @@ class GatewayConnection:
     def _gateway_error(self, message: str, outcome: _DisconnectError) -> GatewayError:
         error = GatewayError(message, err_code=outcome.code)
         cause = outcome.__cause__
-        error.__cause__ = None if cause is None else safe_cause(cause, self._token)
+        error.__cause__ = None if cause is None else safe_cause(cause, *self._tokens)
         return error
 
     def _redact(self, text: str) -> str:
-        return redact(text, self._token)
+        return redact(text, *self._tokens)
+
+
+def _first_leaf(exc: Exception) -> Exception:
+    """异常组里的第一个异常；不是异常组时原样返回。"""
+    while isinstance(exc, ExceptionGroup):
+        exc = cast(ExceptionGroup[Exception], exc).exceptions[0]
+    return exc
