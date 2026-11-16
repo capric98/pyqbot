@@ -63,4 +63,6 @@ uv run --env-file .env pytest -m live --no-cov  # 实测，须先获用户同意
 
 ## 提交
 
-遵循 Conventional Commits：`<type>(<scope>): <中文描述>`，一次提交只做一件事。
+- 遵循 Conventional Commits：`<type>(<scope>): <中文描述>`，一次提交只做一件事。
+- 可以直接在当前分支（包括 `main`）提交，不需要另开分支。
+- 主 agent 可以自行提交，不必等用户要求：每完成一个独立的改动并通过检查就提交，不要让工作区积压大量未提交内容。子 agent 不提交；推送仍须用户要求。
