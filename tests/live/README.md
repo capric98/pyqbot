@@ -57,6 +57,7 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 - `test_live_upload.py::test_url_upload`：官方示意图。
 - `test_live_upload.py::test_inline_data_is_base64`：红色小方块与「内联上传」。
 - `test_live_upload.py::test_large_file_is_uploaded_in_parts`：约 1200×1000 的噪点图与「分片上传」。
+- `test_live_upload.py::test_file_over_10m_is_uploaded_in_several_parts`：约 2000×2000 的噪点图与「多片上传」；分片情况记进日志。
 - `test_live_upload.py::test_upload_and_send_directly`：同 `test_url_upload` 的图，由上传接口直接发出。
 
 ### 需要测试用户动手配合
@@ -102,7 +103,7 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 
 ## 结果在哪，怎么沉淀
 
-- 落盘的只有 `test_live.py`、`test_live_bot.py`、`test_live_events.py`，都在 `.cache/live/`（已被 git 忽略）。`test_live_groups.py` 只把要核对的结果记进日志，要加 `--log-cli-level=WARNING` 才看得到；其余用例以测试用户在客户端看到的效果为准。
+- 落盘的只有 `test_live.py`、`test_live_bot.py`、`test_live_events.py`，都在 `.cache/live/`（已被 git 忽略）。`test_live_groups.py` 与多片上传用例只把要核对的结果记进日志，要加 `--log-cli-level=WARNING` 才看得到；其余用例以测试用户在客户端看到的效果为准。
 - 落盘文件中，`report.txt`、`bot.txt`、`events.txt` 已脱敏、可以贴出来；`raw/` 去掉了凭证，但含 openid 与消息内容，只留在本机。
 - 与 `docs/errata.md`「待实测」相符或不符的结论，改写对应条目（写明实测日期与结论），必要时调整实现。
 - 能固定下来的真实响应，去掉凭证与 openid 后存进 `tests/fixtures/`，在 `tests/test_real_samples.py` 里加本地回归测试。

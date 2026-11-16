@@ -10,11 +10,11 @@ class BotInfo(Model):
         id: 机器人的用户 ID。
         username: 机器人的名字。
         avatar: 头像地址。
-        bot: 是否为机器人。
+        bot: 是否为机器人；实测没有返回（`docs/errata.md`）。
         union_openid: 跨应用统一的 openid，需特殊申请才会返回。
         union_user_account: 跨应用统一的账号，需特殊申请才会返回。
-        share_url: 机器人的分享链接（只在官方示例里出现，见 `docs/errata.md`）。
-        welcome_msg: 欢迎语（同上）。
+        share_url: 机器人的分享链接（`qun.qq.com`）。
+        welcome_msg: 欢迎语，没有设置时为空字符串。
     """
 
     id: str

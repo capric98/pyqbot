@@ -1,0 +1,16 @@
+{
+  "upload_id": "fake-upload-id-0000000000000000",
+  "block_size": "3602158",
+  "parts": [
+    {
+      "index": 1,
+      "presigned_url": "https://cos.test/fake-object?sign=fake-signature",
+      "block_size": "3602158"
+    }
+  ],
+  "upload_config": {
+    "concurrency": 1,
+    "retry_timeout": 300,
+    "retry_delay": 1
+  }
+}

@@ -116,8 +116,8 @@ class CurrentMenu(Model):
     """`client.menu.get()` 的结果。
 
     Attributes:
-        version: 菜单的版本号。
-        menu: 当前生效的菜单；从未设置过时为 `None`。
+        version: 菜单的版本号；从未设置过时为 `None`。
+        menu: 当前生效的菜单；从未设置过时平台返回空对象（没有菜单项），读按钮用 `items`。
     """
 
     version: int | None = None

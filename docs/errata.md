@@ -107,7 +107,8 @@
 
 - **位置**：接口页的 `MessageMarkdown`（`template_id` 整数、`content`、`custom_template_id`、`force_verify_image_resource`，两个模板字段标为弃用，没有 `params`）；`server-inter/message/type/markdown.md`（`content`、`custom_template_id`、`params`）；`server-inter/message/template/model.md`（`template_id`、`params`、`content`）。接口页还说填了 `markdown` 后「content/ark 必须全为空」，但 v2 的请求体没有 `ark` 字段。
 - **当前做法**：`Markdown` 支持 `content`、`force_verify_image_resource`，以及 `markdown.md` 示例里的 `custom_template_id` + `params`；不支持整数的 `template_id`。`markdown` 与 `content` 同传时在本地抛 `ValueError`，`ark` 不理会。
-- **怎么测**：自定义 `content` 已由实测用例覆盖（`tests/live/test_live_messages.py`）；模板没有可用的模板 ID，不测。
+- **已知**：自定义 `content` 可用，标题、粗体、斜体、链接都正常显示（2026-11-16，`test_markdown`）。
+- **不测**：模板没有可用的模板 ID。
 
 ### 键盘：示例与字段说明互相矛盾
 
@@ -119,14 +120,16 @@
   - `msg-btn.md` 把 `visited_label`、`style`、`permission`、`unsupport_tips` 标为必填，接口页都是选填，且说 `visited_label`「不传则保持不变」。
   - `msg-btn.md` 说按钮挂在 Markdown 消息上，接口页没说 `keyboard` 能否随文本等其它类型发送。
 - **当前做法**：`Keyboard` 的 `id` 与 `content` 二选一，否则抛 `ValueError`；`keyboard` 只能随 `markdown` 发送。`enter` 不按场景拦截。枚举收录 style 0/1/3/4、permission.type 0~3。`Button` 的工厂方法总是填上 `visited_label`（默认同 `label`）、`style`（默认灰色线框）与 `permission`（默认所有人：不填时按整数默认值是 0「指定用户」，可能谁都点不了），`unsupport_tips` 不填。
-- **怎么测**：实测用例 `test_markdown_with_buttons` 看蓝底白字（style 4）是否生效、未填 `unsupport_tips` 是否被接受；另在群里发带 `enter` 的指令按钮，看是否生效。
+- **已知**（2026-11-16，`test_markdown_with_buttons`）：单聊里 Markdown + 键盘发送成功；不填 `unsupport_tips` 被接受；style 1（蓝色线框）与 4（蓝底白字）都按预期显示。
+- **怎么测**：在群里发带 `enter` 的指令按钮，看是否生效。
 
 ### 引用：`message_reference.message_id` 的格式
 
 - **位置**：接口页的 `MessageReference`；群聊发消息页的富媒体、卡片示例。
 - **矛盾**：字段说明要 `REFIDX_` 开头的引用索引（自己发的取响应的 `ext_info.ref_idx`，收到的取 `message_scene.ext` 的 `msg_idx`），群聊页的示例填的却是 `ROBOT1.0_` 开头的消息 ID。
 - **当前做法**：`quote=` 传 `SentMessage` 或收到的消息时填引用索引；传字符串则原样填入，所以消息 ID 也能试。
-- **怎么测**：实测用例 `test_quote_previous_message` 覆盖引用索引；再用 `SentMessage.id` 作为字符串引用一次，看是否被接受。
+- **已知**：引用索引可用：用上一条的 `ext_info.ref_idx` 引用，客户端以引用样式显示（2026-11-16，`test_quote_previous_message`）。
+- **怎么测**：用 `SentMessage.id` 作为字符串引用一次，看是否被接受。
 
 ### `content` 能否随富媒体、卡片一起发
 
@@ -140,7 +143,8 @@
 - **位置**：单聊发消息页的 `InputNotify` 与「输入状态通知」示例。
 - **含糊**：示例带 `msg_id` + `msg_seq`，但没说主动发送是否可行、是否占用被动回复次数（单聊每条消息 4 次），响应体也没有给出。
 - **当前做法**：`send_typing()` 的 `reply_to` 可选；传了就像被动回复一样占用 `msg_seq`；响应体不解码。
-- **怎么测**：实测用例 `test_typing` 主动发送；再收到一条消息后先 `send_typing` 再回复 4 次，看第 4 次回复是否因次数超限失败，并记下响应体。
+- **已知**：可以主动发送（不带 `msg_id`），客户端显示「正在输入」，`seconds=30` 时持续约 30 秒（2026-11-16，`test_typing`）。
+- **怎么测**：收到一条消息后先 `send_typing` 再回复 4 次，看第 4 次回复是否因次数超限失败，并记下响应体。
 
 ### 互动召回 `is_wakeup` 与 `msg_id` / `event_id`
 
@@ -202,27 +206,22 @@
 - **位置**：单聊、群聊上传页的 `file_data` 一行与「直接上传二进制数据」，示例只写了 `"xxxx图片的二进制数据"`。
 - **含糊**：字段是字符串，却没说二进制怎么编码；5M 是编码前还是编码后、按 10^6 还是 2^20 也没说。
 - **当前做法**：标准 base64（带填充）；原始数据不超过 3 MiB 才内联（base64 后约 4 MiB），更大的分片上传。
-- **怎么测**：实测用例 `test_inline_data_is_base64`，图片显示正常即确认 base64；要确认上限可再内联一个 4～5 MB 的文件。
+- **已知**：编码是标准 base64，内联的图片正常显示（2026-11-16，`test_inline_data_is_base64`）。
+- **怎么测**：上限：内联一个 4～5 MB 的文件。
 
 ### 分片上传：`block_size` 默认 5MB 与示例的 10485760
 
 - **位置**：`rich-media.md`「注意事项」与预上传页 `block_size` 一行都说默认 5MB，预上传页的响应示例是 `"10485760"`（10 MiB）。
 - **当前做法**：不假设大小，一律按响应顶层的 `block_size` 切片；它是字符串还是数字都接受。
-- **怎么测**：实测用例 `test_large_file_is_uploaded_in_parts` 运行时记下响应的 `block_size` 与 `upload_config`。
-
-### 分片上传：`md5_10m` 在文件不足 10002432 字节时
-
-- **位置**：预上传页的 `md5_10m` 一行；`rich-media.md`「注意事项」。
-- **含糊**：只说是「文件前 10002432 字节的 MD5」，没说文件不够长时怎么算。
-- **当前做法**：取整个文件的 MD5（即前 min(文件大小, 10002432) 字节）。
-- **怎么测**：实测用例 `test_large_file_is_uploaded_in_parts` 的文件约 3.6 MB，成功即确认；再上传一个超过 10002432 字节的文件确认另一种情况。
+- **已知**：约 3.6 MB 的图片只给一片，顶层与这一片的 `block_size` 都等于文件大小，见「已确认」的「分片上传：序号从 1 开始」。
+- **怎么测**：实测用例 `test_file_over_10m_is_uploaded_in_several_parts`（约 12 MB）记下各片大小。
 
 ### 分片上传：分片完成接口的 `block_size`
 
 - **位置**：单聊分片完成页写「分块大小（字节）」，群聊页写「该分块的实际大小」。
 - **含糊**：最后一片不足 `block_size` 时填哪个。
 - **当前做法**：填这一片的实际字节数，字符串。
-- **怎么测**：实测用例 `test_large_file_is_uploaded_in_parts` 的文件大小不是分片大小的整数倍，成功即确认。
+- **怎么测**：实测用例 `test_file_over_10m_is_uploaded_in_several_parts`，成功即确认（约 3.6 MB 的文件只有一片，没有测到）。
 
 ### 分片上传：`upload_config.retry_timeout` 的含义
 
@@ -235,7 +234,8 @@
 
 - **位置**：预上传页的 `file_size`（string）；`server-inter/message/material-management.md` 申请上传的 `file_size`（uint64，示例是数字）。
 - **当前做法**：各按各页：预上传发字符串，素材库发整数。
-- **怎么测**：实测用例 `test_large_file_is_uploaded_in_parts` 与 `test_media_image_library` 成功即确认。
+- **已知**：预上传发字符串被接受（2026-11-16，`test_large_file_is_uploaded_in_parts`）。
+- **怎么测**：素材库一侧由实测用例 `test_media_image_library` 确认。
 
 ### 素材库：`expires_at` 的示例与 90 天不符
 
@@ -272,13 +272,6 @@
 - **当前做法**：所有分片共用第一次取的 `msg_seq`；`index` 每发一个分片加 1，失败的也算，且失败后这条流式消息在本地终止；结束分片是 `input_mode=append`、`content_raw=""`。
 - **怎么测**：实测用例 `test_stream_reply`。看两点：结束分片的请求是否成功（不抛 `APIError`）；测试账号的客户端里这条消息是否停止显示「生成中」、正文是否完整。请求成功但客户端仍显示「生成中」，同样算空的结束分片不可用。
 - **不可用时的备选**：结束分片改用 `input_mode=replace`、`content_raw` 带上完整正文（SDK 在本地累计 `append` / `replace` 过的内容，按 `replace` 的语义它一定以已下发的内容开头）；或者每次 `append` 先压住最后一段，到结束时随 `input_state=10` 一起发出（代价是最后一段晚一拍出现）。
-
-### `GET /users/@me`：示例比字段表多出字段
-
-- **位置**：`autogen/api/users_me.get.md`；旧版 `openapi/user/me.md`。
-- **矛盾**：字段表是 `id`、`username`、`avatar`、`bot`、`union_openid`、`union_user_account`，示例另有 `share_url`、`welcome_msg`；旧版示例没有 `bot`。
-- **当前做法**：`BotInfo` 只有 `id` 必填，其余（含示例多出的两个）都是可选。
-- **怎么测**：实测用例 `test_get_me`，看原始响应（`.cache/live/raw/`）里实际有哪些字段。
 
 ### 自定义菜单：怎么清空，哪些字段必填
 
@@ -653,3 +646,35 @@
 - **位置**：`dev-prepare/api-call-guide.md` 的「响应结构」与错误码表。
 - **结论**：用过期的 token 调 `GET /users/@me`，返回 HTTP 401，响应体是 `{"message": "AccessToken无效或过期", "code": 11244, "err_code": 40011027, "trace_id": "..."}`。两个错误码字段同时出现，`err_code` 是文档里现行的错误码，`code` 是旧式错误码。
 - **实现**：两个都有时，异常的 `err_code` 取响应体的 `err_code`。fixture：`api_token_expired.json`。
+
+### `GET /users/@me`：实际字段是示例那一套
+
+- **位置**：`autogen/api/users_me.get.md`：字段表是 `id`、`username`、`avatar`、`bot`、`union_openid`、`union_user_account`，示例另有 `share_url`、`welcome_msg`。
+- **结论**：响应只有 `id`（19 位数字的字符串）、`username`、`avatar`、`share_url`、`welcome_msg`；字段表里的 `bot`、`union_openid`、`union_user_account` 都没有返回。`share_url` 是 `https://qun.qq.com/qunpro/robot/qunshare?...` 形式的链接，`welcome_msg` 没有设置时是空字符串。
+- **实现**：`BotInfo` 只有 `id` 必填，不变。fixture：`bot_info.json`。
+
+### 生成分享链接：响应多出 `retcode`、`msg`
+
+- **位置**：`autogen/api/v2_generate_url_link.post.md`：响应体只有 `data.url`，示例链接是 `qun.qq.com` 的长链接。
+- **结论**：响应是 `{"retcode": 0, "msg": "success", "data": {"url": "https://bot.q.qq.com/s/..."}}`，链接是短链接。失败时是否用 `retcode` 表示还没见到。
+- **实现**：只读 `data.url`；失败时如果没有 `err_code` / `code`、也没有 `data`，抛「响应无法识别」的 `APIError`。fixture：`share_link.json`。
+
+### 自定义菜单：没有设置过时 `menu` 是空对象
+
+- **位置**：`autogen/api/v2_menu.get.md`：「未设置过菜单时该字段为空」。
+- **结论**：没有设置过菜单的机器人，响应是 `{"menu": {}}`，没有 `version`。
+- **实现**：`CurrentMenu.version` 为 `None`，`items` 为空。fixture：`menu_unset.json`。
+
+### 分片上传：序号从 1 开始，文件不大时只有一片
+
+- **位置**：单聊预上传页 `UploadPart.index` 写「分片序号，从 0 开始」，示例也从 0 开始；分片完成页的示例 `part_index` 是 0。
+- **结论**（`test_large_file_is_uploaded_in_parts`，3602158 字节的 PNG）：
+  - 预上传的响应：`parts` 只有一片，`index` 是 1；每一片另带文档没有的 `block_size`。顶层与这一片的 `block_size` 都是字符串 `"3602158"`，即文件大小。`upload_config` 是 `{"concurrency": 1, "retry_timeout": 300, "retry_delay": 1}`。
+  - 分片完成时 `part_index` 原样填 1 被接受；`md5_10m` 填整个文件的 MD5（文件不足 10002432 字节）被接受；合并后返回 `raw_url`。
+- **实现**：允许序号从 0 或 1 开始（须连续），第 n 片的偏移按「序号 − 最小序号」计算，分片完成时原样回报平台给的序号。fixture：`upload_prepared.json`。
+
+### 卡片：`pic_url` 用 .ico 时转存失败
+
+- **位置**：单聊发消息页的卡片（`msg_type=8`）。文档没有写 `pic_url` 支持哪些格式。
+- **结论**：`pic_url` 填 `https://www.qq.com/favicon.ico` 时，发消息返回 `err_code` 40034141「图片转存失败，请重试」；换成 jpg 后卡片正常显示，点击打开 `url`。
+- **实现**：不变，由平台拒绝。

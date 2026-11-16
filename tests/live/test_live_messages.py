@@ -66,12 +66,15 @@ async def test_markdown_with_buttons(client: pyqbot.Client, openid: str) -> None
 
 
 async def test_card(client: pyqbot.Client, openid: str) -> None:
-    """应看到：一张图文卡片，标题「pyqbot 卡片」、描述一行、一张图，点击打开 qq.com。"""
+    """应看到：一张图文卡片，标题「pyqbot 卡片」、描述一行、一张图，点击打开 qq.com。
+
+    `pic_url` 用 favicon.ico 时平台报 40034141「图片转存失败」，所以用富媒体实测里能上传的 jpg。
+    """
     card = pyqbot.Card(
         title="pyqbot 卡片",
         description="这是一张由实测发出的图文卡片",
         url="https://www.qq.com",
-        pic_url="https://www.qq.com/favicon.ico",
+        pic_url="https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/image-send.35813305.jpg",
     )
 
     sent = await client.users.send_message(openid, card=card)

@@ -8,18 +8,22 @@
 另设 `LIVE_MEDIA_IMAGES=1` 才运行；用例结束时删除自己上传的图片。
 """
 
+import json
+import logging
 import os
 import struct
 import zlib
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
+import httpx2
 import pytest
 
 import pyqbot
 from pyqbot._api.upload import INLINE_LIMIT
 
 pytestmark = pytest.mark.live
+_logger = logging.getLogger("pyqbot.live")
 
 # 官方文档快照里引用的图片（server-inter/message/rich-media.md），公网可访问。
 IMAGE_URL = "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/image-send.35813305.jpg"
@@ -94,6 +98,36 @@ async def test_large_file_is_uploaded_in_parts(
 
     assert sent.id
     assert media.raw_url
+
+
+async def test_file_over_10m_is_uploaded_in_several_parts(
+    app_id: str, app_secret: str, openid: str, tmp_path: Path
+) -> None:
+    """应看到：一张约 2000×2000 的彩色噪点图，下面一行「多片上传」。
+
+    约 12 MB，超过 `md5_10m` 的 10002432 字节。约 3.6 MB 的文件平台只给一片，这里看它分几片、
+    最后一片不足 `block_size` 时填实际大小是否被接受。分片情况记进日志（`--log-cli-level=WARNING`）。
+    """
+    finished: list[dict[str, object]] = []
+
+    async def record(request: httpx2.Request) -> None:
+        if request.url.path.endswith("/upload_part_finish"):
+            finished.append(json.loads(request.content))
+
+    file = tmp_path / "pyqbot-noise-12m.png"
+    file.write_bytes(png(2000, 2000))
+    async with (
+        httpx2.AsyncClient(event_hooks={"request": [record]}) as http_client,
+        pyqbot.Client(app_id, app_secret, http_client=http_client) as client,
+    ):
+        media = await client.users.upload(openid, path=file)
+        sent = await client.users.send_message(openid, "多片上传", media=media)
+
+    parts = [(body["part_index"], body["block_size"]) for body in finished]
+    _logger.warning("文件 %d 字节，分片（序号, 大小）：%s", file.stat().st_size, parts)
+    assert sent.id
+    assert len(parts) > 1
+    assert sum(int(str(size)) for _, size in parts) == file.stat().st_size
 
 
 async def test_upload_and_send_directly(client: pyqbot.Client, openid: str) -> None:
