@@ -48,11 +48,11 @@ bot.run()  # 同步入口，阻塞到退出
 ```text
 src/pyqbot/
   _errors.py  _config.py  _redact.py  地基，互不依赖（已落地）
-  _model.py       Model、OpenIntEnum、宽容解码（已落地）     ← _redact
+  _model.py       Model、RequestModel、Open*Enum、宽容解码（已落地） ← _redact
   _models/        数据模型与事件模型，按领域分文件（部分落地） ← _model _gateway.intents
   _credentials.py access_token 的获取、缓存、刷新（已落地）  ← _config _errors _model _redact
   _http.py        请求层：拼 URL、鉴权头、解码、错误映射（已落地） ← _credentials _errors _model _redact
-  _api/           接口封装，每组一个持有请求层的小类（已落地） ← _http _models
+  _api/           接口封装，每组一个持有请求层的小类，另有翻页工具 paging（已落地） ← _http _models
   _client.py      Client = 生命周期 + 凭证 + 各组接口属性（已落地）
   _gateway/       WebSocket：协议数据、连接状态机（已落地）   ← _errors _model _redact
   _events/        分发器（已落地），不依赖网关连接           ← _models _errors _gateway.intents
@@ -64,8 +64,9 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 ## 共用地基（已落地）
 
 - **`pyqbot._model.Model`**：所有模型的基类（内部，不导出）。子类自动不可变、字段仅限关键字，不必也不要重复声明 `frozen` / `kw_only`；解码时忽略未知字段。对外只有 `to_dict()`，返回与接口 JSON 一一对应的字典。
+- **`pyqbot._model.RequestModel`**：调用方构造、编码进请求体的模型（如 `Keyboard`）继承它。取默认值的字段不编码（`omit_defaults`），所以没传的可选字段不会以 `null` 发出去，`to_dict()` 里也没有。参数之间的约束（如二选一）在 `__post_init__` 里检查，抛 `ValueError`。
 - **`pyqbot._model.decode(data, type_)`**：解码接口与网关数据的统一入口，宽容规则见约定 4。
-- **`pyqbot._model.OpenIntEnum`**：接口里的整数枚举都继承它，见约定 4。第一个字符串枚举出现时再照样加 `OpenStrEnum`。
+- **`pyqbot._model.OpenIntEnum` / `OpenStrEnum`**：接口里的整数、字符串枚举分别继承它们，见约定 4。
 - **`pyqbot._redact`**：凭证脱敏，见约定 7。
 - **异常**（`_errors.py`）：
   ```text
@@ -90,8 +91,26 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
   | 响应体不是 JSON | `APIError`（「无法解析响应」） |
   | 2xx、没有错误码，但解不成 `type_` | `APIError`（「响应无法识别」） |
 
-- **接口分组**：`_api/users.py`、`_api/groups.py` 各一个小类，挂成 `client.users`、`client.groups`。首批只有发文本消息：`send_message(openid, content, *, reply_to=None)`，返回 `pyqbot.SentMessage`。其它消息类型以后用仅限关键字的参数追加，不改已有签名。
-- **被动回复**：`reply_to` 只接受对应场景收到的消息（`users` 收 `C2CMessage`，`groups` 收 `GroupMessage`，见「事件」）。`msg_id` 取 `reply_to.id`，`msg_seq` 由 `next_msg_seq()` 在这个消息对象上从 1 递增，发送失败也不回退；调用方不用管。
+- **接口分组**：`_api/users.py`、`_api/groups.py` 各一个小类，挂成 `client.users`、`client.groups`。单聊与群聊共用 `_api/message.py` 拼请求体。
+- **发消息**：`send_message(openid, content=None, *, markdown, keyboard, media, card, quote, reply_to)`，单聊另有 `wakeup`；返回 `pyqbot.SentMessage`。新的内容类型照样追加仅限关键字的参数，不改已有签名。
+  - `msg_type` 由 SDK 推断：传了 `markdown` 为 2、`media` 为 7、`card` 为 8，否则为 0。调用方不接触 `msg_type`。
+  - 发请求前抛 `ValueError` 的组合：什么内容都没有；`markdown`、`media`、`card` 传了不止一个；`markdown` 与 `content` 同传（接口页）；`keyboard` 不随 `markdown`（`msg-btn.md`）；`wakeup` 与 `reply_to` 同传。`content` 可以随 `media`、`card` 一起发（文档没禁止，见 `errata.md`）。
+  - `markdown` 接受字符串（即 `{"content": ...}`）或 `Markdown`；`media` 是 `Media`（上传接口的响应模型，只发出 `file_info`）；`card` 是 `Card`（即 `card.content`，`type` 固定为 `tuwen`）。
+  - `quote` 填 `message_reference.message_id`：接受引用索引字符串、`SentMessage`（取 `ext_info.ref_idx`）或同场景收到的消息（取 `msg_idx`，即 `message_scene.ext` 里的 `msg_idx`）；取不到时抛 `ValueError`。
+  - 模型上的快捷方法（如 `message.reply()`）参数与 `send_message` 相同，只是固定了 `reply_to`。
+- **被动回复**：`reply_to` 的类型是场景标记类（`users` 收 `C2CReplyTarget`，`groups` 收 `GroupReplyTarget`，见「事件」），所以把群聊的回复对象传给单聊接口时 pyright 报错。收到的消息填 `msg_id`（取 `id`），其余事件填 `event_id`（取 `event.event_id`，为 `None` 时抛 `ValueError`）。两种都由 `next_msg_seq()` 在这个对象上从 1 递增 `msg_seq`，发送失败也不回退，请求在本地被拒（`ValueError`）时不占用；调用方不用管。
+- **其它消息操作**：撤回是 `recall_message(openid, message)`，`message` 可以是消息 ID、`SentMessage`，群聊还可以是收到的 `GroupMessage`（机器人是管理员时）。「正在输入」是 `client.users.send_typing(openid, *, seconds=60, reply_to=None)`（`msg_type=6`，只有单聊），也是被动回复、占用 `msg_seq`；文档没有它的响应体，所以不解码、返回 `None`。
+- **分页接口**：方法名为 `iter_<资源>`，返回 `AsyncIterator`，调用方写 `async for x in client.groups.iter_members(...)`。方法内只写「怎么取一页」的 `fetch(cursor)`，返回 `_api.paging.Page(items, next)`，再 `return paginate(fetch)`：
+  ```python
+  def iter_members(self, group_openid: str, *, limit: int = 50) -> AsyncIterator[GroupMember]:
+      async def fetch(cursor: str | None) -> Page[GroupMember, str]:
+          params = {"limit": limit} | ({"cursor": cursor} if cursor else {})
+          page = await self._http.request("GET", path, type_=MemberPage, params=params)
+          return Page(page.members, page.next_cursor)
+
+      return paginate(fetch)
+  ```
+  `fetch(None)` 取第一页。`next` 为 `None`、空串或与刚用过的相同时结束；游标的类型随接口（字符串、`cookie`、偏移量等），`is_end` 之类的结束标志在 `fetch` 里换成 `next=None`，`before/after` 形式把下一页的锚点放进 `next`。要整页信息（总数等）的接口另给一个取单页的方法，不经它。
 - **网关地址**：`Client._get_gateway_url()` 调 `GET /gateway`，由 `Bot.start()` 作为 `get_url` 注入网关连接。
 
 ## 网关连接（已落地）
@@ -131,7 +150,9 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 
 ## 事件（已落地）
 
-- **事件模型**（`_models/`）：每种事件一个 `Event` 的子类，收到的消息继承 `ReceivedMessage`（带 `id`）。首批是 `C2CMessage`、`GroupMessage`，都带 `reply()`。子类用 `ClassVar` 声明 `event_name`（Dispatch 的 `t`）与 `intent`。绑定的 `Client` 与回复计数存在实例的 `__dict__` 里（`dict=True`），`repr`、`to_dict()`、编码与相等性只看字段。
+- **事件模型**（`_models/`）：每种事件一个 `Event` 的子类，收到的消息继承 `ReceivedMessage`（带 `id`）。首批是 `C2CMessage`、`GroupMessage`，都带 `reply()`。子类用 `ClassVar` 声明 `event_name`（Dispatch 的 `t`）与 `intent`。绑定的 `Client`、事件 ID 与回复计数存在实例的 `__dict__` 里（`dict=True`），`repr`、`to_dict()`、编码与相等性只看字段。
+- **事件 ID**：分发器把 payload 外层的 `id` 经 `bind_event_id()` 记到事件上，对外是只读的 `event.event_id`（不是分发来的事件为 `None`）。被动回复的 `event_id` 取它（文档的出入见 `errata.md`）。
+- **可以被动回复的事件**（`_models/event.py`）：`ReplyTarget` 是基类，场景用无字段的标记子类表示：`C2CReplyTarget`、`GroupReplyTarget`（从顶层导出，以后加频道再加一个）。`ReceivedMessage` 也是 `ReplyTarget`，所以 `C2CMessage(_ChatMessage, C2CReplyTarget)` 这样多继承即可。两个场景都会发生的事件（如 `INTERACTION_CREATE`）同时继承两个标记，场景不对时由平台拒绝。
 - **模型上的行为**：分发器在调用处理函数前 `bind_client(event, client)`，`message.reply()` 这类快捷方法经 `self._bound_client()` 调用接口；没有绑定时抛 `RuntimeError`。同一事件的所有处理函数拿到同一个对象，所以 `msg_seq` 在它们之间也是递增的。
 - **常用信息一步拿到**：嵌在发送者里的 openid 在消息上另有属性（`message.user_openid`、`message.member_openid`）；用户写类型标注会用到的嵌套类型（发送者、附件）从顶层导出，其余不导出。文本字段缺失与空串没有区别时默认 `""`（如 `content`），省得处处判断 `None`。
 - **注册**（`Bot`）：每种事件一个装饰器 `@bot.on_<事件>`，原样返回处理函数；类型写成 `[F: Handler[事件模型]](handler: F) -> F`，参数类型不对时 pyright 报错。处理函数必须是 `async def`，否则注册时抛 `TypeError`。同一事件可以注册多个。
@@ -140,6 +161,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 - **日志不带凭证**：处理函数名取函数自身的 `__qualname__`（`partial` 逐层取被包的函数，可调用对象取类名），不用 `repr()`，因为 `partial` 的 repr 带着绑定的参数；任务名、日志与注册时的 `TypeError` 都用它。处理函数的异常链先格式化成文本，经 `Bot` 注入的 `Client._redact_secrets` 脱敏（约定 7）再写日志，不交给 `logger.exception`。
 - **关闭**（`await aclose(grace_period=5)`）：可以重复、并发调用，一定返回。只有第一次调用标记关闭并取消处理函数，每个任务只取消一次，之后的调用只等待，不打断处理函数的清理。在处理函数里调用（`bot.close()` 也一样）只请求停止、立刻返回，不等任何处理函数，所以处理函数之间不会互相等待。在外面调用时最多等 `grace_period` 秒，还没结束的（吞掉了取消）记一条 WARNING 后不再等。`Bot.close()` 依次断开网关、调它、关 HTTP 连接。
 - **加一种事件**：在 `_models/` 按官方文档定义模型（声明 `event_name`、`intent`，只把 SDK 要用的字段写成必填，需要的话加 `reply()`），从顶层导出；在 `Bot` 上照 `on_c2c_message` 加一个装饰器。分发器与 Intents 推导不用改。
+- **加一种可以被动回复的事件**：在上一条之外，让模型继承发消息接口文档里它所属场景的标记类（`event_id` 支持的事件列在 `event_id` 一行），如 `class FriendAdd(C2CReplyTarget)`。`send_message` 的签名、`msg_seq` 与 `event_id` 的填写都不用改。需要快捷方法时照 `C2CMessage.reply()` 写 `reply()`，`reply_to=self`。
 
 ## 后续模块要遵守的约定
 
@@ -148,7 +170,8 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 3. **异常**：运行期失败只抛 `QQBotError` 的子类，新增的类都放 `_errors.py` 并导出。只有基类带 `QQBot`，子类不加前缀、以 `Error` 结尾，且不与内置异常重名。`httpx2`、`msgspec` 的异常（含超深嵌套 JSON 引起的 `RecursionError`）不得漏给用户，包装后用 `raise ... from` 保留原因。响应体里 `err_code` 与 `code` 任一个非零就算失败（获取 token 的接口只有 `code`，且业务失败时 HTTP 仍是 200）；两个都有时异常的 `err_code` 取响应体的 `err_code`，`code` 是旧式错误码（见 `errata.md`）；`trace_id` 优先取响应头 `X-Tps-trace-ID`，其次响应体。用法错误（参数不合法、关闭后再用）抛内置的 `ValueError` / `RuntimeError`。
 4. **模型**：继承 `Model`。可选字段写 `X | None = None`，不向外暴露 `msgspec.UNSET`；集合字段用 `tuple[X, ...]`、默认 `()`（写 `= []` 会触发 ruff RUF012）；接口字段名不是 snake_case 时用 `msgspec.field(name=...)`。内部可以随意用 msgspec，但公共签名里不出现它的类型。
    - **宽容解码落到字段级**：只有 SDK 自己要用的字段，以及调用方拿不到就没法继续的字段（如 `SentMessage.id`）才写成必填；其余字段都给默认值。解码一律经 `_model.decode()`：有默认值的字段类型不符时退回默认值（嵌套模型逐层处理；`tuple[模型, ...]` 逐个元素处理，清理后仍不合法的元素只丢掉它自己），只有必填字段缺失或类型不符才让整条数据失败。
-   - **枚举容忍未知取值**：取值互斥的枚举继承 `OpenIntEnum`，字段直接写枚举类型。未知的整数得到伪成员：是该枚举的实例，`name` 为 `"UNKNOWN"`，`value`、比较与 `to_dict()` 都是原值；每次得到的是不同对象，只用 `==` / `match` 的值模式比较，不用 `is`。msgspec 解码按 JSON 类型严格校验（`true`、`1.0` 不算整数）；直接调用 `MyEnum(True)` 则按标准库语义命中值相等的成员。
+   - **枚举容忍未知取值**：取值互斥的枚举继承 `OpenIntEnum`（整数）或 `OpenStrEnum`（字符串，如 `scope: c2c|group`），字段直接写枚举类型。未知的取值得到伪成员：是该枚举的实例，`name` 为 `"UNKNOWN"`，`value`、比较与 `to_dict()` 都是原值；每次得到的是不同对象，只用 `==` / `match` 的值模式比较，不用 `is`。msgspec 解码按 JSON 类型严格校验（`true`、`1.0` 不算整数，数字不算字符串）；直接调用 `MyEnum(True)` 则按标准库语义命中值相等的成员。
+   - **请求模型**：调用方构造的模型继承 `RequestModel`，字段名与官方 JSON 一致；常用写法另给工厂类方法（如 `Button.callback()`、`Keyboard.from_rows()`），只填文档里有的字段。官方 JSON 里的固定外壳（如卡片的 `type: "tuwen"`）由接口方法补上，不让调用方填。
    - 位标志用标准库 `enum.IntFlag`：它默认保留未知位，例如 `Intents`。不用 `MyEnum | int` 这类联合类型：调用方每处都要再判断一次类型。
 5. **接口封装**：每组一个 `_api/<组>.py`，写成持有请求层的小类，由 `Client` 在构造时创建成属性（`self.groups = Groups(self._http)`）；不用 mixin。只经请求层发请求，不直接碰 `httpx2`。
 6. **模块之间靠注入，不互相认识**：网关连接不依赖 `Client` 和事件模型，分发器不依赖网关连接，各自需要的能力由 `Bot` 在启动时传进去。这样每一块都能单独测试，Webhook 以后也能接到同一个分发器上。
@@ -174,8 +197,8 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 
 - **其余事件**：`autogen/event/` 下还有二十种，照「加一种事件」的步骤做。
 - **其余接口**：`autogen/api/` 下的群管理、用户、面板等，以及 `server-inter/channel/` 下的频道接口，照约定 5 按资源分组。
-- **其它消息类型**：Markdown、富媒体、卡片、键盘，在 `send_message` 上用仅限关键字的参数追加。
-- **富媒体上传**：预上传、分片、完成三步，需要实测。
+- **其它消息类型**（已落地）：Markdown、键盘、富媒体、卡片、引用、正在输入、互动召回、撤回，见「请求层与接口分组」。剩下：流式消息（`v2_users_user_openid_stream_messages`）；文本里的 `<qqbot-at-user>` 等交互标签（`trans/text-chain.md`）现在由调用方自己拼。
+- **富媒体上传**：预上传、分片、完成三步，需要实测。返回 `pyqbot.Media`（字段即上传接口的响应体，可直接 `decode` 成它），按场景挂在 `client.users` / `client.groups` 上。
 - **Webhook**（未确认）：见上。
 - **待定的语义**：HTTP 202 加 304023 / 304024 表示「已受理、等待审核」，现在按失败抛出，响应体里的 `data.message_audit.audit_id` 也没有带出来；做频道消息时要定下怎么表达（见 `errata.md`）。
 

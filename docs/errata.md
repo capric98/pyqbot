@@ -91,6 +91,70 @@
 - **含糊**：单聊的实测结果多一个 `avatar`（已确认，见下）；群聊 `author` 是否同样有 `avatar`、`member_role` 的取值是否只有三种，都没测到。`message_type` 的 101「并行消息」也没有说明含义。
 - **当前做法**：`avatar` 两边都建模为可选；`member_role` 先用字符串，未知取值原样保留。
 
+### 被动回复的 `event_id`：取外层 `id` 还是 `d.id`
+
+- **位置**：`autogen/api/v2_users_user_openid_messages.post.md` 与群聊页的 `event_id` 一行；`autogen/event/interaction_create.md` 事件体的 `id`；`autogen/api/interactions_interaction_id.put.md` 的 `interaction_id`。
+- **矛盾**：发消息接口说 `event_id`「从事件最外层的 id 获取」；`interaction_create.md` 说 `d.id`「用于被动消息发送和互动回调」；回应互动的接口说 `d.id`「不带 `INTERACTION_CREATE:` 前缀」，暗示外层 `id` 带前缀、两者不同。另外 `msg_seq` 只说「与 msg_id 联合使用」，没说用 `event_id` 时要不要带。
+- **当前做法**：按发消息接口页，取外层 `id`（`event.event_id`）；`msg_seq` 照样按对象从 1 递增并带上。
+- **怎么测**：点一次回调按钮，记下外层 `id` 与 `d.id`；分别用两者作为 `event_id` 被动回复，看哪个被接受；再用同一个 `event_id` 带递增的 `msg_seq` 连发两条。
+
+### `msg_type` 的取值各页不一致
+
+- **位置**：单聊发消息页（0/2/6/7/8）、群聊发消息页（0/2/7/8）、`server-inter/message/overview.md`（0/2/7）、`server-inter/message/type/overview.md`（表格 0/2/7，表下又说「发送侧只有 msg_type=0/2/3/7 四种」）。
+- **当前做法**：以两个接口页为准：SDK 按参数推断 0/2/7/8，「正在输入」的 6 只在单聊提供。3（ARK）的发送文档里没有请求体字段，不支持。
+
+### Markdown 对象的结构三处不同
+
+- **位置**：接口页的 `MessageMarkdown`（`template_id` 整数、`content`、`custom_template_id`、`force_verify_image_resource`，两个模板字段标为弃用，没有 `params`）；`server-inter/message/type/markdown.md`（`content`、`custom_template_id`、`params`）；`server-inter/message/template/model.md`（`template_id`、`params`、`content`）。接口页还说填了 `markdown` 后「content/ark 必须全为空」，但 v2 的请求体没有 `ark` 字段。
+- **当前做法**：`Markdown` 支持 `content`、`force_verify_image_resource`，以及 `markdown.md` 示例里的 `custom_template_id` + `params`；不支持整数的 `template_id`。`markdown` 与 `content` 同传时在本地抛 `ValueError`，`ark` 不理会。
+- **怎么测**：自定义 `content` 已由实测用例覆盖（`tests/live/test_live_messages.py`）；模板没有可用的模板 ID，不测。
+
+### 键盘：示例与字段说明互相矛盾
+
+- **位置**：接口页的 `Keyboard` 等结构；`server-inter/message/trans/msg-btn.md`；`server-inter/message/trans/overview.md` 的示例；群聊发消息页的 Markdown + 键盘示例。
+- **矛盾**：
+  - 接口页说 `id` 与 `content` 互斥，`trans/overview.md` 的示例两个都带。
+  - `action.enter` 说「仅单聊可用」，群聊页的示例却用了。
+  - `render_data.style` 在 `msg-btn.md` 只有 0、1，接口页有 0、1、3、4；`permission.type` 在 `msg-btn.md` 多一个 3（指定身份组，仅频道）。
+  - `msg-btn.md` 把 `visited_label`、`style`、`permission`、`unsupport_tips` 标为必填，接口页都是选填，且说 `visited_label`「不传则保持不变」。
+  - `msg-btn.md` 说按钮挂在 Markdown 消息上，接口页没说 `keyboard` 能否随文本等其它类型发送。
+- **当前做法**：`Keyboard` 的 `id` 与 `content` 二选一，否则抛 `ValueError`；`keyboard` 只能随 `markdown` 发送。`enter` 不按场景拦截。枚举收录 style 0/1/3/4、permission.type 0~3。`Button` 的工厂方法总是填上 `visited_label`（默认同 `label`）、`style`（默认灰色线框）与 `permission`（默认所有人：不填时按整数默认值是 0「指定用户」，可能谁都点不了），`unsupport_tips` 不填。
+- **怎么测**：实测用例 `test_markdown_with_buttons` 看蓝底白字（style 4）是否生效、未填 `unsupport_tips` 是否被接受；另在群里发带 `enter` 的指令按钮，看是否生效。
+
+### 引用：`message_reference.message_id` 的格式
+
+- **位置**：接口页的 `MessageReference`；群聊发消息页的富媒体、卡片示例。
+- **矛盾**：字段说明要 `REFIDX_` 开头的引用索引（自己发的取响应的 `ext_info.ref_idx`，收到的取 `message_scene.ext` 的 `msg_idx`），群聊页的示例填的却是 `ROBOT1.0_` 开头的消息 ID。
+- **当前做法**：`quote=` 传 `SentMessage` 或收到的消息时填引用索引；传字符串则原样填入，所以消息 ID 也能试。
+- **怎么测**：实测用例 `test_quote_previous_message` 覆盖引用索引；再用 `SentMessage.id` 作为字符串引用一次，看是否被接受。
+
+### `content` 能否随富媒体、卡片一起发
+
+- **位置**：接口页的 `content` 一行只说「msg_type=0 时为全文」；`server-inter/message/rich-media.md` 的示例只有 `media`。
+- **含糊**：`msg_type` 为 7、8 时带上 `content` 是显示、忽略还是报错，没有说明。
+- **当前做法**：不拦截，`content` 原样发出（`message.reply("图来了", media=media)` 这样的写法可用）。
+- **怎么测**：富媒体上传落地后，发一条带 `content` 的图片消息与一条带 `content` 的卡片，看客户端的展示。
+
+### 正在输入（`msg_type=6`）：是否必须是被动回复
+
+- **位置**：单聊发消息页的 `InputNotify` 与「输入状态通知」示例。
+- **含糊**：示例带 `msg_id` + `msg_seq`，但没说主动发送是否可行、是否占用被动回复次数（单聊每条消息 4 次），响应体也没有给出。
+- **当前做法**：`send_typing()` 的 `reply_to` 可选；传了就像被动回复一样占用 `msg_seq`；响应体不解码。
+- **怎么测**：实测用例 `test_typing` 主动发送；再收到一条消息后先 `send_typing` 再回复 4 次，看第 4 次回复是否因次数超限失败，并记下响应体。
+
+### 互动召回 `is_wakeup` 与 `msg_id` / `event_id`
+
+- **位置**：单聊发消息页的 `is_wakeup` 一行；`autogen/api/v2_users_user_openid_stream_messages.post.md` 的 `is_wakeup` 一行。
+- **矛盾**：发消息页说与 `msg_id`、`event_id`「互斥使用」，流式消息页说「true 时不校验 msg_id/event_id 有效期」，即可以同时出现。
+- **当前做法**：按发消息页，`wakeup=True` 与 `reply_to` 同传时在本地抛 `ValueError`。
+- **不主动实测**：召回消息每个周期只能发一条，测一次就占掉一个周期。
+
+### 撤回：能撤回哪些消息
+
+- **位置**：`server-inter/message/overview.md`「撤回消息」；`autogen/api/v2_groups_group_openid_messages_message_id.delete.md`。
+- **矛盾**：概述只说「机器人可撤回自己发送的消息」，群聊撤回页说机器人是群管理员时还能撤回普通成员的消息（`d.id`）。两处都说超过 2 分钟不可撤回。
+- **当前做法**：`client.groups.recall_message()` 也接受收到的 `GroupMessage`；时限不在本地判断，由平台拒绝（40064004）。
+
 ## 已确认
 
 以下都是 2026-11-16 用真实机器人实测的结果。
