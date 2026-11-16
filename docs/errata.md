@@ -209,20 +209,6 @@
 - **当前做法**：PUT 与分片完成各自重试；从这一步首次尝试算起，等完 `retry_delay` 会超过 `retry_timeout` 就不再重试。规则见 `design.md`。
 - **不主动实测**：要人为制造对象存储或平台的临时故障，实际遇到时记到这里。
 
-### `file_size`：预上传是字符串，素材库是整数
-
-- **位置**：预上传页的 `file_size`（string）；`server-inter/message/material-management.md` 申请上传的 `file_size`（uint64，示例是数字）。
-- **当前做法**：各按各页：预上传发字符串，素材库发整数。
-- **已知**：预上传发字符串被接受（2026-11-16，`test_large_file_is_uploaded_in_parts`）。
-- **怎么测**：素材库一侧由实测用例 `test_media_image_library` 确认。
-
-### 素材库：`expires_at` 的示例与 90 天不符
-
-- **位置**：`material-management.md` 查询有效图片的响应示例。
-- **矛盾**：示例里 `expires_at - created_at` 是 604801 秒（约 7 天），而限制说明与 `complete` 的 `ttl` 都是 90 天（7776000 秒）。
-- **当前做法**：原样透出，SDK 不据此计算。
-- **怎么测**：实测用例 `test_media_image_library` 上传后列出，记下 `expires_at - created_at`。
-
 ### 素材库：`.jpg` 是否算与 `image/jpeg` 一致
 
 - **位置**：`material-management.md`「限制说明」要求扩展名与 Content-Type 一致；错误码 40035001 写「扩展名与 Content-Type 需为 png/jpeg/gif/webp 且一致」。
@@ -242,14 +228,8 @@
 - **位置**：`autogen/api/v2_menu.put.md`。
 - **含糊**：`menu`、`items` 以及菜单项的所有字段都标为选填，错误码表却有「必填字段缺失」（40030016）；也没说怎么清空菜单。
 - **当前做法**：工厂方法总是填 `name`、`type` 与对应类型的字段；`client.menu.set([])` 发 `{"menu": {"items": []}}`。
-- **怎么测**：在征得同意后，于测试机器人上 `set([])`，看菜单是否消失（会影响所有用户）。
-
-### 指令面板：请求里的 `panel.version` 与修改时的备注
-
-- **位置**：`autogen/api/v2_panels.post.md`、`autogen/api/v2_panels_panel_id.put.md` 的 `Panel`。
-- **含糊**：请求体的 `panel.version` 只写「当前版本号」，没说是否用于并发校验；修改接口说「覆盖原有的面板元素列表和备注」，没说不传 `remark` 时备注是清空还是保留。
-- **当前做法**：不发送 `version`；`panels.set()` 不传 `remark` 时请求里没有它，docstring 提示备注可能被清空。
-- **怎么测**：实测用例 `test_panel_lifecycle` 之外，再修改一次不带 `remark`，用 `get()` 看备注。
+- **已知**：没有设置过菜单时 `set([])` 被接受，返回版本号 1，之后 `GET` 的 `version` 为 1、菜单项为空（2026-11-16，`test_set_menu_to_itself`）。
+- **怎么测**：先设一个非空菜单再 `set([])`，看菜单是否消失（会影响所有用户，须单独同意）。
 
 ### 频道：测试条件
 
@@ -688,3 +668,24 @@
   - 客户端里消息逐段出现：生成中显示跳动的三个点，每来一片手机轻微震动，发出结束分片后三个点消失，正文完整。
   - 每个分片响应的 `remain_msg_len` 都是 0。
 - **实现**：不变。
+
+### 素材库：列表的时间是数字字符串，有效期 90 天
+
+- **位置**：`server-inter/message/material-management.md`：查询有效图片的 `created_at`、`expires_at` 写 int64，示例的差约 7 天；限制说明与 `complete` 的 `ttl` 是 90 天。
+- **结论**（`test_media_image_library`）：
+  - `complete` 返回整数 `ttl` 7776000。
+  - 列出时 `created_at`、`expires_at` 是数字字符串（如 `"1794861718"`），两者相差 7776000 秒，即 90 天，示例的约 7 天不对。
+  - 申请上传时 `file_size` 发整数被接受；预上传那边发字符串也被接受（见「分片上传」）。
+- **实现**：`MediaImage.created_at`、`expires_at` 的字符串与整数都接受，统一返回整数（此前按整数解码，字符串被宽容解码丢成 `None`）。fixture：`media_images_list.json`。
+
+### 指令面板：版本号在顶层递增，不传 `remark` 会清空备注
+
+- **位置**：`autogen/api/v2_panels.post.md`、`autogen/api/v2_panels_panel_id.put.md` 的 `Panel`。
+- **结论**（`test_panel_lifecycle`，只关联测试用户的单聊面板）：
+  - 请求里不发 `panel.version` 被接受。
+  - 详情顶层的 `version` 创建时为 1，每次修改加 1；`panel.version` 是空的。
+  - 不带 `remark` 修改后，详情里的备注没有了，即被清空。
+  - 移除、加回关联用户与删除都成功。
+  - `created_at`、`updated_at` 是 RFC3339 字符串。
+- **没有确认**：客户端的显示。面板要在单聊输入框里输入 `/` 才弹出（官方示意图），测试用户当时没有唤出它。
+- **实现**：不变；`panels.set()` 的 docstring 改为不传 `remark` 会清空备注。

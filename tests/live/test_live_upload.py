@@ -15,6 +15,7 @@ import struct
 import zlib
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import cast
 
 import httpx2
 import pytest
@@ -24,6 +25,7 @@ from pyqbot._api.upload import INLINE_LIMIT
 
 pytestmark = pytest.mark.live
 _logger = logging.getLogger("pyqbot.live")
+TIME_KEYS = frozenset({"ttl", "created_at", "expires_at"})
 
 # 官方文档快照里引用的图片（server-inter/message/rich-media.md），公网可访问。
 IMAGE_URL = "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/image-send.35813305.jpg"
@@ -151,6 +153,30 @@ async def test_media_image_library(client: pyqbot.Client, openid: str) -> None:
         assert image.url.startswith("qqbot-media://")
         listed = [item async for item in client.images.iter_images()]
         assert image.image_id in [item.image_id for item in listed]
+        mine = next(item for item in listed if item.image_id == image.image_id)
+        lifetime = (
+            mine.expires_at - mine.created_at
+            if mine.expires_at is not None and mine.created_at is not None
+            else None
+        )
+        _logger.warning(
+            "素材：上传时 ttl=%s；列出时 expires_at - created_at=%s 秒", image.ttl, lifetime
+        )
+        token = await client.get_access_token()
+        response = await client.http_client.get(
+            client.config.base_url + "/v2/media-images",
+            headers={"Authorization": f"QQBot {token}"},
+            timeout=client.config.timeout,
+        )
+        body = cast(dict[str, list[dict[str, object]]], response.json())
+        raw = next(i for i in body.get("images", []) if i.get("image_id") == image.image_id)
+        _logger.warning(  # 只显示时间字段的值，其余只给类型（preview_url 带签名）
+            "素材列表的原始字段：%s",
+            {
+                key: (type(value).__name__, value if key in TIME_KEYS else None)
+                for key, value in raw.items()
+            },
+        )
 
         sent = await client.users.send_message(
             openid, markdown=f"# 素材库\n\n![素材 #120px #80px]({image.url})"

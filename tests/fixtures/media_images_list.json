@@ -1,0 +1,12 @@
+{
+  "images": [
+    {
+      "image_id": "1234567890_fakeimage",
+      "url": "qqbot-media://image/v1/fake",
+      "file_name": "pyqbot.png",
+      "preview_url": "https://cos.test/fake-object?sign=fake-signature",
+      "created_at": "1794861718",
+      "expires_at": "1802637718"
+    }
+  ]
+}

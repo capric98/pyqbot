@@ -160,8 +160,9 @@ async def test_set_menu_to_itself(client: pyqbot.Client) -> None:
 async def test_panel_lifecycle(client: pyqbot.Client, openid: str) -> None:
     """**会创建对外生效的面板，须单独征得同意。** 面板只关联测试用户，用完即删。
 
-    应看到：运行期间测试账号单聊的指令面板里出现「pyqbot」→ 修改后变成「pyqbot2」；
-    结束后面板消失。`iter_panels` 里有这个面板，详情里 `user_openids` 是测试用户。
+    应看到：运行期间测试账号单聊的指令面板里先出现「pyqbot」，约 30 秒后变成「pyqbot2」，再过约 30 秒
+    面板消失。`iter_panels` 里有这个面板，详情里 `user_openids` 是测试用户。另外看不带 `remark`
+    修改时备注是清空还是保留（记在 `bot.txt`）。
     """
     require_flag("LIVE_GLOBAL_CONFIG")
     panel_id = await client.panels.create(
@@ -173,6 +174,7 @@ async def test_panel_lifecycle(client: pyqbot.Client, openid: str) -> None:
     try:
         detail = await client.panels.get(panel_id)
         note(client, f"面板 {panel_id}：{detail.to_dict()}")
+        await asyncio.sleep(30)  # 让测试用户看到「pyqbot」
         assert detail.target_type == pyqbot.PanelTargetType.SPECIFIC
         assert openid in detail.user_openids
 
@@ -182,7 +184,12 @@ async def test_panel_lifecycle(client: pyqbot.Client, openid: str) -> None:
         item = pyqbot.PanelItem.command_button("pyqbot2", desc="修改后")
         version = await client.panels.set(panel_id, [item], remark="pyqbot 实测，可删除")
         note(client, f"修改后版本 {version}；去测试账号确认面板已变成「pyqbot2」")
-        await asyncio.sleep(20)
+        await asyncio.sleep(30)
+
+        version = await client.panels.set(panel_id, [item])
+        panel = (await client.panels.get(panel_id)).panel
+        remark = panel.remark if panel is not None else None
+        note(client, f"不带 remark 修改后版本 {version}，备注为 {remark!r}")
 
         await client.panels.remove_targets(panel_id, user_openids=[openid])
         assert openid not in (await client.panels.get(panel_id)).user_openids

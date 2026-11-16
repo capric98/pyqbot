@@ -13,7 +13,7 @@ import pyqbot
 from pyqbot._gateway.payload import READY_EVENT, OpCode, Ready, decode_payload
 from pyqbot._model import decode
 from pyqbot._models.event import Event, bind_event_id, reply_fields
-from pyqbot._models.upload import UploadPrepared
+from pyqbot._models.upload import ImagePage, UploadPrepared
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -187,3 +187,11 @@ def test_authorize_interaction_has_no_chat_type_and_replies_with_the_outer_id() 
         pyqbot.AuthorizeScope.C2C_PUSH,
     )
     assert reply_fields(event)["event_id"] == "INTERACTION_CREATE:" + event.id
+
+
+def test_media_image_list_gives_times_as_digit_strings() -> None:
+    [image] = decode(sample("media_images_list.json"), ImagePage).images
+
+    assert image.created_at == 1794861718
+    assert image.expires_at is not None
+    assert image.expires_at - image.created_at == 90 * 24 * 3600  # 文档示例约 7 天，实测是 90 天
