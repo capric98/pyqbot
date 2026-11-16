@@ -1,0 +1,105 @@
+"""发消息的各种内容类型：向 `TEST_USER_OPENID` 主动发送，再由人确认客户端里的效果。
+
+确认 `docs/errata.md` 里与发消息有关的待实测项。运行前提见 `AGENTS.md`「实测」：每次都要先取得用户同意，
+运行方式 `uv run --env-file .env pytest -m live --no-cov tests/live/test_live_messages.py`。
+每个用例都是一条主动消息（撤回用例两条），占用当天对该用户的主动消息额度。
+"""
+
+import os
+from collections.abc import AsyncGenerator
+
+import pytest
+
+import pyqbot
+
+pytestmark = pytest.mark.live
+
+
+@pytest.fixture
+def openid() -> str:
+    value = os.environ.get("TEST_USER_OPENID")
+    if not value:
+        pytest.skip("缺少环境变量 TEST_USER_OPENID：用 uv run --env-file .env 运行")
+    return value
+
+
+@pytest.fixture
+async def client(app_id: str, app_secret: str) -> AsyncGenerator[pyqbot.Client]:
+    async with pyqbot.Client(app_id, app_secret) as client:
+        yield client
+
+
+async def test_markdown(client: pyqbot.Client, openid: str) -> None:
+    """应看到：一级标题「pyqbot Markdown」，下面一行粗体、一行斜体、一个可点的链接。"""
+    sent = await client.users.send_message(
+        openid,
+        markdown="# pyqbot Markdown\n\n**粗体** 与 _斜体_\n\n[链接](https://www.qq.com)",
+    )
+
+    assert sent.id
+
+
+async def test_markdown_with_buttons(client: pyqbot.Client, openid: str) -> None:
+    """应看到：Markdown 下方两行按钮。
+
+    第一行「回调」（蓝色线框）与「跳转」：点「回调」后按钮文字变成「已回调」（平台会推送
+    INTERACTION_CREATE，本用例不连网关、不回应，客户端可能转圈直到超时）；点「跳转」打开 qq.com。
+    第二行「指令」（蓝底白字）：点后直接发出「/pyqbot」（`enter=True`）。
+    """
+    keyboard = pyqbot.Keyboard.from_rows(
+        [
+            pyqbot.Button.callback(
+                "回调", "pyqbot-live", visited_label="已回调", style=pyqbot.ButtonStyle.BLUE_OUTLINE
+            ),
+            pyqbot.Button.link("跳转", "https://www.qq.com"),
+        ],
+        [
+            pyqbot.Button.command(
+                "指令", "/pyqbot", enter=True, style=pyqbot.ButtonStyle.BLUE_FILLED
+            )
+        ],
+    )
+
+    sent = await client.users.send_message(openid, markdown="**带按钮的消息**", keyboard=keyboard)
+
+    assert sent.id
+
+
+async def test_card(client: pyqbot.Client, openid: str) -> None:
+    """应看到：一张图文卡片，标题「pyqbot 卡片」、描述一行、一张图，点击打开 qq.com。"""
+    card = pyqbot.Card(
+        title="pyqbot 卡片",
+        description="这是一张由实测发出的图文卡片",
+        url="https://www.qq.com",
+        pic_url="https://www.qq.com/favicon.ico",
+    )
+
+    sent = await client.users.send_message(openid, card=card)
+
+    assert sent.id
+
+
+async def test_quote_previous_message(client: pyqbot.Client, openid: str) -> None:
+    """应看到：先是「被引用的消息」，紧接着一条以引用形式展示它的「这条引用了上一条」。"""
+    first = await client.users.send_message(openid, "被引用的消息")
+    assert first.ext_info is not None
+    assert first.ext_info.ref_idx
+
+    sent = await client.users.send_message(openid, "这条引用了上一条", quote=first)
+
+    assert sent.id
+
+
+async def test_typing(client: pyqbot.Client, openid: str) -> None:
+    """应看到：机器人显示「正在输入」约 10 秒后消失，期间没有新消息。
+
+    主动发送：官方示例都带 msg_id，平台若拒绝（抛 `APIError`），把错误码记进 errata。
+    """
+    await client.users.send_typing(openid, seconds=10)
+
+
+async def test_send_then_recall(client: pyqbot.Client, openid: str) -> None:
+    """应看到：「这条马上会被撤回」出现后很快变成撤回提示。"""
+    sent = await client.users.send_message(openid, "这条马上会被撤回")
+
+    await client.users.recall_message(openid, sent)
