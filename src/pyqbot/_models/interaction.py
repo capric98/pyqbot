@@ -172,8 +172,9 @@ _SCENES = {
 class Interaction(C2CReplyTarget, GroupReplyTarget, ChannelReplyTarget):
     """用户与机器人的互动，如点击回调按钮、快捷菜单、授权，对应事件 `INTERACTION_CREATE`。
 
-    回调按钮与快捷菜单（`type` 为 `INLINE_KEYBOARD`、`CALLBACK_COMMAND`）要在收到后约 1 秒内 `ack()`
-    （实测，文档写 3 秒），否则用户那边提示「请求第三方失败」；SDK 不会替你回应，耗时的处理放在回应之后。单聊、群聊和频道的互动都可以用 `reply()` 被动回复。
+    回调按钮与快捷菜单（`type` 为 `INLINE_KEYBOARD`、`CALLBACK_COMMAND`）要在收到后约 1 秒内回应（实测，文档写
+    3 秒），否则用户那边提示「请求第三方失败」。`Bot` 默认在调用处理函数前替你回应「成功」（`auto_ack`）；
+    关掉后要自己尽快 `ack()`，耗时的处理放在回应之后。单聊、群聊和频道的互动都可以用 `reply()` 被动回复。
 
     Attributes:
         id: 互动 ID，`ack()` 用它；与被动回复用的 `event_id`（payload 外层的 `id`）不是一个值。
@@ -194,8 +195,7 @@ class Interaction(C2CReplyTarget, GroupReplyTarget, ChannelReplyTarget):
         ```python
         @bot.on_interaction
         async def clicked(interaction: pyqbot.Interaction) -> None:
-            await interaction.ack()
-            await interaction.reply(f"你点了 {interaction.button_data}")
+            await interaction.reply(f"你点了 {interaction.button_data}")  # 已由 SDK 回应
         ```
     """
 

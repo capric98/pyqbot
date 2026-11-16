@@ -22,6 +22,9 @@ from ._models.bot import BotInfo, ShareLinkResponse
 from ._models.gateway import Gateway
 from ._redact import redact
 
+KEEPALIVE_EXPIRY = 60.0
+"""SDK 自建的 HTTP 客户端保留空闲连接的秒数（httpx2 默认 5 秒）。"""
+
 
 class Client:
     """QQ 机器人 API 客户端，可以脱离 `Bot` 单独使用。
@@ -74,7 +77,7 @@ class Client:
             timeout=timeout,
         )
         self._owns_http_client = http_client is None
-        self._http_client = httpx2.AsyncClient() if http_client is None else http_client
+        self._http_client = _default_http_client() if http_client is None else http_client
         self._access_token = AccessTokenManager(self._config, self._http_client)
         self._closed = False
         self._http = HTTP(
@@ -209,3 +212,11 @@ class Client:
         traceback: TracebackType | None,
     ) -> None:
         await self.close()
+
+
+def _default_http_client() -> httpx2.AsyncClient:
+    # 回应互动只有约 1 秒，空闲断开后重新握手就可能超时（`docs/design.md`「`Interaction` 的两个 ID」）。
+    limits = httpx2.Limits(
+        max_connections=100, max_keepalive_connections=20, keepalive_expiry=KEEPALIVE_EXPIRY
+    )  # 前两项同 httpx2 的默认值
+    return httpx2.AsyncClient(limits=limits)

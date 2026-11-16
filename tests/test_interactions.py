@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -507,34 +507,49 @@ async def test_reply_on_an_unbound_interaction_raises() -> None:
         await pyqbot.Interaction(id="i", chat_type=pyqbot.ChatType.C2C, user_openid="u").reply("x")
 
 
-async def test_dispatched_interaction_is_acked_and_replied_to() -> None:
+async def dispatch_click(
+    data: Mapping[str, object], *, auto_ack: bool = True, handlers: int = 1
+) -> list[tuple[str, str, object]]:
+    """经 `Bot` 分发一次互动，处理函数只回复；返回平台收到的请求。"""
     platform = Platform()
-    done = asyncio.Event()
+    replied = asyncio.Event()
+    calls = 0
 
     async with (
         httpx2.AsyncClient(transport=httpx2.MockTransport(platform.handle)) as http_client,
-        pyqbot.Bot("app-id", APP_SECRET, http_client=http_client) as bot,
+        pyqbot.Bot("app-id", APP_SECRET, http_client=http_client, auto_ack=auto_ack) as bot,
     ):
 
-        @bot.on_interaction
         async def clicked(event: pyqbot.Interaction) -> None:
-            await event.ack()
+            nonlocal calls
+            if not auto_ack:
+                await event.ack(code=pyqbot.InteractionResult.NO_PERMISSION)
             await event.reply(f"你点了 {event.button_data}")
-            done.set()
+            calls += 1
+            if calls == handlers:
+                replied.set()
 
+        for _ in range(handlers):
+            bot.on_interaction(clicked)
         assert bot._resolve_intents() == pyqbot.Intents.INTERACTION  # pyright: ignore[reportPrivateUsage]
         frame = {
             "op": 0,
             "s": 1,
             "t": "INTERACTION_CREATE",
             "id": "INTERACTION_CREATE:o",
-            "d": C2C_CLICK,
+            "d": data,
         }
         bot._dispatcher.dispatch(decode_payload(json.dumps(frame)), bot)  # pyright: ignore[reportPrivateUsage]  代替 Bot.start()
         async with asyncio.timeout(HANG_GUARD):
-            await done.wait()
+            await replied.wait()
+            await bot._dispatcher.aclose()  # pyright: ignore[reportPrivateUsage]  等自动回应的任务结束
+    return platform.requests
 
-    assert platform.requests == [
+
+async def test_bot_acks_a_button_click_before_the_handler_replies() -> None:
+    requests = await dispatch_click(C2C_CLICK)
+
+    assert requests == [
         ("PUT", "/interactions/1b13d569-4610-4ab9-bc51-feecc5def6d4", {"code": 0}),
         (
             "POST",
@@ -547,3 +562,26 @@ async def test_dispatched_interaction_is_acked_and_replied_to() -> None:
             },
         ),
     ]
+
+
+async def test_bot_does_not_ack_interactions_that_need_no_answer() -> None:
+    requests = await dispatch_click(AUTHORIZE)
+
+    assert [method for method, _, _ in requests] == ["POST"]
+
+
+async def test_auto_ack_is_added_once_however_many_handlers() -> None:
+    requests = await dispatch_click(C2C_CLICK, handlers=2)
+
+    assert [method for method, _, _ in requests] == ["PUT", "POST", "POST"]
+
+
+async def test_without_auto_ack_the_handler_chooses_the_result() -> None:
+    requests = await dispatch_click(C2C_CLICK, auto_ack=False)
+
+    assert requests[0] == (
+        "PUT",
+        "/interactions/1b13d569-4610-4ab9-bc51-feecc5def6d4",
+        {"code": pyqbot.InteractionResult.NO_PERMISSION},
+    )
+    assert [method for method, _, _ in requests] == ["PUT", "POST"]

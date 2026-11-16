@@ -20,7 +20,7 @@ class Interactions:
 
         只有回调按钮与快捷菜单（`InteractionType.INLINE_KEYBOARD`、`CALLBACK_COMMAND`）需要回应，
         其它类型回应了也不报错。实测客户端只等约 1 秒（文档写 3 秒）：晚了接口照样成功，用户却看到
-        「请求第三方失败」；重复回应也不报错。SDK 不自动回应。
+        「请求第三方失败」；重复回应也不报错。`Bot` 默认替你回应（`auto_ack`）。
 
         对应官方接口 `PUT /interactions/{interaction_id}`。
 

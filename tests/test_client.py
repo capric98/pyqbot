@@ -40,6 +40,29 @@ async def test_own_http_client_is_closed_on_exit() -> None:
     assert client.http_client.is_closed
 
 
+async def test_own_http_client_keeps_idle_connections_for_a_minute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 回应互动只有约 1 秒，重新握手可能就超时了，见 docs/design.md。
+    created: list[httpx2.Limits] = []
+    real = httpx2.AsyncClient
+
+    def recording(*, limits: httpx2.Limits) -> httpx2.AsyncClient:
+        created.append(limits)
+        return real(limits=limits)
+
+    monkeypatch.setattr(httpx2, "AsyncClient", recording)
+    async with pyqbot.Client("app-id", "app-secret"):
+        pass
+
+    [limits] = created
+    assert (limits.keepalive_expiry, limits.max_connections, limits.max_keepalive_connections) == (
+        60.0,
+        100,
+        20,
+    )
+
+
 async def test_injected_http_client_is_used_and_left_open() -> None:
     async with mock_http_client() as http_client:
         async with pyqbot.Client("app-id", "app-secret", http_client=http_client) as client:
