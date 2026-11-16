@@ -106,10 +106,10 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 | `intents` | `Intents` | Identify 时订阅的事件类别 |
 | `on_dispatch` | `(GatewayPayload) -> None` | 每条 Dispatch（含 READY、RESUMED）调用一次。同步、必须立刻返回；抛出的异常记日志，不影响连接 |
 
-另有 `shard`（原样用于 Identify）、`connect_timeout`（WebSocket 握手超时，传 `config.timeout`，见约定 2）和下文的各个时间参数，默认值就是生产取值。`shard` 或时间参数不合法时构造即抛 `ValueError`。
+另有 `shard`（原样用于 Identify）、`connect_timeout`（WebSocket 握手超时，传 `config.timeout`，见约定 2）和下文的各个时间参数，默认值就是生产取值。`shard` 不合法、期限参数（各个 `*_timeout`）不是有限正数等配置错误，构造即抛 `ValueError`。
 
-- **`await connection.run()`**：一直运行到 `await connection.close()`（正常返回）或遇到不可恢复的错误（抛 `GatewayError`）。`get_url` / `get_token` 抛 `NetworkError` 时按网络错误退避重试，抛其它异常原样向外抛；连接内部的编程错误也原样抛出，不包成异常组。`run()` 只能调用一次；`close()` 之后再调 `run()` 立即返回。
-- **关闭**：`close()` 可重复、可并发调用，只有第一次触发收尾，其余的等同一次收尾。收尾先等 httpx2 优雅关闭，超过 `close_timeout`（默认 5 秒）就再取消一次强制结束（此时底层连接可能没关干净），所以 `close()` 与 `run()` 一定返回。`run()` 被取消时同样先等收尾，期间再次取消不会打断它，收尾后抛 `CancelledError`。断开重连前关闭旧连接也受 `close_timeout` 限制。
+- **`await connection.run()`**：一直运行到 `await connection.close()`（正常返回）或遇到不可恢复的错误（抛 `GatewayError`）。`get_url` / `get_token` 抛 `NetworkError` 时按网络错误退避重试，抛其它异常原样向外抛；编程错误（见下面的分类）等连接关好后原样抛出，不包成异常组。`run()` 只能调用一次；`close()` 之后再调 `run()` 立即返回。
+- **关闭**：`close()` 可重复、可并发调用，只有第一次触发收尾，其余的等同一次收尾。收尾先等 httpx2 优雅关闭，超过 `close_timeout`（默认 5 秒）就再取消一次强制结束（此时底层连接可能没关干净），所以 `close()` 与 `run()` 一定返回。连接已拿到断开原因、正在关闭 WebSocket，或 worker 已在被取消时，收尾不再取消它，只等期限；它自己关完后不再重连，已拿到的致命原因照样抛 `GatewayError`。`run()` 被取消（只算进入 `run()` 之后新增的取消）时同样先等收尾，期间再次取消不会打断它，收尾后抛 `CancelledError`。断开重连前关闭旧连接也受 `close_timeout` 限制。
 - **会话状态**：`session_id`（来自 READY）与 `seq`（最近一条已交给 `on_dispatch` 的 `s`，`on_dispatch` 抛异常也算）。有会话就 Resume，没有就 Identify。
 - **断开后怎么办**：
 
@@ -120,8 +120,10 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
   | 收到 OpCode 9 | 清掉会话，重连并 Identify；连续 3 次（中间没有 READY / RESUMED）就放弃 |
   | Hello、认证结果超时未到 | 按网络错误处理 |
 
+  建连、读写、关闭 WebSocket 时冒出的异常（httpx2 的会话用 anyio 任务组，可能是异常组）递归展开到每个叶子再分类：`OSError`（含超时、TLS）、`EOFError`、`httpx2.HTTPError`、`HTTPXWSException`，以及异常类定义在 `anyio`、`wsproto`、`h11`、`httpcore2`、`httpx2` 里的，算网络错误；其它都算编程错误。有一个叶子是编程错误就抛它，结束 `run()`。已拿到断开原因后，关闭阶段的异常一律不覆盖它。
+
 - **心跳**：认证成功（收到本连接的第一条 Dispatch）后立刻发一次，之后按 Hello 给的周期发送，`d` 为当前的 `seq`。到下一次该发时上一次还没收到应答（包括还没写出去），就认为连接已死，断开重连。收到服务端的 OpCode 1 立刻补发一次。不用 WebSocket 层的 Ping。
-- **发送超时**：httpx2 的写入没有超时，所以心跳、Identify、Resume 的每次发送都受 `send_timeout`（默认 10 秒）限制，超时即认为连接已死。其它发送失败只记日志，断开原因由读循环拿到。WebSocket 关闭阶段的异常不覆盖已拿到的断开原因。
+- **发送超时**：httpx2 的写入没有超时，所以心跳、Identify、Resume 的每次发送都受 `send_timeout`（默认 10 秒）限制，超时即认为连接已死。其它发送失败只记日志，断开原因由读循环拿到。
 - **认证超时**：`handshake_timeout` 分别限制等 Hello 和等第一条 Dispatch 的时间。不等 RESUMED：它要在补发完遗漏事件之后才到。
 - **退避**：重连间隔从 1 秒起每次翻倍，上限 60 秒，乘以 [0.5, 1] 的随机抖动；收到 READY 或 RESUMED 后从头算。两次 Identify 至少间隔 5 秒（`/gateway/bot` 的 `max_concurrency` 是每 5 秒可新建的会话数）。
 - **坏帧**：单帧解不开（`PayloadError`）、非文本帧或意料之外的 OpCode，记日志后跳过，不影响连接。
