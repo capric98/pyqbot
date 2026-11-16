@@ -16,6 +16,7 @@
 import asyncio
 import json
 import os
+import random
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from pathlib import Path
 
@@ -253,6 +254,142 @@ async def test_stream_reply(app_id: str, app_secret: str, openid: str) -> None:
             outcome["timeout"] = f"{wait_seconds} 秒内没有收到测试用户的消息"
 
     assert "stream_msg_id" in outcome, outcome
+
+
+MARKDOWN_SHOWCASE = r"""# pyqbot Markdown 能力测试
+
+好的！下面用一段**模拟大模型输出**的内容，把常见的 Markdown 语法都走一遍。
+
+## 1. 文字样式
+
+**加粗**、__下划线加粗__、*星号斜体*、_下划线斜体_、***加粗斜体***、~~删除线~~，以及行内代码 `pip install pyqbot`。
+
+## 2. 列表
+
+1. 有序列表第一项
+2. 有序列表第二项
+    - 嵌套的无序列表（前面空 4 格）
+    - 再嵌套一项
+3. 有序列表第三项
+
+- 无序列表
+- [x] 已完成的任务
+- [ ] 未完成的任务
+
+## 3. 引用
+
+> 引用的第一行
+> 引用的第二行
+>> 嵌套引用
+
+## 4. 代码块
+
+```python
+async def hello(message: pyqbot.C2CMessage) -> None:
+    await message.reply("你好，pyqbot")
+```
+
+## 5. 表格
+
+| 语法 | 写法 | 文档列出 |
+| :--- | :---: | ---: |
+| 加粗 | `**文字**` | 是 |
+| 表格 | 竖线分隔 | 否 |
+| 公式 | `$...$` | 否 |
+
+## 6. LaTeX 公式
+
+行内公式：$E = mc^2$，以及 \(e^{i\pi} + 1 = 0\)。
+
+块级公式：
+
+$$
+\sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}
+$$
+
+\[
+\int_0^1 x^2 \, dx = \frac{1}{3}
+\]
+
+## 7. 链接与图片
+
+[🔗腾讯网](https://www.qq.com)，自动链接 <https://bot.q.qq.com>
+
+![示意图 #300px #200px](https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/image-send.35813305.jpg)
+
+## 8. 其它
+
+脚注引用[^1]，HTML 标签 <u>下划线</u> 与 <sup>上标</sup>，emoji 😀🎉。
+
+[^1]: 这是脚注的内容。
+
+***
+
+<ZWSP>
+<ZWSP>
+以上就是全部内容，**测试完毕**。
+""".replace("<ZWSP>", "\u200b")
+
+
+def llm_like_pieces(text: str, rng: random.Random) -> list[str]:
+    """把文本切成 4～12 个字一片，模拟大模型逐段输出。"""
+    pieces: list[str] = []
+    start = 0
+    while start < len(text):
+        size = rng.randint(4, 12)
+        pieces.append(text[start : start + size])
+        start += size
+    return pieces
+
+
+@pytest.mark.live
+async def test_markdown_showcase_stream(app_id: str, app_secret: str, openid: str) -> None:
+    """测试用户发「开始」后，像大模型逐段生成那样流式回复一段覆盖各种 Markdown 语法的内容。
+
+    看客户端里标题、文字样式、列表、任务列表、引用、代码块、表格、LaTeX 公式、链接、图片、脚注、HTML 标签、
+    分割线各自怎么渲染（文档只列了其中一部分）。`LIVE_MARKDOWN_COMPARE=1` 时，流式结束后再用普通 Markdown
+    消息被动回复一遍同样的内容，对比两种渲染。分片数与 `remain_msg_len` 记在 `bot.txt`。
+    """
+    require_flag("LIVE_GATEWAY")
+    wait_seconds = float(os.environ.get("LIVE_WAIT_SECONDS", "0"))
+    compare = os.environ.get("LIVE_MARKDOWN_COMPARE") == "1"
+    bot = pyqbot.Bot(app_id, app_secret)
+    outcome: dict[str, object] = {}
+
+    @bot.on_c2c_message
+    async def start(message: pyqbot.C2CMessage) -> None:
+        if message.user_openid != openid or message.content.strip() != "开始":
+            return
+        pieces = llm_like_pieces(MARKDOWN_SHOWCASE, random.Random(0))
+        remains: list[int | None] = []
+        try:
+            async with message.reply_stream() as stream:
+                for piece in pieces:
+                    await stream.append(piece)
+                    if stream.last_sent is not None:
+                        remains.append(stream.last_sent.remain_msg_len)
+                    await asyncio.sleep(0.05)
+            outcome["stream"] = f"被接受：{len(pieces)} 片，共 {len(MARKDOWN_SHOWCASE)} 字"
+        except pyqbot.APIError as error:
+            outcome["stream"] = (error.err_code, error.message, f"第 {len(remains) + 1} 片失败")
+        outcome["remain_msg_len"] = sorted({r for r in remains if r is not None})
+        if compare:
+            try:
+                await message.reply(markdown=MARKDOWN_SHOWCASE)
+                outcome["plain_markdown"] = "被接受"
+            except pyqbot.APIError as error:
+                outcome["plain_markdown"] = (error.err_code, error.message)
+        await bot.close()
+
+    async with bot:
+        try:
+            async with asyncio.timeout(wait_seconds):
+                await bot.start()
+        except TimeoutError:
+            outcome["timeout"] = f"{wait_seconds} 秒内没有收到「开始」"
+        note(bot, f"Markdown 展示：{outcome}")
+
+    assert "stream" in outcome, outcome
 
 
 # ---- 本地测试：落盘前脱敏（不访问网络，随 `uv run pytest` 运行）----

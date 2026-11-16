@@ -699,3 +699,13 @@
 - **位置**：`autogen/api/v2_users_user_openid_messages.post.md` 的 `msg_id` 一行写「5 分钟内有效」，同页页首与 `server-inter/message/overview.md` 的表格写单聊 60 分钟。
 - **结论**（`test_c2c_reply_after_10_and_55_minutes`）：收到单聊消息后断开网关，隔约 10 分钟、约 55 分钟各用它被动回复一次，都被接受，测试用户也都收到了。「5 分钟」不对，与 60 分钟的说法一致。
 - **实现**：不变，SDK 不在本地判断是否过期。
+
+### Markdown：实际支持的语法比文档多
+
+- **位置**：`server-inter/message/type/markdown.md`「支持格式」只列了标题、文字样式、链接、图片、有序 / 无序 / 嵌套列表、块引用、分割线与换多行。
+- **结论**（`test_markdown_showcase_stream`，同一段约 1000 字的 Markdown 先流式发出、再用普通 Markdown 消息发一遍）：
+  - 文档列出的语法都正常渲染，包括带尺寸的图片与 `<https://...>` 自动链接。
+  - 文档没列的也都能用：代码块、表格（含对齐）、LaTeX 公式（`$...$`、`\(...\)` 行内，`$$...$$`、`\[...\]` 块级）、任务列表（`- [x]`）、脚注。
+  - HTML 标签（`<u>`、`<sup>`）不生效。
+  - 流式与普通消息的最终渲染一致；流式切成 124 片、每片 4～12 字发出都被接受，`remain_msg_len` 一直是 0。
+- **实现**：不变，SDK 不改写 Markdown 内容。
