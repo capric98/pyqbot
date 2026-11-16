@@ -39,6 +39,14 @@ def test_payload_error_is_a_separate_kind_of_failure() -> None:
     assert not isinstance(error, pyqbot.APIError | pyqbot.NetworkError)
 
 
+def test_gateway_error_carries_the_close_code() -> None:
+    error = pyqbot.GatewayError("网关连接无法恢复：关闭码 4914", err_code=4914)
+
+    assert isinstance(error, pyqbot.QQBotError)
+    assert not isinstance(error, pyqbot.NetworkError)
+    assert error.err_code == 4914
+
+
 def test_redact_replaces_every_known_secret() -> None:
     text = "secret=s3cr3t access=t0k-1 t0k-1 s3cr3t/t0k-1"
 

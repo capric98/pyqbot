@@ -5,7 +5,7 @@ from importlib.metadata import version
 from ._bot import Bot
 from ._client import Client
 from ._config import Config
-from ._errors import APIError, NetworkError, PayloadError, QQBotError
+from ._errors import APIError, GatewayError, NetworkError, PayloadError, QQBotError
 from ._gateway.intents import Intents
 from ._models.message import SentMessage
 
@@ -16,6 +16,7 @@ __all__ = [
     "Bot",
     "Client",
     "Config",
+    "GatewayError",
     "Intents",
     "NetworkError",
     "PayloadError",

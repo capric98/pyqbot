@@ -59,3 +59,11 @@ class NetworkError(QQBotError):
 
 class PayloadError(QQBotError):
     """网关下发的一帧数据无法解码。只影响这一帧，不代表连接不可用。"""
+
+
+class GatewayError(QQBotError):
+    """网关连接被关闭且无法恢复，重连也不会成功。
+
+    网关以关闭码断开时，`err_code` 是该关闭码，含义见官方文档的 WebSocket 错误码；
+    其它原因（如连续多次会话无效）时为 `None`。
+    """
