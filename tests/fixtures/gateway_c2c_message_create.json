@@ -1,0 +1,23 @@
+{
+  "op": 0,
+  "s": 2,
+  "t": "C2C_MESSAGE_CREATE",
+  "d": {
+    "author": {
+      "avatar": "https://example.invalid/avatar.png",
+      "bot": false,
+      "id": "0123456789ABCDEF0123456789ABCDEF",
+      "union_openid": "",
+      "user_openid": "0123456789ABCDEF0123456789ABCDEF",
+      "username": "测试用户"
+    },
+    "content": "你好",
+    "id": "ROBOT1.0_fake-message-id",
+    "message_scene": {
+      "ext": ["msg_idx=REFIDX_fake"],
+      "source": "default"
+    },
+    "message_type": 0,
+    "timestamp": "2026-11-16T11:55:42+08:00"
+  }
+}

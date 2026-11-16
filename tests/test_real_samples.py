@@ -1,0 +1,60 @@
+"""用实测得到的真实响应回归 SDK 的解析。样本脱敏后存在 `tests/fixtures/`，出处见 `docs/errata.md`。"""
+
+import json
+from pathlib import Path
+
+import httpx2
+import pytest
+
+import pyqbot
+from pyqbot._gateway.payload import READY_EVENT, OpCode, Ready, decode_payload
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def sample(name: str) -> bytes:
+    return (FIXTURES / name).read_bytes()
+
+
+async def get_token_from(name: str) -> str:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, content=sample(name), headers={"X-Tps-trace-ID": "trace-1"})
+
+    async with (
+        httpx2.AsyncClient(transport=httpx2.MockTransport(handler)) as http_client,
+        pyqbot.Client("app-id", "app-secret", http_client=http_client) as client,
+    ):
+        return await client.get_access_token()
+
+
+async def test_token_response_with_string_expires_in_is_accepted() -> None:
+    assert await get_token_from("token_success.json") == "fake-access-token"
+
+
+async def test_wrong_secret_response_becomes_api_error_despite_http_200() -> None:
+    with pytest.raises(pyqbot.APIError) as caught:
+        await get_token_from("token_wrong_secret.json")
+
+    error = caught.value
+    assert (error.status_code, error.err_code, error.trace_id) == (200, 100016, "trace-1")
+    assert "invalid appid or secret" in error.message
+
+
+def test_ready_frame_decodes() -> None:
+    payload = decode_payload(sample("gateway_ready.json"))
+    ready = payload.decode_data(Ready)
+
+    assert (payload.op, payload.t, payload.s) == (OpCode.DISPATCH, READY_EVENT, 1)
+    assert ready.session_id == "00000000-0000-0000-0000-000000000000"
+    assert ready.shard == (0, 1)
+    assert ready.user is not None
+    assert ready.user.id == "1234567890123456789"
+
+
+def test_c2c_message_frame_keeps_its_data_for_the_event_layer() -> None:
+    payload = decode_payload(sample("gateway_c2c_message_create.json"))
+    data = json.loads(payload.data)
+
+    assert (payload.op, payload.t, payload.s) == (OpCode.DISPATCH, "C2C_MESSAGE_CREATE", 2)
+    assert data["author"]["user_openid"] == data["author"]["id"]
+    assert data["timestamp"] == "2026-11-16T11:55:42+08:00"
