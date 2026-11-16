@@ -175,7 +175,10 @@ async def test_closed_client_refuses_to_send() -> None:
 
 
 async def test_token_failure_is_raised_without_calling_the_api() -> None:
+    paths: list[str] = []
+
     def handle(request: httpx2.Request) -> httpx2.Response:
+        paths.append(request.url.path)
         return httpx2.Response(200, json={"code": 100016, "message": "invalid appid or secret"})
 
     async with (
@@ -186,6 +189,45 @@ async def test_token_failure_is_raised_without_calling_the_api() -> None:
             await client.users.send_message(OPENID, "x")
 
     assert caught.value.err_code == 100016
+    assert paths == ["/app/getAppAccessToken"]
+
+
+@pytest.mark.parametrize("field", ["err_code", "code"])
+@pytest.mark.parametrize(
+    ("code", "err_code"),
+    [(40034005.0, 40034005), (1.5, None), (True, None), ({"n": 1}, None), ([1], None)],
+)
+async def test_error_code_of_an_unexpected_type_still_means_failure(
+    field: str, code: object, err_code: int | None
+) -> None:
+    platform = Platform()
+    platform.respond = responding(httpx2.Response(200, json={field: code, "message": "rejected"}))
+
+    with pytest.raises(pyqbot.APIError, match="rejected") as caught:
+        await send(platform)
+
+    assert caught.value.err_code == err_code
+
+
+@pytest.mark.parametrize("where", ["header", "body"])
+async def test_credentials_echoed_in_the_trace_id_are_redacted(where: str) -> None:
+    echoed = f"trace-{TOKEN}-{APP_SECRET}"
+    body = {"err_code": 11243, "message": "denied"}
+    headers: dict[str, str] = {}
+    if where == "header":
+        headers["X-Tps-trace-ID"] = echoed
+    else:
+        body["trace_id"] = echoed
+    platform = Platform()
+    platform.respond = responding(httpx2.Response(401, json=body, headers=headers))
+
+    with pytest.raises(pyqbot.APIError) as caught:
+        await send(platform)
+
+    shown = "".join(traceback.format_exception(caught.value))
+    assert TOKEN not in shown
+    assert APP_SECRET not in shown
+    assert caught.value.trace_id == "trace-***-***"
 
 
 # 失败映射：(响应, 状态码, err_code, trace_id, 文案片段)

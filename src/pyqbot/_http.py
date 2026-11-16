@@ -11,7 +11,7 @@ from ._config import Config
 from ._credentials import TRACE_ID_HEADER, find_error_code
 from ._errors import APIError, NetworkError
 from ._model import Model, decode
-from ._redact import redact, safe_cause
+from ._redact import redact, redact_optional, safe_cause
 
 type QueryParams = Mapping[str, str | int]
 
@@ -105,8 +105,9 @@ def path_segment(value: str, name: str) -> str:
 
 class _ErrorBody(Model):
     # 通用失败结构用 err_code；code 是获取 token 接口的写法，两个都认（docs/errata.md）。
-    code: int | str | None = None
-    err_code: int | str | None = None
+    # 类型写成 object：写成 int | str 的话，类型不符的错误码会被宽容解码丢掉，失败就成了成功。
+    code: object = None
+    err_code: object = None
     message: str | None = None
     trace_id: str | None = None
 
@@ -126,7 +127,7 @@ def _parse_response[T](
             f"{action} 失败：{redact(reason, *secrets)}",
             status_code=status_code,
             err_code=err_code,
-            trace_id=trace_id,
+            trace_id=redact_optional(trace_id, *secrets),
         )
 
     if content.strip():

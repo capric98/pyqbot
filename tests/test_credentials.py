@@ -548,6 +548,39 @@ async def test_known_tokens_echoed_by_the_platform_are_redacted(clock: FakeClock
     assert_hidden(caught.value, "token-1", "token-9")
 
 
+@pytest.mark.parametrize("where", ["header", "body"])
+async def test_secret_echoed_in_the_trace_id_is_redacted(where: str) -> None:
+    echoed = f"trace-{APP_SECRET}"
+    body = {"code": 100016, "message": "bad secret"}
+    headers: dict[str, str] = {}
+    if where == "header":
+        headers["X-Tps-trace-ID"] = echoed
+    else:
+        body["trace_id"] = echoed
+    server = TokenServer()
+    server.respond = responding(httpx2.Response(200, json=body, headers=headers))
+
+    async with client_for(server) as client:
+        with pytest.raises(pyqbot.APIError) as caught:
+            await client.get_access_token()
+
+    assert caught.value.trace_id == "trace-***"
+    assert APP_SECRET not in "".join(traceback.format_exception(caught.value))
+
+
+async def test_error_code_of_an_unexpected_type_still_means_failure() -> None:
+    server = TokenServer()
+    server.respond = responding(
+        httpx2.Response(200, json={"code": True, "access_token": "token-9", "expires_in": "7200"})
+    )
+
+    async with client_for(server) as client:
+        with pytest.raises(pyqbot.APIError) as caught:
+            await client.get_access_token()
+
+    assert caught.value.err_code is None
+
+
 def test_token_holding_structures_hide_the_token() -> None:
     token = "tok-abcdef"
     structures: list[Model] = [

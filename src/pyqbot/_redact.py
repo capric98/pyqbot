@@ -13,6 +13,11 @@ def redact(text: str, *secrets: str | None) -> str:
     return text
 
 
+def redact_optional(text: str | None, *secrets: str | None) -> str | None:
+    """同 `redact()`，`text` 为 `None` 时返回 `None`；用于 `trace_id` 这类可能缺失的外部文本。"""
+    return text and redact(text, *secrets)
+
+
 def safe_cause[E: BaseException](exc: E, *secrets: str | None) -> E | None:
     """给 `raise ... from` 用：`exc` 的异常链里出现凭证时返回 `None`（丢掉整条链），否则返回 `exc`。"""
     # traceback 会连同 __cause__ / __context__ 一起打印，光给新异常的文案脱敏不够。

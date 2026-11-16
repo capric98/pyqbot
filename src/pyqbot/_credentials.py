@@ -21,7 +21,7 @@ import msgspec
 from ._config import Config
 from ._errors import APIError, NetworkError, QQBotError
 from ._model import Model, decode
-from ._redact import redact, safe_cause
+from ._redact import redact, redact_optional, safe_cause
 
 TOKEN_PATH = "/app/getAppAccessToken"
 REFRESH_MARGIN = 50.0
@@ -145,31 +145,33 @@ class _TokenResponse(Model):
 
     access_token: str | None = None
     expires_in: float | str | None = None  # 文档出入，见 docs/errata.md
-    code: int | str | None = None
-    err_code: int | str | None = None
+    code: object = None  # 不写成 int | str：类型不符的错误码不能被宽容解码丢掉
+    err_code: object = None
     message: str | None = None
     trace_id: str | None = None
 
 
 def _parse_response(response: httpx2.Response, secrets: Iterable[str | None]) -> tuple[str, float]:
     status_code = response.status_code
-    trace_id = response.headers.get(TRACE_ID_HEADER)
+    secrets = tuple(secrets)
+    header_trace_id = response.headers.get(TRACE_ID_HEADER)
     try:
         body = decode(response.content, _TokenResponse)
     except (msgspec.DecodeError, RecursionError) as exc:
         raise APIError(
             f"获取 access_token 失败：无法解析响应（HTTP {status_code}）",
             status_code=status_code,
-            trace_id=trace_id,
+            trace_id=redact_optional(header_trace_id, *secrets),
         ) from exc
 
-    trace_id = trace_id or body.trace_id
+    secrets = (*secrets, body.access_token)
+    trace_id = redact_optional(header_trace_id or body.trace_id, *secrets)
     # 文档要求优先依据 code 判断：业务失败时 HTTP 状态码仍是 200。
     failed, err_code = find_error_code(body.code, body.err_code)
     if failed or not response.is_success:
         reason = body.message or f"HTTP {status_code}"
         raise APIError(
-            f"获取 access_token 失败：{redact(reason, *secrets, body.access_token)}",
+            f"获取 access_token 失败：{redact(reason, *secrets)}",
             status_code=status_code,
             err_code=err_code,
             trace_id=trace_id,
@@ -185,24 +187,35 @@ def _parse_response(response: httpx2.Response, secrets: Iterable[str | None]) ->
     return body.access_token, expires_in
 
 
-def find_error_code(*fields: int | str | None) -> tuple[bool, int | None]:
-    """检查响应体里的错误码字段，返回（是否失败，第一个能转成整数的错误码）。认不出的错误码也算失败。"""
-    codes = [code for code in fields if code not in _SUCCESS_CODES]
+def find_error_code(*fields: object) -> tuple[bool, int | None]:
+    """检查响应体里的错误码字段，返回（是否失败，第一个能转成整数的错误码）。
+
+    认不出的错误码（非数字的字符串、布尔、对象等）也算失败，只是拿不到整数。
+    """
+    codes = [code for code in fields if not _means_success(code)]
     return bool(codes), next(
         (parsed for code in codes if (parsed := _as_int(code)) is not None), None
     )
 
 
-_SUCCESS_CODES = (None, 0, "0", "")
+def _means_success(code: object) -> bool:
+    # bool 要先排除：False == 0，不排除会被当成「错误码为 0」。
+    return code is None or (not isinstance(code, bool) and code in (0, "0", ""))
 
 
-def _as_int(value: int | str | None) -> int | None:
+def _as_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
     if isinstance(value, str):
         try:
             return int(value)
         except ValueError:
             return None
-    return value
+    return None
 
 
 def _parse_expires_in(value: float | str | None) -> float | None:
