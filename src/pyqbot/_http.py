@@ -1,8 +1,9 @@
 """请求层：所有 OpenAPI 请求都经这里发出（`dev-prepare/api-call-guide.md`），失败映射见 `docs/design.md`。"""
 
+import re
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from typing import overload
-from urllib.parse import quote
+from urllib.parse import parse_qsl, quote, urlsplit
 
 import httpx2
 import msgspec
@@ -85,14 +86,46 @@ class HTTP:
                 timeout=config.timeout,
             )
         except httpx2.RequestError as exc:
-            reason = (
-                "请求超时"
-                if isinstance(exc, httpx2.TimeoutException)
-                else redact(str(exc) or type(exc).__name__, *secrets)
-            )
-            raise NetworkError(f"{method} {path} 失败：{reason}") from safe_cause(exc, *secrets)
+            raise _network_error(f"{method} {path}", exc, secrets) from safe_cause(exc, *secrets)
 
         return _parse_response(response, type_, f"{method} {path}", secrets)
+
+    async def put_presigned(
+        self, url: str, content: bytes, *, content_type: str | None = None
+    ) -> httpx2.Response:
+        """把 `content` PUT 到对象存储（COS）的预签名地址，返回 2xx 的响应；不加鉴权头，不解析响应体。
+
+        失败同样抛 `NetworkError` / `APIError`，但文案只写主机与路径：查询串是临时签名，不进文案和异常链。
+        """
+        try:
+            target = httpx2.URL(url)
+        except httpx2.InvalidURL:
+            # 底层文案可能带着地址，不保留异常链。
+            raise NetworkError("PUT 预签名地址失败：地址不合法") from None
+        action = f"PUT {target.copy_with(query=None)}"
+        secrets = (*self._known_secrets(), *_signature_parts(url, target))
+        headers = {} if content_type is None else {"Content-Type": content_type}
+        # 自己构造 Request 再 send()：不合并客户端默认的 headers、cookies、params（params 会替换掉
+        # 签名查询串），auth=None 关掉客户端的鉴权，也不跟随重定向，免得签名和数据被带到别处。
+        request = httpx2.Request(
+            "PUT",
+            target,
+            content=content,
+            headers=headers,
+            extensions={"timeout": httpx2.Timeout(self._config.timeout).as_dict()},
+        )
+        try:
+            response = await self._http_client.send(request, auth=None, follow_redirects=False)
+        except httpx2.RequestError as exc:
+            raise _network_error(action, exc, secrets) from safe_cause(exc, *secrets)
+        if not response.is_success:
+            # COS 的失败响应是 XML，<Code> 是 SignatureDoesNotMatch 这类错误名，便于排查。
+            code = _COS_ERROR_CODE.search(response.text)
+            reason = f"HTTP {response.status_code}" + (f" {code[1]}" if code else "")
+            raise APIError(
+                f"{action} 失败：{redact(reason, *secrets)}", status_code=response.status_code
+            )
+        return response
 
 
 def path_segment(value: str, name: str) -> str:
@@ -104,6 +137,32 @@ def path_segment(value: str, name: str) -> str:
     if value in ("", ".", ".."):
         raise ValueError(f"{name} 不合法：{value!r}")
     return quote(value, safe="")
+
+
+_COS_ERROR_CODE = re.compile(r"<Code>([^<]{1,64})</Code>")
+_MIN_SIGNATURE_PART = 8
+
+
+def _signature_parts(url: str, target: httpx2.URL) -> set[str]:
+    """预签名地址里要隐藏的部分：整个地址与查询串，以及较长的参数值（编码前后两种写法）。"""
+    queries = {urlsplit(url).query, target.query.decode("ascii", "replace")}
+    parts = {url, str(target), *queries}
+    for query in queries:
+        parts.update(item.partition("=")[2] for item in query.split("&"))
+        parts.update(value for _, value in parse_qsl(query))
+    # 短的取值（如 partNumber=1）不是签名，替换掉反而会把文案里的数字都换成 ***。
+    return {part for part in parts if len(part) >= _MIN_SIGNATURE_PART}
+
+
+def _network_error(
+    action: str, exc: httpx2.RequestError, secrets: Iterable[str | None]
+) -> NetworkError:
+    reason = (
+        "请求超时"
+        if isinstance(exc, httpx2.TimeoutException)
+        else redact(str(exc) or type(exc).__name__, *secrets)
+    )
+    return NetworkError(f"{action} 失败：{reason}")
 
 
 class _ErrorBody(Model):

@@ -65,6 +65,7 @@ from ._models.send import (
     MarkdownParam,
     Media,
 )
+from ._models.upload import FileType, MediaImage
 
 __version__ = version("pyqbot")
 
@@ -91,6 +92,7 @@ __all__ = [
     "Client",
     "Config",
     "FeedbackOption",
+    "FileType",
     "FriendAdd",
     "FriendAddScene",
     "FriendDel",
@@ -119,6 +121,7 @@ __all__ = [
     "Markdown",
     "MarkdownParam",
     "Media",
+    "MediaImage",
     "MemberRole",
     "MessageAttachment",
     "NetworkError",

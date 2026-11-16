@@ -1,10 +1,14 @@
 """群聊接口。"""
 
+import os
+
 from .._http import HTTP, path_segment
 from .._models.event import GroupReplyTarget
 from .._models.message import GroupAnyMessage, SentMessage
 from .._models.send import Card, Keyboard, Markdown, Media
+from .._models.upload import FileType
 from .message import message_body, message_path, send_message
+from .upload import upload_media
 
 
 class Groups:
@@ -82,3 +86,57 @@ class Groups:
         """
         base = f"/v2/groups/{path_segment(openid, 'openid')}/messages"
         await self._http.request("DELETE", message_path(base, message), type_=None)
+
+    async def upload(
+        self,
+        openid: str,
+        *,
+        path: str | os.PathLike[str] | None = None,
+        url: str | None = None,
+        data: bytes | None = None,
+        file_name: str | None = None,
+        file_type: FileType | None = None,
+        send: bool = False,
+    ) -> Media:
+        """上传图片、视频、语音或文件，返回的 `Media` 传给 `send_message(media=...)` 发送。
+
+        群聊上传的文件只能发到群聊。参数与上传方式的选择同 `client.users.upload()`。
+
+        对应官方接口 `POST /v2/groups/{group_openid}/files`；分片上传另用
+        `POST /v2/groups/{group_id}/upload_prepare` 与 `POST /v2/groups/{group_id}/upload_part_finish`。
+
+        Args:
+            openid: 群的 `group_openid`。
+            path: 本地文件的路径。
+            url: 公网可访问的 http(s) 地址。
+            data: 文件内容，此时必须给出 `file_name`。
+            file_name: 上报给平台的文件名，默认取 `path` 的文件名；不能与 `url` 同时传。
+            file_type: 文件类型，不传时按扩展名推断，规则同单聊。
+            send: 上传后直接作为主动消息发到群里，返回的 `Media.id` 是那条消息的 ID。
+                占用主动消息额度。
+
+        Raises:
+            APIError: 平台拒绝，例如机器人被禁言（`err_code` 850018）、格式不支持（850019）。
+            NetworkError: 没有拿到平台或对象存储的响应。
+            ValueError: 同 `client.users.upload()`。
+            OSError: 读取文件失败。
+            RuntimeError: 客户端已关闭。
+
+        Example:
+            ```python
+            media = await client.groups.upload(
+                group_openid, url="https://example.com/a.mp4", file_type=pyqbot.FileType.VIDEO
+            )
+            ```
+        """
+        base = f"/v2/groups/{path_segment(openid, 'openid')}"
+        return await upload_media(
+            self._http,
+            base,
+            path=path,
+            url=url,
+            data=data,
+            file_name=file_name,
+            file_type=file_type,
+            send=send,
+        )

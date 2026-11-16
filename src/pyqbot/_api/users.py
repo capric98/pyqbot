@@ -1,10 +1,14 @@
 """单聊接口。"""
 
+import os
+
 from .._http import HTTP, path_segment
 from .._models.event import C2CReplyTarget, reply_fields
 from .._models.message import C2CMessage, SentMessage
 from .._models.send import Card, Keyboard, Markdown, Media
+from .._models.upload import FileType
 from .message import message_body, message_path, send_message, typing_body
+from .upload import upload_media
 
 
 class Users:
@@ -122,3 +126,60 @@ class Users:
         """
         base = f"/v2/users/{path_segment(openid, 'openid')}/messages"
         await self._http.request("DELETE", message_path(base, message), type_=None)
+
+    async def upload(
+        self,
+        openid: str,
+        *,
+        path: str | os.PathLike[str] | None = None,
+        url: str | None = None,
+        data: bytes | None = None,
+        file_name: str | None = None,
+        file_type: FileType | None = None,
+        send: bool = False,
+    ) -> Media:
+        """上传图片、视频、语音或文件，返回的 `Media` 传给 `send_message(media=...)` 发送。
+
+        单聊上传的文件只能发到单聊。`path`、`url`、`data` 三选一：`url` 由平台下载；
+        本地文件与 `data` 不超过 3 MiB 时随请求内联上传，更大的由 SDK 自动分片上传（并发、重试按平台下发的配置）。
+
+        对应官方接口 `POST /v2/users/{user_openid}/files`；分片上传另用
+        `POST /v2/users/{user_id}/upload_prepare` 与 `POST /v2/users/{user_id}/upload_part_finish`。
+
+        Args:
+            openid: 用户的 `user_openid`。
+            path: 本地文件的路径。
+            url: 公网可访问的 http(s) 地址。
+            data: 文件内容，此时必须给出 `file_name`。
+            file_name: 上报给平台的文件名，默认取 `path` 的文件名；不能与 `url` 同时传。
+            file_type: 文件类型。不传时按扩展名推断（不区分大小写）：png、jpg、jpeg、gif、webp、bmp
+                为图片，mp4 为视频，silk、slk、mp3、wav、ogg 为语音；其它扩展名要显式传入，
+                任意文件都可以传 `FileType.FILE`。
+            send: 上传后直接作为主动消息发给用户，返回的 `Media.id` 是那条消息的 ID。
+                占用主动消息额度。
+
+        Raises:
+            APIError: 平台拒绝，例如格式不支持（`err_code` 850019）、超过大小上限（850031）。
+            NetworkError: 没有拿到平台或对象存储的响应（分片会先按平台的配置重试）。
+            ValueError: `openid` 为空，`path`、`url`、`data` 不是恰好传了一个，`data` 没有 `file_name`，
+                `url` 带了 `file_name`，文件为空，或推断不出 `file_type`。
+            OSError: 读取文件失败。
+            RuntimeError: 客户端已关闭。
+
+        Example:
+            ```python
+            media = await client.users.upload(openid, path="photo.png")
+            await message.reply("图来了", media=media)
+            ```
+        """
+        base = f"/v2/users/{path_segment(openid, 'openid')}"
+        return await upload_media(
+            self._http,
+            base,
+            path=path,
+            url=url,
+            data=data,
+            file_name=file_name,
+            file_type=file_type,
+            send=send,
+        )
