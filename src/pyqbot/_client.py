@@ -59,7 +59,12 @@ class Client:
         self._http_client = httpx2.AsyncClient() if http_client is None else http_client
         self._access_token = AccessTokenManager(self._config, self._http_client)
         self._closed = False
-        self._http = HTTP(self._config, self._http_client, self.get_access_token)
+        self._http = HTTP(
+            self._config,
+            self._http_client,
+            self.get_access_token,
+            self._access_token.known_secrets,
+        )
         self.users = Users(self._http)
         self.groups = Groups(self._http)
 

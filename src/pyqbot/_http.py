@@ -1,6 +1,6 @@
 """请求层：所有 OpenAPI 请求都经这里发出（`dev-prepare/api-call-guide.md`），失败映射见 `docs/design.md`。"""
 
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from typing import overload
 from urllib.parse import quote
 
@@ -20,6 +20,7 @@ class HTTP:
     """带鉴权的请求，响应解码成模型，失败映射成 `APIError` / `NetworkError`。
 
     `get_token` 是 `Client.get_access_token`：客户端关闭后它抛 `RuntimeError`，请求也随之被拒。
+    `known_secrets` 给出要脱敏的全部凭证：平台回显的可能是已经换掉的旧 token，不只是本次请求用的。
     """
 
     def __init__(
@@ -27,10 +28,12 @@ class HTTP:
         config: Config,
         http_client: httpx2.AsyncClient,
         get_token: Callable[[], Awaitable[str]],
+        known_secrets: Callable[[], Iterable[str | None]],
     ) -> None:
         self._config = config
         self._http_client = http_client
         self._get_token = get_token
+        self._known_secrets = known_secrets
 
     @overload
     async def request[T](
@@ -66,7 +69,7 @@ class HTTP:
         """发请求并把响应体解码成 `type_`（`None` 则不解码）；`path` 里的路径参数先经 `path_segment()`。"""
         config = self._config
         token = await self._get_token()
-        secrets = (config.app_secret, token)
+        secrets = (*self._known_secrets(), token)
         headers = {"Authorization": f"QQBot {token}"}
         content = None
         if json is not None:
@@ -116,7 +119,7 @@ def _parse_response[T](
     response: httpx2.Response,
     type_: type[T] | None,
     action: str,
-    secrets: tuple[str, ...],
+    secrets: tuple[str | None, ...],
 ) -> T | None:
     status_code = response.status_code
     trace_id = response.headers.get(TRACE_ID_HEADER)

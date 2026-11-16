@@ -396,7 +396,7 @@ async def test_requests_without_body_and_responses_without_content() -> None:
         return TOKEN
 
     async with httpx2.AsyncClient(transport=httpx2.MockTransport(handle)) as http_client:
-        http = HTTP(pyqbot.Config(app_id="a", app_secret="s"), http_client, get_token)
+        http = HTTP(pyqbot.Config(app_id="a", app_secret="s"), http_client, get_token, tuple)
         result = await http.request("DELETE", "/x", type_=None, params={"page": 2})
 
     assert result is None
@@ -422,9 +422,31 @@ async def test_responses_without_a_type_only_check_for_failure(
         return TOKEN
 
     async with httpx2.AsyncClient(transport=httpx2.MockTransport(lambda _: response)) as client:
-        http = HTTP(pyqbot.Config(app_id="a", app_secret="s"), client, get_token)
+        http = HTTP(pyqbot.Config(app_id="a", app_secret="s"), client, get_token, tuple)
         if failure is None:
             assert await http.request("DELETE", "/x", type_=None) is None
         else:
             with pytest.raises(pyqbot.APIError, match=failure):
                 await http.request("DELETE", "/x", type_=None)
+
+
+async def test_token_replaced_before_this_request_is_still_redacted() -> None:
+    # 网关还在用的旧 token 被平台回显时，它不是本次请求用的那个，但同样不能进入异常。
+    def handle(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(403, json={"err_code": 11243, "message": "bad token-old"})
+
+    async def get_token() -> str:
+        return "token-new"
+
+    async with httpx2.AsyncClient(transport=httpx2.MockTransport(handle)) as http_client:
+        http = HTTP(
+            pyqbot.Config(app_id="a", app_secret="s"),
+            http_client,
+            get_token,
+            lambda: (APP_SECRET, "token-new", "token-old"),
+        )
+        with pytest.raises(pyqbot.APIError) as caught:
+            await http.request("GET", "/gateway", type_=None)
+
+    assert "token-old" not in "".join(traceback.format_exception(caught.value))
+    assert "bad ***" in str(caught.value)
