@@ -55,7 +55,10 @@
 - **含糊**：没说网关是否回应 WebSocket 层的 Ping、单帧最大多大、会不会发二进制帧。
 - **当前做法**：关掉 httpx2 默认每 20 秒一次的 Ping，存活只看 OpCode 1 心跳；单帧上限放宽到 1 MiB（httpx2 默认 64 KiB）；二进制帧记日志后跳过。
 - **已知**：网关会回应 WebSocket 层的 Ping。2026-11-16 实测时用 httpx2 默认的 20 秒 Ping（超时 20 秒）连了约 78 秒，连接没有因为 Ping 超时而断开。
-- **已知**：一次选多张图发出时，QQ 拆成每张一条消息推送，每帧约 1.2 KB；文字约 0.8 KB；没有见到二进制帧（2026-11-16，`test_resume_replays_backlog`）。
+- **已知**（2026-11-16）：
+  - 手机上一次选多张图发出时，拆成每张一条消息，每条的 `d` 约 1.2 KB（`test_resume_replays_backlog`）。
+  - 电脑上一次发 4 张图加一行文字，是一条消息带 4 个附件，`d` 约 2.3 KB（`test_multi_image_message`）。
+  - 图片只以链接出现，帧都很小；没有见到二进制帧。
 - **怎么测**：长时间挂着连接，看 WebSocket 层的 Ping 与断线。
 
 ### Intents：尚未确认的两处
@@ -120,8 +123,8 @@
 - **位置**：`server-inter/message/rich-media.md` 的「支持的消息类型」与同页「文件类型与限制」表格；单聊、群聊上传页的 `file_type` 一行。
 - **矛盾**：正文说图片 jpg/png/gif/webp/bmp、语音 silk/mp3/wav/ogg；同页表格与单聊上传页说图片 png/jpg、语音 silk；群聊上传页说语音 silk/mp3/wav。
 - **当前做法**：不传 `file_type` 时按最宽的列表推断（png/jpg/jpeg/gif/webp/bmp 为图片，mp4 为视频，silk/slk/mp3/wav/ogg 为语音），平台不支持时由它拒绝（850019），调用方可改传 `FileType.FILE`。
-- **已知**：单聊里 gif、webp、bmp、jpg 图片与 wav 语音都上传、发送成功，客户端正常显示（2026-11-16，`test_image_and_voice_formats`）。
-- **怎么测**：mp3、ogg 语音（本机生成不了，没测）；群聊里的这些格式。
+- **已知**：单聊里 gif、webp、bmp、jpg 图片，wav、mp3、ogg（vorbis）语音与 mp4 视频都上传、发送成功（2026-11-16，`test_image_and_voice_formats`、`test_ffmpeg_voice_and_video_formats`）。
+- **怎么测**：silk 语音；群聊里的这些格式。
 
 ### 分片上传：`upload_config.retry_timeout` 的含义
 
@@ -653,6 +656,7 @@
   - 群里点回调按钮时，机器人正在分片上传大图，回应虽成功，按钮却显示「请求第三方失败」；随后的被动回复照常发出。
   - 改成 SDK 自动回应后，处理函数 3 秒后才回复，按钮仍立刻变成 `visited_label`（`test_callback_button_interaction`）。
   - `visited_label` 只是临时显示：收到这条回复（新消息）后，按钮又显示回 `label`。
+  - 群里改用自动回应后，同样的场景（机器人正在分片上传大图）按钮也正常变成「已回调」。
 - **实现**：`Bot` 默认先替处理函数回应「成功」（`auto_ack=True`，可关）；SDK 自建的 HTTP 客户端把空闲连接保留 60 秒，免得回应时重新握手。
 
 ### 富媒体：内联上传与分片
@@ -661,7 +665,7 @@
 - **结论**：
   - 内联上传：原始 5.5 MB（base64 后 7.3 MB）的图片也被接受，「5M」在这几个大小上没有生效（`test_inline_size_limit`）。
   - 约 25 MB 的文件（`FileType.FILE`）：预上传给的 `block_size` 是 `"10485760"`，共 3 片（10、10、5 MiB），每片另带自己的 `block_size`。最后一片填实际大小被接受，文件消息发送成功（`test_large_file_type_upload`）。
-  - 约 3.6 MB 与约 12 MB 的图片都只给一片（见「分片上传：序号从 1 开始，图片只有一片」）。
+  - 约 3.6 MB 与约 12 MB 的图片、约 24.5 MB 的 mp4 视频都只给一片，`block_size` 等于文件大小（`test_large_video_in_parts`）。是否分片看文件类型：只有「文件」按 10 MiB 切。
   - 群聊的分片上传（约 3.6 MB 的图片）同样成功。
 - **实现**：不变；`INLINE_LIMIT` 仍是 3 MiB，偏保守但不出错。
 
