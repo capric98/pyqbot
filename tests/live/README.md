@@ -24,7 +24,7 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 | `LIVE_TOKEN_WINDOW` | 观察 token 换发，最长两个多小时 |
 | `LIVE_GLOBAL_CONFIG` | 改菜单、增删面板（影响所有用户） |
 | `LIVE_MEDIA_IMAGES` | 素材库（机器人全局） |
-| `TEST_GROUP_OPENID` | 测试群；群用例都要 |
+| `TEST_GROUP_OPENID` | 测试群；群用例都要（由 `test_group_add_robot` 取得） |
 | `LIVE_GROUP_WRITE` | 会改动群或机器人配置的群用例 |
 | `TEST_GROUP_MEMBER_OPENID` | 群里一个可以被禁言、不在黑名单的普通成员 |
 | `TEST_GROUP_REMOVABLE_OPENID` | 同意被移出测试群的成员 |
@@ -79,6 +79,11 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 - `test_live_upload.py::test_media_image_library`（`LIVE_MEDIA_IMAGES`）：收到「素材库」与蓝色图片，结束后图片从列表里删除。
 
 ### 需要测试群
+
+先取得测试群：连上网关后把机器人拉进群，群的 openid 会写进 `.cache/live/test_group.env`，把其中的 `TEST_GROUP_OPENID` 加进 `.env`。
+
+- `test_live_events.py::test_group_add_robot`（`LIVE_GATEWAY`）：拉机器人进群，群里收到「pyqbot：已加入，用于 SDK 实测」。
+- `test_live_events.py::test_group_at_message`（`LIVE_GATEWAY`）：群里 @机器人 发「/ping」，收到「pyqbot：pong」；日志里看 `content` 是否带空格、有没有另推全量消息。
 
 只读的只要 `TEST_GROUP_OPENID`，多数还要白名单或管理员身份（否则 `err_code` 11253）：
 

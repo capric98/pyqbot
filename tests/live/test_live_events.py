@@ -6,7 +6,7 @@
 `LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_live_events.py::<用例> -s`。
 
 只处理 `TEST_USER_OPENID` 触发的事件，其他人的只记一笔。每条 Dispatch 的外层 `id` 与 `d.id`（如有）
-都记进日志与 `.cache/live/events.txt`（已被 git 忽略），不含 openid 与消息内容；原始的 `d` 另存进
+都记进日志与 `.cache/live/events.txt`（已被 git 忽略），不含 openid；原始的 `d` 另存进
 `.cache/live/raw/`（含 openid，只留在本机）。
 """
 
@@ -264,4 +264,92 @@ async def test_callback_button_interaction(
             outcome["timeout"] = f"{wait_seconds} 秒内没有等到测试用户点击"
 
     note("callback_button_interaction", outcome)
+    assert "sent" in outcome, outcome
+
+
+# ---- 测试群：入群与 @ 消息 ----
+
+GROUP_FILE = OUTPUT.parent / "test_group.env"
+
+
+async def test_group_add_robot(
+    app_id: str, app_secret: str, wait_seconds: float, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """让测试用户把机器人拉进测试群；运行期间不要把它拉进别的群。
+
+    应收到 `GROUP_ADD_ROBOT`，机器人用 event_id 在群里被动回复「pyqbot：已加入，用于 SDK 实测」。
+    群的 openid 与拉人的成员写进 `.cache/live/test_group.env`，供群用例的 `TEST_GROUP_OPENID` 使用。
+    """
+    bot = pyqbot.Bot(app_id, app_secret)
+    record_event_ids(bot, monkeypatch)
+    outcome: dict[str, object] = {}
+
+    @bot.on_group_add_robot
+    async def joined(event: pyqbot.GroupAddRobot) -> None:
+        if "add" in outcome:
+            note("group_add_robot.ignored", "只认第一个入群事件")
+            return
+        outcome["add"] = {"event_id": event.event_id, "timestamp": event.timestamp}
+        GROUP_FILE.parent.mkdir(parents=True, exist_ok=True)
+        GROUP_FILE.write_text(
+            f"TEST_GROUP_OPENID={event.group_openid}\n"
+            f"# 拉机器人进群的成员：{event.op_member_openid}\n",
+            encoding="utf-8",
+        )
+        sent = await event.reply("pyqbot：已加入，用于 SDK 实测")
+        outcome["sent"] = sent.id
+        await bot.close()
+
+    await run_until_closed(bot, wait_seconds, outcome)
+
+    note("group_add_robot", outcome)
+    assert "sent" in outcome, outcome
+
+
+async def test_group_at_message(
+    app_id: str, app_secret: str, wait_seconds: float, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """让测试群里的成员 @机器人 发「/ping」。
+
+    应看到机器人被动回复「pyqbot：pong」。日志里看 `content` 的原样（官方示例带首尾空格）、`author`
+    有哪些字段与 `member_role`，以及同一条消息是否另推了全量的 `GROUP_MESSAGE_CREATE`（要有接收全部
+    消息的权限）。发消息成员的 openid 追加进 `.cache/live/test_group.env`，供禁言等用例挑选。
+    """
+    group = os.environ.get("TEST_GROUP_OPENID")
+    if not group:
+        pytest.skip("缺少环境变量 TEST_GROUP_OPENID：先跑 test_group_add_robot")
+    bot = pyqbot.Bot(app_id, app_secret)
+    record_event_ids(bot, monkeypatch)
+    all_messages: list[object] = []
+    outcome: dict[str, object] = {"all_messages": all_messages}
+
+    @bot.on_group_message
+    async def any_message(message: pyqbot.GroupMessage) -> None:
+        if message.group_openid == group:
+            all_messages.append({"id": message.id, "content": message.content})
+
+    @bot.on_group_at_message
+    async def mentioned(message: pyqbot.GroupAtMessage) -> None:
+        if message.group_openid != group:
+            note("group_at_message.ignored", "不是测试群")
+            return
+        author = message.author.to_dict()
+        outcome["at"] = {
+            "id": message.id,
+            "content": message.content,
+            "author_keys": sorted(author),
+            "member_role": message.author.member_role,
+            "message_type": message.message_type,
+            "message_scene": message.message_scene.to_dict() if message.message_scene else None,
+        }
+        with GROUP_FILE.open("a", encoding="utf-8") as file:
+            file.write(f"# @ 机器人的成员：{message.author.member_openid}\n")
+        sent = await message.reply("pyqbot：pong")
+        outcome["sent"] = sent.id
+        await asyncio.sleep(5)  # 等同一条消息的全量事件（如果有）
+        await bot.close()
+
+    await run_until_closed(bot, wait_seconds, outcome)
+
+    note("group_at_message", outcome)
     assert "sent" in outcome, outcome
