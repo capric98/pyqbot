@@ -5,9 +5,11 @@
 """
 
 import asyncio
+import contextlib
 import itertools
 import json
 import logging
+import math
 import traceback
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator, MutableMapping
 from contextlib import asynccontextmanager
@@ -212,22 +214,32 @@ class BuggyTransport(httpx2.AsyncBaseTransport):
         raise RuntimeError("传输层自身的 bug")
 
 
+class OSErrorTransport(httpx2.AsyncBaseTransport):
+    """直接漏出 OSError，没有被 httpx2 包装。"""
+
+    async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
+        raise ConnectionResetError("连接被重置")
+
+
 _TEXT_FRAME = 0x1
 _CLOSE_FRAME = 0x8
 
 
 class StreamFault:
-    """注入到某一条连接底层流上的故障：卡住写入、让关闭流时出错。"""
+    """注入到某一条连接底层流上的故障：卡住写入、读或关闭流时出错。"""
 
     def __init__(
         self,
         *,
         block_text_from: int | None = None,
         block_close: bool = False,
+        read_error: Exception | None = None,
         aclose_error: Exception | None = None,
     ) -> None:
         self.block_text_from = block_text_from  # 从客户端发的第几个文本帧（从 1 数）起卡住
         self.block_close = block_close  # 卡住客户端的关闭帧
+        self.read_error = read_error  # fail_reads 置位之后，下一次读抛出它
+        self.fail_reads = asyncio.Event()
         self.aclose_error = aclose_error
         self.blocked = asyncio.Event()  # 有一次写入被卡住了
         self.release = asyncio.Event()  # 放行被卡住的写入
@@ -251,6 +263,8 @@ class FaultyStream:
 
     # 签名要与 httpx2 的网络流一致，所以保留 timeout 参数。
     async def read(self, max_bytes: int, timeout: float | None = None) -> bytes:  # noqa: ASYNC109
+        if self._fault.read_error is not None and self._fault.fail_reads.is_set():
+            raise self._fault.read_error
         return await self._inner.read(max_bytes, timeout)
 
     async def write(self, buffer: bytes, timeout: float | None = None) -> None:  # noqa: ASYNC109
@@ -294,6 +308,7 @@ async def open_client(
         "wss://gateway.test": FaultyTransport(gateway, faults or {}),
         "wss://refused.test": RefusingTransport(),
         "wss://buggy.test": BuggyTransport(),
+        "wss://oserror.test": OSErrorTransport(),
     }
     async with httpx2.AsyncClient(mounts=mounts) as client:
         yield client
@@ -1278,6 +1293,161 @@ async def test_worker_cancelled_by_someone_else_cancels_run() -> None:
             await runner
 
 
+# 异常分类：传输错误重连，其它都是编程错误
+
+
+def defined_in(package: str) -> Exception:
+    """异常类定义在 `package` 里的异常；只伪造模块名，不必真的导入那个包。"""
+    cls = cast(type[Exception], type("SomeError", (Exception,), {"__module__": f"{package}._x"}))
+    return cls("出错了")
+
+
+def broken_read_after_login(fault: StreamFault, *, s: int = 2) -> Script:
+    async def script(side: GatewaySide) -> None:
+        await start_session(side, s=s)
+        fault.fail_reads.set()
+        await side.send(11)  # 唤醒正在等的读，下一次读就出错
+        await side.serve()
+
+    return script
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        anyio.BrokenResourceError("network broke"),
+        ConnectionResetError("reset"),
+        TimeoutError(),
+        EOFError(),
+        *(defined_in(package) for package in ("anyio", "wsproto", "h11", "httpcore2", "httpx2")),
+    ],
+    ids=lambda error: f"{type(error).__module__}.{type(error).__name__}",
+)
+async def test_transport_error_from_the_background_reader_reconnects(error: Exception) -> None:
+    async def second(side: GatewaySide) -> None:
+        await resume_session(side, s=4)
+        await side.serve()
+
+    fault = StreamFault(read_error=error)
+    gateway = FakeGateway(broken_read_after_login(fault), second)
+    async with asyncio.timeout(TIMEOUT), open_client(gateway, {0: fault}) as client:
+        connection = make_connection(client, Injected(gateway, finish_on="RESUMED"))
+        await run_until_done(connection, gateway)
+
+    assert gateway.sides[1].logins()[0]["d"]["seq"] == 2
+
+
+async def test_programming_error_from_the_background_reader_ends_run() -> None:
+    error = RuntimeError("reader bug")
+    fault = StreamFault(read_error=error)
+    gateway = FakeGateway(broken_read_after_login(fault))
+    async with asyncio.timeout(TIMEOUT), open_client(gateway, {0: fault}) as client:
+        with pytest.raises(RuntimeError) as caught:
+            await make_connection(client, Injected(gateway)).run()
+
+    assert caught.value is error
+    assert len(gateway.sides) == 1
+
+
+async def test_one_programming_error_among_transport_errors_ends_run() -> None:
+    # 读和关闭流各出一个错，httpx2 把它们放进同一个异常组；编程错误不在第一个位置。
+    bug = RuntimeError("aclose bug")
+    fault = StreamFault(read_error=anyio.BrokenResourceError("network broke"), aclose_error=bug)
+    gateway = FakeGateway(broken_read_after_login(fault))
+    async with asyncio.timeout(TIMEOUT), open_client(gateway, {0: fault}) as client:
+        with pytest.raises(RuntimeError) as caught:
+            await make_connection(client, Injected(gateway)).run()
+
+    assert caught.value is bug
+
+
+async def test_os_error_while_connecting_is_retried() -> None:
+    gateway = FakeGateway(serve_after_login)
+    injected = Injected(gateway, finish_on="READY")
+    injected.urls = ["wss://oserror.test/websocket"]
+    async with asyncio.timeout(TIMEOUT), open_client(gateway) as client:
+        await run_until_done(make_connection(client, injected), gateway)
+
+    assert injected.url_calls == 2
+
+
+# 连接自己正在关闭时的收尾
+
+
+async def let_close_reach_its_wait() -> None:
+    # close() 和它创建的收尾任务各走到自己的等待点；asyncio 按先后执行，几次让出就够。
+    for _ in range(3):
+        await asyncio.sleep(0)
+
+
+@pytest.mark.parametrize("ending", ["reconnect", "banned"])
+async def test_close_lets_a_connection_already_closing_finish(ending: str) -> None:
+    async def first(side: GatewaySide) -> None:
+        await start_session(side)
+        if ending == "reconnect":
+            await side.send(7)
+        else:
+            await side.close(4914)
+        await side.serve()
+
+    gateway = FakeGateway(first)
+    fault = StreamFault(block_close=True)
+    async with asyncio.timeout(TIMEOUT), open_client(gateway, {0: fault}) as client:
+        connection = make_connection(client, Injected(gateway))
+        runner = asyncio.create_task(connection.run())
+        await fault.blocked.wait()  # 已拿到断开原因，正在写关闭帧
+        closer = asyncio.create_task(connection.close())
+        await let_close_reach_its_wait()
+        fault.release.set()
+        await closer
+        result = (await asyncio.gather(runner, return_exceptions=True))[0]
+
+    assert fault.aclosed
+    assert len(gateway.sides) == 1  # 关完不再重连
+    if ending == "reconnect":
+        assert result is None
+    else:
+        assert isinstance(result, pyqbot.GatewayError)
+        assert result.err_code == 4914
+
+
+async def test_cancelling_run_does_not_cancel_a_worker_already_being_cancelled() -> None:
+    gateway = FakeGateway(serve_after_login)
+    fault = StreamFault(block_close=True)
+    async with asyncio.timeout(TIMEOUT), open_client(gateway, {0: fault}) as client:
+        connection = make_connection(client, Injected(gateway, finish_on="READY"))
+        runner = asyncio.create_task(connection.run())
+        await gateway.done.wait()
+        # 像 asyncio.run() 收尾那样，worker 先被取消，然后才轮到 run()。
+        cast(asyncio.Task[None], vars(connection)["_worker"]).cancel()
+        await fault.blocked.wait()
+        runner.cancel()
+        await let_close_reach_its_wait()
+        fault.release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await runner
+
+    assert fault.aclosed
+
+
+async def test_leftover_cancellation_of_the_caller_is_not_taken_as_cancelling_run() -> None:
+    gateway = FakeGateway(serve_after_login)
+    async with asyncio.timeout(TIMEOUT), open_client(gateway) as client:
+        connection = make_connection(client, Injected(gateway, finish_on="READY"))
+
+        async def caller() -> None:
+            cast(asyncio.Task[None], asyncio.current_task()).cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await asyncio.sleep(0)
+            # 捕获了取消却没有 uncancel()，cancelling() 仍然是 1。
+            await connection.run()
+
+        runner = asyncio.create_task(caller())
+        await gateway.done.wait()
+        await connection.close()
+        assert await runner is None
+
+
 # 构造时校验
 
 
@@ -1290,6 +1460,10 @@ async def test_worker_cancelled_by_someone_else_cancels_run() -> None:
         ({"handshake_timeout": -1}, "handshake_timeout"),
         ({"send_timeout": float("nan")}, "send_timeout"),
         ({"close_timeout": 0}, "close_timeout"),
+        ({"connect_timeout": math.inf}, "connect_timeout"),
+        ({"handshake_timeout": math.inf}, "handshake_timeout"),
+        ({"send_timeout": math.inf}, "send_timeout"),
+        ({"close_timeout": math.inf}, "close_timeout"),
         ({"reconnect_delay": -1}, "reconnect_delay"),
         ({"identify_interval": -0.1}, "identify_interval"),
         ({"reconnect_delay": 2, "max_reconnect_delay": 1}, "max_reconnect_delay"),
