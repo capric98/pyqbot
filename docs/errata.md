@@ -146,7 +146,7 @@
 
 - **位置**：单聊发消息页的 `is_wakeup` 一行；`autogen/api/v2_users_user_openid_stream_messages.post.md` 的 `is_wakeup` 一行。
 - **矛盾**：发消息页说与 `msg_id`、`event_id`「互斥使用」，流式消息页说「true 时不校验 msg_id/event_id 有效期」，即可以同时出现。
-- **当前做法**：按发消息页，`wakeup=True` 与 `reply_to` 同传时在本地抛 `ValueError`。
+- **当前做法**：按发消息页，`wakeup=True` 与 `reply_to` 同传时在本地抛 `ValueError`。流式消息暂不提供 `is_wakeup`。
 - **不主动实测**：召回消息每个周期只能发一条，测一次就占掉一个周期。
 
 ### 撤回：能撤回哪些消息
@@ -250,6 +250,49 @@
 - **含糊**：`.jpg` 扩展名配 `image/jpeg` 算不算一致。
 - **当前做法**：`.jpg`、`.jpeg` 都发 `image/jpeg`；其它扩展名在本地抛 `ValueError`。
 - **怎么测**：在素材库上传一张文件名为 `.jpg` 的图片，看 prepare 是否返回 40035001。
+
+### 流式消息：路径参数与示例的 openid
+
+- **位置**：`autogen/api/v2_users_user_openid_stream_messages.post.md` 的「路径参数」与请求示例。
+- **含糊**：路径参数 `user_openid` 的描述是空的；第三个示例（结束片）路径里的 openid 有 44 位，前两个示例与真实的 `user_openid` 都是 32 位。
+- **当前做法**：按单聊发消息接口理解为用户的 `user_openid`，`message.reply_stream()` 取 `message.user_openid`。
+- **怎么测**：实测用例 `tests/live/test_live_bot.py::test_stream_reply`。
+
+### 流式消息：`content_raw` 说是 Markdown，`content_type` 却可以是 text
+
+- **位置**：同上，请求体的 `content_type` 与 `content_raw` 两行。
+- **矛盾**：`content_type` 可选 `text` / `markdown`，`content_raw` 的描述却是「Markdown 格式的文本内容」。
+- **当前做法**：`markdown=True`（默认）发 `content_type=markdown`，`markdown=False` 发 `text`，`content_raw` 原样填调用方的文字。
+- **怎么测**：用 `reply_stream(markdown=False)` 发一段带 `**` 的文字，看是否按原文显示。
+
+### 流式消息：各分片的 `msg_seq`、`index` 与结束分片
+
+- **位置**：同上，请求体与三个请求示例。
+- **含糊**：`msg_seq` 只说「用于去重」，没说同一条流式消息的各分片是否共用一个（三个示例都是 1）；某个分片发送失败后 `index` 该重用还是跳过；结束分片（`input_state=10`）能否不带内容。
+- **当前做法**：所有分片共用第一次取的 `msg_seq`；`index` 每发一个分片加 1，失败的也算，且失败后这条流式消息在本地终止；结束分片是 `input_mode=append`、`content_raw=""`。
+- **怎么测**：实测用例 `test_stream_reply`。看两点：结束分片的请求是否成功（不抛 `APIError`）；测试账号的客户端里这条消息是否停止显示「生成中」、正文是否完整。请求成功但客户端仍显示「生成中」，同样算空的结束分片不可用。
+- **不可用时的备选**：结束分片改用 `input_mode=replace`、`content_raw` 带上完整正文（SDK 在本地累计 `append` / `replace` 过的内容，按 `replace` 的语义它一定以已下发的内容开头）；或者每次 `append` 先压住最后一段，到结束时随 `input_state=10` 一起发出（代价是最后一段晚一拍出现）。
+
+### `GET /users/@me`：示例比字段表多出字段
+
+- **位置**：`autogen/api/users_me.get.md`；旧版 `openapi/user/me.md`。
+- **矛盾**：字段表是 `id`、`username`、`avatar`、`bot`、`union_openid`、`union_user_account`，示例另有 `share_url`、`welcome_msg`；旧版示例没有 `bot`。
+- **当前做法**：`BotInfo` 只有 `id` 必填，其余（含示例多出的两个）都是可选。
+- **怎么测**：实测用例 `test_get_me`，看原始响应（`.cache/live/raw/`）里实际有哪些字段。
+
+### 自定义菜单：怎么清空，哪些字段必填
+
+- **位置**：`autogen/api/v2_menu.put.md`。
+- **含糊**：`menu`、`items` 以及菜单项的所有字段都标为选填，错误码表却有「必填字段缺失」（40030016）；也没说怎么清空菜单。
+- **当前做法**：工厂方法总是填 `name`、`type` 与对应类型的字段；`client.menu.set([])` 发 `{"menu": {"items": []}}`。
+- **怎么测**：在征得同意后，于测试机器人上 `set([])`，看菜单是否消失（会影响所有用户）。
+
+### 指令面板：请求里的 `panel.version` 与修改时的备注
+
+- **位置**：`autogen/api/v2_panels.post.md`、`autogen/api/v2_panels_panel_id.put.md` 的 `Panel`。
+- **含糊**：请求体的 `panel.version` 只写「当前版本号」，没说是否用于并发校验；修改接口说「覆盖原有的面板元素列表和备注」，没说不传 `remark` 时备注是清空还是保留。
+- **当前做法**：不发送 `version`；`update()` 不传 `remark` 时请求里没有它，docstring 提示备注可能被清空。
+- **怎么测**：实测用例 `test_panel_lifecycle` 之外，再修改一次不带 `remark`，用 `get()` 看备注。
 
 ## 已确认
 

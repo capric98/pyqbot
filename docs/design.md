@@ -119,6 +119,14 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
   - **重试**：只有 PUT 与 `upload_part_finish` 重试（平台为分片下发了 `upload_config`；预上传与合并照常不重试），两者各自计时。只重试临时性失败：`NetworkError`、HTTP 5xx 或 429、`err_code` 40093001（「请重试」）。每次失败后等 `retry_delay` 秒再试；等完会超过从这一步首次尝试算起的 `retry_timeout` 秒就不再重试，抛出最后一次的异常。其它失败（如对象存储 403 签名失效）立即抛出。
 - **对象存储的 PUT**：`HTTP.put_presigned(url, content, *, content_type=None)` 自己构造 `httpx2.Request`，经 `client.http_client` 的 `send()` 发出：不合并客户端默认的 headers、cookies、params（params 会替换掉签名查询串），`auth=None` 关掉客户端的鉴权，不跟随重定向，显式传超时；不拼 `base_url`、不解析响应体，返回 2xx 的响应（素材库要读 `ETag`）。错误语义同 `request()`：拿不到响应抛 `NetworkError`（两者共用 `_network_error()`），地址解析不了也是；非 2xx 抛 `APIError`（`err_code`、`trace_id` 为 `None`，文案附上对象存储 XML 里的 `<Code>`）。预签名地址的查询串是临时签名，按凭证对待：文案只写 `PUT scheme://host/path`；脱敏时在凭证之外再替换整个地址、查询串和其中不短于 8 个字符的参数值（编码前后两种写法），异常链里出现它们就整条丢掉；持有预签名地址的模型（含公开的 `MediaImage.preview_url`）把它列进 `_secret_fields`。SDK 不改动第三方库的 logger：调用方自己开启 httpx2 的 INFO 日志时，日志里会有预签名地址（短期有效，只对这一次上传有效）。
 - **素材库**（`_api/images.py`，挂成 `client.images`，属于机器人本身）：`upload(*, path, data, file_name)` 返回 `MediaImage`，`iter_images()`，`delete(image)`。Content-Type 由扩展名决定（png、jpg/jpeg、gif、webp），其它扩展名抛 `ValueError`；大小与数量上限不在本地检查，由平台在 prepare 时拒绝，所以先流式算哈希，prepare 通过后才把整个文件读进内存 PUT。`complete` 的 `md5` 取 PUT 响应的 `ETag`（去掉引号），没有时退回本地算的 MD5。列表的 `total` 暂不暴露。
+- **机器人自身**：只关于这个机器人、没有可以归组的资源的接口直接挂在 `Client` 上：`get_me()`（`GET /users/@me`）、`generate_share_link()`（`POST /v2/generate_url_link`，只返回链接字符串）。机器人全局的配置有自己的资源，仍按约定 5 分组：`client.menu`（单聊自定义菜单，`get()` / `set(items)`）、`client.panels`（指令面板）。
+- **菜单与面板的模型**：`MenuItem`、`PanelItem` 等同时用于解码与请求体（继承 `RequestModel`、不在 `__post_init__` 里校验，所以取回的内容可以原样设置回去，未知的 `type` 也不会让解码失败）。数量、长度、https 由平台检查（错误码 400300xx），本地只拦平台会静默忽略的组合：面板的 `user_openids` 只能配 c2c、`group_openids` 只能配 group。`create()` 传了关联对象即 `target_type=specific`，否则为 `all`；增删关联对象是 `add_targets()` / `remove_targets()`，`op` 不对外。
+- **流式消息**（只有单聊）：`client.users.stream_message(openid, *, reply_to, markdown=True)` 与 `C2CMessage.reply_stream()` 返回 `StreamMessage`，不发请求；`async with` 体里 `await stream.append(text)` / `replace(full_text)` 每次发一个分片，退出时发结束分片。
+  - 分片的填法：`index` 从 0 起每发一个分片（含结束分片，发送失败的也算）加 1；`stream_msg_id` 第一个分片不填，之后填第一个分片响应的 `id`；`msg_id` / `event_id` 与 `msg_seq` 在第一个分片时经 `reply_fields()` 取一次，所有分片共用，所以整条流式消息只占用回复对象的一个 `msg_seq`（文档示例如此，见 `errata.md`）。同一个对象的分片用锁串行发出。
+  - `append("")` 不发请求。`append()` 与 `replace()` 可以混用，每个分片带自己的 `input_mode`。结束分片是 `input_mode=append`、`content_raw=""`、`input_state=10`；一个分片也没发过时退出不发任何请求。
+  - `async with` 体里抛 `Exception` 时仍发结束分片（免得用户那边一直显示生成中），结束分片失败只记 WARNING，原异常照常抛出；被取消等 `BaseException` 不发，不拖住取消。
+  - 分片发送失败（含请求在途时被取消）后平台状态未知，这条流式消息就此终止：之后 `append()` / `replace()` 抛 `RuntimeError`，退出时不再发结束分片。还在等锁时被取消的调用什么也没发，不占 `index`，也不影响这条流。结束后再 `append()` 也抛 `RuntimeError`；`finish()` 可重复调用。
+  - 每个分片的响应是 `SentStreamChunk`（`SentMessage` 的子类，多一个 `remain_msg_len`），经 `stream.last_sent` 取最近一个；SDK 不按 `remain_msg_len` 做任何判断。`is_wakeup` 暂不提供（与发消息页的说法冲突，见 `errata.md`）。
 
 ## 网关连接（已落地）
 
@@ -208,8 +216,8 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 骨架已经打通：凭证、请求层、网关连接、事件分发、`Bot.start()` / `run()` 都已落地，单聊消息能收能回。剩下的主要是按现有写法铺开：
 
 - **其余事件**：单聊、群聊的事件（好友增删、主动消息开关、机器人进出群、群成员与入群申请、全量群消息、订阅消息授权）和 `INTERACTION_CREATE` 已落地，见「事件」。剩下频道的事件，照「加一种事件」的步骤做；频道的互动回复要补上 `Interaction.reply()` 的频道分支。
-- **其余接口**：`autogen/api/` 下的群管理、用户、面板等，以及 `server-inter/channel/` 下的频道接口，照约定 5 按资源分组。
-- **其它消息类型**（已落地）：Markdown、键盘、富媒体、卡片、引用、正在输入、互动召回、撤回，见「请求层与接口分组」。剩下：流式消息（`v2_users_user_openid_stream_messages`）；文本里的 `<qqbot-at-user>` 等交互标签（`trans/text-chain.md`）现在由调用方自己拼。
+- **其余接口**：`autogen/api/` 下的群管理、用户等，以及 `server-inter/channel/` 下的频道接口，照约定 5 按资源分组。机器人自身、分享链接、自定义菜单、指令面板已落地。
+- **其它消息类型**（已落地）：Markdown、键盘、富媒体、卡片、引用、正在输入、互动召回、撤回、流式消息，见「请求层与接口分组」。剩下：文本里的 `<qqbot-at-user>` 等交互标签（`trans/text-chain.md`）现在由调用方自己拼。
 - **富媒体上传与素材库**（已落地）：见「请求层与接口分组」，文档出入与待实测项见 `errata.md`，实测用例在 `tests/live/test_live_upload.py`。
 - **Webhook**（未确认）：见上。
 - **待定的语义**：HTTP 202 加 304023 / 304024 表示「已受理、等待审核」，现在按失败抛出，响应体里的 `data.message_audit.audit_id` 也没有带出来；做频道消息时要定下怎么表达（见 `errata.md`）。
