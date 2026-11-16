@@ -189,7 +189,7 @@ class JoinStrategies:
         对应官方接口 `POST /v2/groups/join_approval_strategy/{strategy_id}/execute`。
 
         Raises:
-            APIError: 平台拒绝，例如策略不存在。
+            APIError: 平台拒绝，例如策略不存在；策略停用、机器人不是群管理员时实测报 50105002。
             NetworkError: 没有拿到平台的响应。
             ValueError: `strategy_id` 为空。
             RuntimeError: 客户端已关闭。

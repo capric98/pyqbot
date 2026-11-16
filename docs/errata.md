@@ -432,7 +432,13 @@
 - **位置**：`autogen/api/v2_groups_join_approval_strategy.post.md`、`..._strategy_id.patch.md` 的 `group_ids`；`v2_groups_join_approval_strategy.get.md` 的响应示例；`..._strategy_id_execute.post.md` 的请求示例。
 - **矛盾**：创建与修改都说 `group_ids` 是「QQ 群号列表（uint64）」，列表的响应示例却是打了码的字符串（`"10****499"`）；白名单号码明确要求字符串「避免 JS 精度问题」，群号没有。创建示例带了 `"expire_at": ""`，字段说明是「不传默认一年过期」。执行接口说请求为空，示例是 `{}`。
 - **当前做法**：请求里 `group_ids` 发整数；响应里的 `JoinStrategy.group_ids` 是 `tuple[int | str, ...]`，原样保留。不传 `expire_at` 时不发这个键。执行接口发 `{}`。
-- **怎么测**：实测用例 `test_join_strategy_lifecycle` 用 `group_openids` 创建；要确认 `group_ids` 须用户另给一个测试群的群号，看创建能否成功、列表里返回什么类型、是否打码。
+- **已知**（2026-11-16，`test_join_strategy_lifecycle`，机器人在测试群里不是管理员）：
+  - 用 `group_openids` 创建停用的策略、改备注、加删白名单都被接受。
+  - 创建的响应只回了 `strategy_id`、`is_enable`、`expire_at`。
+  - 列表里有 `group_openids`，`group_ids` 是空的；`whitelist_user_count` 是 1（加两个、删一个）。
+  - `expire_at` 按秒原样保存，返回时换成 +08:00；`created_at`、`updated_at` 是 RFC3339。
+  - 执行接口发 `{}`，平台报 50105002「处理失败，请稍后重试」，可能是因为策略停用或机器人不是管理员。
+- **怎么测**：要确认 `group_ids`，须用户另给一个测试群的群号，看创建能否成功、列表里返回什么类型、是否打码；执行接口要机器人是管理员、策略启用时再试。
 
 ### 频道发消息：没有 `msg_seq`
 

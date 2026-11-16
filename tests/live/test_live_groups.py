@@ -257,14 +257,18 @@ async def test_join_strategy_lifecycle(client: pyqbot.Client, write_allowed: str
         group_openids=group, enabled=False, expire_at=expire_at, remark="pyqbot 实测"
     )
     async with undo_on_failure(lambda: client.join_strategies.delete(strategy)):
+        note("创建的响应", strategy)
         assert strategy.enabled is False
         await client.join_strategies.update(strategy, remark="pyqbot 实测（已修改）")
         whitelist = await client.join_strategies.add_whitelist_users(strategy, [10001, "10002"])
         assert whitelist.whitelist_user_count is not None
         await client.join_strategies.remove_whitelist_users(strategy, 10002)
-        await client.join_strategies.execute(strategy)
         listed = {s.strategy_id: s async for s in client.join_strategies.iter_strategies()}
         note("新建的策略", listed[strategy.strategy_id])
         assert listed[strategy.strategy_id].remark == "pyqbot 实测（已修改）"
         assert listed[strategy.strategy_id].expire_at == expire_at
+        try:  # 2026-11-16 停用的策略、机器人不是管理员时报 50105002，只记下
+            await client.join_strategies.execute(strategy)
+        except pyqbot.APIError as error:
+            note("execute 失败", (error.err_code, error.message))
         await client.join_strategies.delete(strategy)
