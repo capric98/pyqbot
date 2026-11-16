@@ -347,47 +347,70 @@ async def test_markdown_showcase_stream(app_id: str, app_secret: str, openid: st
     """测试用户发「开始」后，像大模型逐段生成那样流式回复一段覆盖各种 Markdown 语法的内容。
 
     看客户端里标题、文字样式、列表、任务列表、引用、代码块、表格、LaTeX 公式、链接、图片、脚注、HTML 标签、
-    分割线各自怎么渲染（文档只列了其中一部分）。`LIVE_MARKDOWN_COMPARE=1` 时，流式结束后再用普通 Markdown
-    消息被动回复一遍同样的内容，对比两种渲染。分片数与 `remain_msg_len` 记在 `bot.txt`。
+    分割线各自怎么渲染（文档只列了其中一部分）。内容按每 0.05 秒 4～12 字产生，`LIVE_STREAM_COALESCE=0` 时
+    逐片发送，否则用默认的合并分片；实际发出的请求数、每个请求的往返与总时长记在 `bot.txt`。
+    `LIVE_MARKDOWN_COMPARE=1` 时，流式结束后再用普通 Markdown 消息被动回复一遍同样的内容，对比两种渲染。
     """
     require_flag("LIVE_GATEWAY")
     wait_seconds = float(os.environ.get("LIVE_WAIT_SECONDS", "0"))
     compare = os.environ.get("LIVE_MARKDOWN_COMPARE") == "1"
-    bot = pyqbot.Bot(app_id, app_secret)
+    coalesce = os.environ.get("LIVE_STREAM_COALESCE") != "0"
     outcome: dict[str, object] = {}
+    loop = asyncio.get_running_loop()
+    started: dict[int, float] = {}
+    took: list[float] = []
 
-    @bot.on_c2c_message
-    async def start(message: pyqbot.C2CMessage) -> None:
-        if message.user_openid != openid or message.content.strip() != "开始":
-            return
-        pieces = llm_like_pieces(MARKDOWN_SHOWCASE, random.Random(0))
-        remains: list[int | None] = []
-        try:
-            async with message.reply_stream() as stream:
-                for piece in pieces:
-                    await stream.append(piece)
-                    if stream.last_sent is not None:
-                        remains.append(stream.last_sent.remain_msg_len)
-                    await asyncio.sleep(0.05)
-            outcome["stream"] = f"被接受：{len(pieces)} 片，共 {len(MARKDOWN_SHOWCASE)} 字"
-        except pyqbot.APIError as error:
-            outcome["stream"] = (error.err_code, error.message, f"第 {len(remains) + 1} 片失败")
-        outcome["remain_msg_len"] = sorted({r for r in remains if r is not None})
-        if compare:
+    async def on_request(request: httpx2.Request) -> None:
+        if request.url.path.endswith("/stream_messages"):
+            started[id(request)] = loop.time()
+
+    async def on_response(response: httpx2.Response) -> None:
+        sent_at = started.pop(id(response.request), None)
+        if sent_at is not None:
+            took.append(loop.time() - sent_at)
+
+    hooks = {"request": [on_request], "response": [on_response]}
+    limits = httpx2.Limits(keepalive_expiry=60)  # 同 SDK 自建的客户端
+    async with httpx2.AsyncClient(event_hooks=hooks, limits=limits) as http_client:
+        bot = pyqbot.Bot(app_id, app_secret, http_client=http_client)
+
+        @bot.on_c2c_message
+        async def start(message: pyqbot.C2CMessage) -> None:
+            if message.user_openid != openid or message.content.strip() != "开始":
+                return
+            pieces = llm_like_pieces(MARKDOWN_SHOWCASE, random.Random(0))
+            began = loop.time()
             try:
-                await message.reply(markdown=MARKDOWN_SHOWCASE)
-                outcome["plain_markdown"] = "被接受"
+                async with message.reply_stream(coalesce=coalesce) as stream:
+                    for piece in pieces:
+                        await stream.append(piece)
+                        await asyncio.sleep(0.05)
+                outcome["stream"] = f"被接受：{len(pieces)} 段内容，共 {len(MARKDOWN_SHOWCASE)} 字"
             except pyqbot.APIError as error:
-                outcome["plain_markdown"] = (error.err_code, error.message)
-        await bot.close()
+                outcome["stream"] = (error.err_code, error.message)
+            ordered = sorted(took)
+            outcome["timing"] = (
+                f"{'合并' if coalesce else '逐片'}：总共 {loop.time() - began:.1f} 秒，"
+                f"实际 {len(took)} 个请求；往返 最短 {ordered[0]:.2f}、中位 "
+                f"{ordered[len(ordered) // 2]:.2f}、最长 {ordered[-1]:.2f} 秒"
+                if ordered
+                else "没有请求"
+            )
+            if compare:
+                try:
+                    await message.reply(markdown=MARKDOWN_SHOWCASE)
+                    outcome["plain_markdown"] = "被接受"
+                except pyqbot.APIError as error:
+                    outcome["plain_markdown"] = (error.err_code, error.message)
+            await bot.close()
 
-    async with bot:
-        try:
-            async with asyncio.timeout(wait_seconds):
-                await bot.start()
-        except TimeoutError:
-            outcome["timeout"] = f"{wait_seconds} 秒内没有收到「开始」"
-        note(bot, f"Markdown 展示：{outcome}")
+        async with bot:
+            try:
+                async with asyncio.timeout(wait_seconds):
+                    await bot.start()
+            except TimeoutError:
+                outcome["timeout"] = f"{wait_seconds} 秒内没有收到「开始」"
+            note(bot, f"Markdown 展示：{outcome}")
 
     assert "stream" in outcome, outcome
 
