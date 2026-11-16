@@ -181,6 +181,36 @@ def test_nested_models_are_cleaned_field_by_field() -> None:
     assert decode(raw, Profile).owner == User(id="u", union_openid="x")
 
 
+def test_models_inside_tuples_are_cleaned_one_by_one() -> None:
+    raw = json.dumps(
+        {
+            "openid": "g",
+            "members": [
+                {"id": "u1", "role": 2, "joined_at": "2026-07-21T02:30:00Z", "nickname": 5},
+                {"id": 1, "role": 2, "joined_at": "2026-07-21T02:30:00Z"},  # 必填字段不符
+                "不是对象",
+                {"id": "u2", "role": 2, "joined_at": "2026-07-21T02:30:00Z", "unionOpenid": "x"},
+            ],
+        }
+    )
+
+    # 坏的次要字段退回默认值，仍不合法的元素只丢掉自己。
+    assert decode(raw, Group).members == (
+        MEMBER,
+        Member(
+            id="u2",
+            role=Role.ADMIN,
+            joined_at=datetime(2026, 7, 21, 2, 30, tzinfo=UTC),
+            union_openid="x",
+        ),
+    )
+
+
+def test_tuples_of_non_models_and_non_lists_are_left_to_the_field_rule() -> None:
+    assert decode(b'{"id": "p", "tags": ["a", 1]}', Profile) == Profile(id="p")
+    assert decode(b'{"openid": "g", "members": {}}', Group) == Group(openid="g")
+
+
 @pytest.mark.parametrize("raw", [b'{"age": 3}', b'{"id": 1}', b"[]", b"not json"])
 def test_required_fields_still_fail(raw: bytes) -> None:
     with pytest.raises(msgspec.DecodeError):

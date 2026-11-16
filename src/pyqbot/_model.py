@@ -1,7 +1,8 @@
 """数据模型与枚举的内部基类，以及宽容的 JSON 解码。"""
 
 import enum
-from typing import Any, ClassVar, Self, cast, dataclass_transform, get_args
+from types import UnionType
+from typing import Any, ClassVar, Self, cast, dataclass_transform, get_args, get_origin
 
 import msgspec
 
@@ -96,7 +97,7 @@ def decode[T](data: bytes | str, type_: type[T]) -> T:
 
 
 def _drop_invalid_optional(obj: object, model: type[Model]) -> object:
-    """去掉 `obj` 里类型不符的可选字段，嵌套的模型逐层处理。"""
+    """去掉 `obj` 里类型不符的可选字段，嵌套的模型与模型元组逐层处理。"""
     if not isinstance(obj, dict):
         return obj
     values = cast(dict[str, object], obj)
@@ -104,13 +105,43 @@ def _drop_invalid_optional(obj: object, model: type[Model]) -> object:
     for info in msgspec.structs.fields(model):
         if info.encode_name not in values:
             continue
-        value = values[info.encode_name]
-        for nested in get_args(info.type) or (info.type,):
-            if isinstance(nested, type) and issubclass(nested, Model):
-                value = cleaned[info.encode_name] = _drop_invalid_optional(value, nested)
+        value = cleaned[info.encode_name] = _clean(values[info.encode_name], info.type)
         try:
             msgspec.convert(value, info.type)
         except msgspec.ValidationError:
             if not info.required:
                 del cleaned[info.encode_name]
     return cleaned
+
+
+def _clean(value: object, type_: object) -> object:
+    """按 `type_` 清理 `value`：模型逐字段清理；`tuple[模型, ...]` 逐个元素清理，仍不合法的元素单独丢掉。"""
+    if get_origin(type_) is UnionType:
+        for option in get_args(type_):
+            value = _clean(value, option)
+        return value
+    item_type = _model_tuple_item(type_)
+    if item_type is None:
+        if isinstance(type_, type) and issubclass(type_, Model):
+            return _drop_invalid_optional(value, type_)
+        return value
+    if not isinstance(value, list):
+        return value
+    kept: list[object] = []
+    for item in cast(list[object], value):
+        item = _drop_invalid_optional(item, item_type)
+        try:
+            msgspec.convert(item, item_type)
+        except msgspec.ValidationError:
+            continue
+        kept.append(item)
+    return kept
+
+
+def _model_tuple_item(type_: object) -> type[Model] | None:
+    """`type_` 是 `tuple[M, ...]` 且 `M` 是模型时返回 `M`。"""
+    args = get_args(type_)
+    if get_origin(type_) is not tuple or len(args) != 2 or args[1] is not Ellipsis:
+        return None
+    item = args[0]
+    return item if isinstance(item, type) and issubclass(item, Model) else None

@@ -277,10 +277,34 @@ def test_secondary_fields_of_the_wrong_type_fall_back_to_defaults() -> None:
     assert message.author == pyqbot.GroupMember()
     assert message.member_openid is None
     assert (message.content, message.timestamp, message.message_type) == ("", None, None)
-    # 宽容解码不逐个处理元组里的模型：有一项不符，整个元组退回默认值。
-    assert (message.attachments, message.mentions) == ((), ())
+    # 元组里的模型逐个清理：附件只丢掉坏字段；mentions 本身不是列表，退回默认值。
+    assert message.attachments == (pyqbot.MessageAttachment(),)
+    assert message.mentions == ()
     assert message.message_scene is not None
     assert (message.message_scene.source, message.message_scene.ext) == (None, ())
+
+
+def test_bad_fields_inside_attachments_and_elements_drop_only_themselves() -> None:
+    # 评审给出的例子：坏的只有 width 与 author.username。
+    data = {
+        "id": "m",
+        "author": {"user_openid": "u"},
+        "attachments": [
+            {"url": "https://example.invalid/1", "width": "bad"},
+            {"url": "https://example.invalid/2"},
+        ],
+        "msg_elements": [{"content": "有效引用正文", "author": {"username": 42}}],
+    }
+    message = dispatch_of("C2C_MESSAGE_CREATE", data).decode_data(pyqbot.C2CMessage)
+
+    assert message.attachments == (
+        pyqbot.MessageAttachment(url="https://example.invalid/1"),
+        pyqbot.MessageAttachment(url="https://example.invalid/2"),
+    )
+    [element] = message.msg_elements
+    assert element.content == "有效引用正文"
+    assert element.author is not None
+    assert element.author.username is None
 
 
 def test_unknown_message_type_and_fields_are_tolerated() -> None:
