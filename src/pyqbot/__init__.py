@@ -5,7 +5,7 @@ from importlib.metadata import version
 from ._bot import Bot
 from ._client import Client
 from ._config import Config
-from ._errors import APIError, GatewayError, NetworkError, PayloadError, QQBotError
+from ._errors import APIError, GatewayError, NetworkError, QQBotError
 from ._gateway.intents import Intents
 from ._models.message import (
     C2CMessage,
@@ -32,7 +32,6 @@ __all__ = [
     "Intents",
     "MessageAttachment",
     "NetworkError",
-    "PayloadError",
     "QQBotError",
     "ReceivedMessageType",
     "SentMessage",

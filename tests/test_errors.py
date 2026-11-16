@@ -1,6 +1,7 @@
 import pytest
 
 import pyqbot
+from pyqbot._errors import PayloadError
 from pyqbot._redact import redact, safe_cause
 
 
@@ -33,7 +34,7 @@ def test_api_error_adds_status_code() -> None:
 
 
 def test_payload_error_is_a_separate_kind_of_failure() -> None:
-    error = pyqbot.PayloadError("无法解码")
+    error = PayloadError("无法解码")
 
     assert isinstance(error, pyqbot.QQBotError)
     assert not isinstance(error, pyqbot.APIError | pyqbot.NetworkError)

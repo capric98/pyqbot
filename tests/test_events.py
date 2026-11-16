@@ -11,6 +11,7 @@ import msgspec
 import pytest
 
 import pyqbot
+from pyqbot._errors import PayloadError
 from pyqbot._gateway.payload import GatewayPayload, decode_payload
 from pyqbot._models.event import Event, ReceivedMessage, bind_client, next_msg_seq
 
@@ -328,7 +329,7 @@ def test_unknown_message_type_and_fields_are_tolerated() -> None:
 def test_message_without_what_reply_needs_is_rejected(
     event_type: type[pyqbot.C2CMessage | pyqbot.GroupMessage], data: object
 ) -> None:
-    with pytest.raises(pyqbot.PayloadError):
+    with pytest.raises(PayloadError):
         dispatch_of(event_type.event_name, data).decode_data(event_type)
 
 

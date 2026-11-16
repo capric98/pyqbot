@@ -72,9 +72,9 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
   QQBotError        基类：message、err_code、trace_id（后两者可为 None）
   ├── APIError      平台返回了失败：另带 status_code；可按需再细分
   ├── NetworkError  没拿到响应：连接失败、超时
-  ├── PayloadError  网关下发的一帧解不开：只丢弃这一帧，连接照常
   └── GatewayError  网关被关闭且不可恢复：err_code 为关闭码（有的话）
   ```
+  另有内部的 `PayloadError`（不导出）：网关下发的一帧解不开。SDK 自己接住并丢弃这一帧，调用方见不到；等有公共接口会把它抛给调用方时（如 Webhook）再决定导出与命名。
 - **`pyqbot.Config`**：见上。
 
 ## 请求层与接口分组（已落地）

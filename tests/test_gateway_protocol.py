@@ -3,6 +3,7 @@ import json
 import pytest
 
 import pyqbot
+from pyqbot._errors import PayloadError
 from pyqbot._gateway.close_codes import CloseAction, classify_close_code
 from pyqbot._gateway.payload import (
     READY_EVENT,
@@ -155,7 +156,7 @@ DEEP = "[" * 100_000 + "]" * 100_000
     ["not json", "[]", '{"d": {}}', '{"op": "1"}', '{"op": 1, "s": "x"}', b"\xff", DEEP],
 )
 def test_malformed_frames_raise_payload_error(frame: str | bytes) -> None:
-    with pytest.raises(pyqbot.PayloadError, match="无法解码网关 payload"):
+    with pytest.raises(PayloadError, match="无法解码网关 payload"):
         decode_payload(frame)
 
 
@@ -163,7 +164,7 @@ def test_malformed_frames_raise_payload_error(frame: str | bytes) -> None:
 def test_data_of_the_wrong_shape_raises_payload_error(d: str) -> None:
     payload = decode_payload(f'{{"op": 10, "d": {d}}}')
 
-    with pytest.raises(pyqbot.PayloadError, match="无法解码"):
+    with pytest.raises(PayloadError, match="无法解码"):
         payload.decode_data(Hello)
 
 
@@ -199,7 +200,7 @@ def test_ready_tolerates_minor_fields_of_the_wrong_type(d: object, expected: Rea
 def test_ready_without_a_usable_session_id_fails(d: object) -> None:
     payload = decode_payload(json.dumps({"op": 0, "t": "READY", "d": d}))
 
-    with pytest.raises(pyqbot.PayloadError):
+    with pytest.raises(PayloadError):
         payload.decode_data(Ready)
 
 

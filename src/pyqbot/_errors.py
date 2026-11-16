@@ -58,7 +58,7 @@ class NetworkError(QQBotError):
 
 
 class PayloadError(QQBotError):
-    """网关下发的一帧数据无法解码。只影响这一帧，不代表连接不可用。"""
+    """网关下发的一帧数据无法解码。内部异常，不导出：SDK 接住后丢弃这一帧，调用方见不到。"""
 
 
 class GatewayError(QQBotError):

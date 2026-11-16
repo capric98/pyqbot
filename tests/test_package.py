@@ -11,3 +11,9 @@ def test_every_name_in_all_is_exported() -> None:
     missing = [name for name in pyqbot.__all__ if not hasattr(pyqbot, name)]
 
     assert missing == []
+
+
+def test_frame_decoding_error_stays_internal() -> None:
+    # 坏帧由 SDK 自己丢弃，调用方接不到这个异常，导出了只会误导。
+    assert "PayloadError" not in pyqbot.__all__
+    assert not hasattr(pyqbot, "PayloadError")
