@@ -31,6 +31,20 @@ class OpenIntEnum(enum.IntEnum):
         return member
 
 
+class OpenStrEnum(enum.StrEnum):
+    """容忍未知取值的字符串枚举，语义与 `OpenIntEnum` 相同。"""
+
+    @classmethod
+    def _missing_(cls, value: object) -> Self | None:
+        if not isinstance(value, str):
+            return None
+        # 不缓存，理由同 OpenIntEnum。
+        member = str.__new__(cls, value)
+        member._name_ = UNKNOWN_MEMBER_NAME
+        member._value_ = value
+        return member
+
+
 # msgspec 的 kw_only 只对声明它的那个类自己的字段生效，不会被子类继承，所以用元类改默认值。
 @dataclass_transform(kw_only_default=True, frozen_default=True, field_specifiers=(msgspec.field,))
 class _ModelMeta(msgspec.StructMeta):
@@ -78,6 +92,10 @@ class Model(msgspec.Struct, metaclass=_ModelMeta):
             return super().__repr__()
         fields = ", ".join(f"{name}={value!r}" for name, value in self.__rich_repr__())
         return f"{type(self).__name__}({fields})"
+
+
+class RequestModel(Model, omit_defaults=True):
+    """由调用方构造、编码进请求体的模型：取默认值的字段不编码，`to_dict()` 里也没有。"""
 
 
 def decode[T](data: bytes | str, type_: type[T]) -> T:

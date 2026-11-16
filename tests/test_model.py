@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import msgspec
 import pytest
 
-from pyqbot._model import Model, OpenIntEnum, decode
+from pyqbot._model import Model, OpenIntEnum, OpenStrEnum, RequestModel, decode
 
 
 class Role(enum.IntEnum):
@@ -117,6 +117,73 @@ def test_values_equal_to_a_member_follow_the_standard_library() -> None:
 def test_decoding_checks_the_json_type_strictly(raw: bytes) -> None:
     with pytest.raises(msgspec.ValidationError):
         msgspec.json.decode(raw, type=Message)
+
+
+class Scope(OpenStrEnum):
+    C2C = "c2c"
+    GROUP = "group"
+
+
+class Operation(Model):
+    scope: Scope
+
+
+def test_open_str_enum_decodes_known_values_to_members() -> None:
+    assert msgspec.json.decode(b'{"scope": "group"}', type=Operation).scope is Scope.GROUP
+
+
+def test_open_str_enum_keeps_unknown_values_instead_of_failing() -> None:
+    operation = msgspec.json.decode(b'{"scope": "guild"}', type=Operation)
+
+    assert isinstance(operation.scope, Scope)
+    assert (operation.scope.name, operation.scope.value) == ("UNKNOWN", "guild")
+    assert operation.scope == "guild"
+    assert operation.scope != Scope.C2C
+    assert f"{operation.scope}" == "guild"
+    assert operation.to_dict() == {"scope": "guild"}
+    assert decode(b'{"scope": "guild"}', Operation) == operation
+
+
+def test_unknown_str_values_are_not_registered_as_members() -> None:
+    assert Scope("guild") == Scope("guild")
+    assert repr(Scope("guild")) == "<Scope.UNKNOWN: 'guild'>"
+    assert "guild" not in Scope
+    assert list(Scope) == [Scope.C2C, Scope.GROUP]
+    assert "guild" not in Scope._value2member_map_  # pyright: ignore[reportPrivateUsage]  验证不缓存
+
+
+@pytest.mark.parametrize("value", [1, None, b"c2c"])
+def test_open_str_enum_rejects_values_of_the_wrong_type(value: object) -> None:
+    with pytest.raises(ValueError, match="is not a valid Scope"):
+        Scope(value)
+
+
+@pytest.mark.parametrize("raw", [b'{"scope": 1}', b'{"scope": null}'])
+def test_str_decoding_checks_the_json_type_strictly(raw: bytes) -> None:
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(raw, type=Operation)
+
+
+# ---- 请求模型 ----
+
+
+class Body(RequestModel):
+    name: str
+    note: str | None = None
+    tags: tuple[str, ...] = ()
+    flag: bool | None = None
+
+
+class Wrapper(RequestModel):
+    body: Body
+
+
+def test_request_models_leave_out_fields_at_their_defaults() -> None:
+    wrapper = Wrapper(body=Body(name="n", flag=False))
+
+    assert msgspec.json.encode(wrapper) == b'{"body":{"name":"n","flag":false}}'
+    assert wrapper.to_dict() == {"body": {"name": "n", "flag": False}}
+    assert Body(name="n", tags=("a",)).to_dict() == {"name": "n", "tags": ["a"]}
 
 
 # ---- 凭证字段 ----
