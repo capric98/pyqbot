@@ -157,6 +157,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
    - 包装底层异常时写 `raise ... from _redact.safe_cause(exc, *secrets)`：traceback 会连异常链一起打印，链上出现凭证时整条链丢掉。
    - 持有凭证的 `Model` 在类体里写 `_secret_fields = frozenset({"token"})`，这些字段在 `repr()` 与 `__rich_repr__()` 里显示为 `***`（字段名写错会在类创建时报错）；dataclass 用 `field(repr=False)`。
    - 每处都要有测试，且测试在去掉脱敏后必须失败，例如让替身回显 `app_secret`。
+   - openid（用户、群、群成员）不是凭证，可以出现在异常文案和日志里，例如请求路径。
 
 ## 测试约定
 
