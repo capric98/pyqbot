@@ -274,6 +274,38 @@ def _json_or_none(response: httpx2.Response) -> object:
         return None
 
 
+async def test_bot_replies_to_a_c2c_message(app_id: str, app_secret: str) -> None:
+    """完整链路：`Bot` 连上网关，收到测试用户的一条单聊消息后回复它，然后退出。
+
+    只回复 `TEST_USER_OPENID` 发来的消息，其他人的消息只记一笔、不回复。
+    """
+    require_flag("LIVE_GATEWAY")
+    test_user = os.environ.get("TEST_USER_OPENID", "")
+    wait_seconds = float(os.environ.get("LIVE_WAIT_SECONDS", "0"))
+    bot = pyqbot.Bot(app_id, app_secret)
+    outcome: dict[str, object] = {}
+
+    @bot.on_c2c_message
+    async def reply(message: pyqbot.C2CMessage) -> None:
+        if message.user_openid != test_user:
+            note("bot_reply.ignored", "消息不是测试用户发来的，没有回复")
+            return
+        sent = await message.reply(f"pyqbot 收到：{message.content}")
+        outcome["sent"] = outline(sent.to_dict())
+        save_raw("sent_message", sent.to_dict())
+        await bot.close()
+
+    async with bot:
+        try:
+            async with asyncio.timeout(wait_seconds):
+                await bot.start()
+        except TimeoutError:
+            outcome["timeout"] = f"{wait_seconds} 秒内没有收到测试用户的消息"
+
+    note("bot_reply", outcome)
+    assert "sent" in outcome, outcome
+
+
 async def test_gateway_identify_wait_for_message_then_resume(app_id: str, app_secret: str) -> None:
     require_flag("LIVE_GATEWAY")
     wait_seconds = float(os.environ.get("LIVE_WAIT_SECONDS", "0"))
