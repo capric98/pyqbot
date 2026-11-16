@@ -6,6 +6,7 @@ from ._bot import Bot
 from ._client import Client
 from ._config import Config
 from ._errors import APIError, NetworkError, PayloadError, QQBotError
+from ._gateway.intents import Intents
 
 __version__ = version("pyqbot")
 
@@ -14,6 +15,7 @@ __all__ = [
     "Bot",
     "Client",
     "Config",
+    "Intents",
     "NetworkError",
     "PayloadError",
     "QQBotError",
