@@ -106,24 +106,26 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 | `intents` | `Intents` | Identify 时订阅的事件类别 |
 | `on_dispatch` | `(GatewayPayload) -> None` | 每条 Dispatch（含 READY、RESUMED）调用一次。同步、必须立刻返回；抛出的异常记日志，不影响连接 |
 
-另有 `shard`（原样用于 Identify）、`connect_timeout`（WebSocket 握手超时，传 `config.timeout`，见约定 2）和下文的各个时间参数，默认值就是生产取值。
+另有 `shard`（原样用于 Identify）、`connect_timeout`（WebSocket 握手超时，传 `config.timeout`，见约定 2）和下文的各个时间参数，默认值就是生产取值。`shard` 或时间参数不合法时构造即抛 `ValueError`。
 
-- **`await connection.run()`**：一直运行到 `await connection.close()`（正常返回）或遇到不可恢复的错误（抛 `GatewayError`）。`get_url` / `get_token` 抛 `NetworkError` 时按网络错误退避重试，抛其它异常原样向外抛。`run()` 只能调用一次；`close()` 可重复调用，之后再调 `run()` 立即返回。
+- **`await connection.run()`**：一直运行到 `await connection.close()`（正常返回）或遇到不可恢复的错误（抛 `GatewayError`）。`get_url` / `get_token` 抛 `NetworkError` 时按网络错误退避重试，抛其它异常原样向外抛；连接内部的编程错误也原样抛出，不包成异常组。`run()` 只能调用一次；`close()` 之后再调 `run()` 立即返回。
+- **关闭**：`close()` 可重复、可并发调用，只有第一次触发收尾，其余的等同一次收尾。收尾先等 httpx2 优雅关闭，超过 `close_timeout`（默认 5 秒）就再取消一次强制结束（此时底层连接可能没关干净），所以 `close()` 与 `run()` 一定返回。`run()` 被取消时同样先等收尾，期间再次取消不会打断它，收尾后抛 `CancelledError`。断开重连前关闭旧连接也受 `close_timeout` 限制。
 - **会话状态**：`session_id`（来自 READY）与 `seq`（最近一条已交给 `on_dispatch` 的 `s`，`on_dispatch` 抛异常也算）。有会话就 Resume，没有就 Identify。
 - **断开后怎么办**：
 
   | 情况 | 动作 |
   | --- | --- |
   | 收到关闭码 | 按 `classify_close_code()`：Resume、Identify（清掉会话）或放弃（抛 `GatewayError`，`err_code` 为关闭码） |
-  | 网络错误（含握手被拒）、没有关闭帧、心跳没有应答、收到 OpCode 7 | 重连并 Resume |
+  | 网络错误（含握手被拒）、没有关闭帧、心跳没有应答、发送超时、收到 OpCode 7 | 重连并 Resume |
   | 收到 OpCode 9 | 清掉会话，重连并 Identify；连续 3 次（中间没有 READY / RESUMED）就放弃 |
   | Hello、认证结果超时未到 | 按网络错误处理 |
 
-- **心跳**：认证成功（收到本连接的第一条 Dispatch）后立刻发一次，之后按 Hello 给的周期发送，`d` 为当前的 `seq`。到下一次该发时上一次还没收到应答，就认为连接已死，断开重连。收到服务端的 OpCode 1 立刻补发一次。不用 WebSocket 层的 Ping。
+- **心跳**：认证成功（收到本连接的第一条 Dispatch）后立刻发一次，之后按 Hello 给的周期发送，`d` 为当前的 `seq`。到下一次该发时上一次还没收到应答（包括还没写出去），就认为连接已死，断开重连。收到服务端的 OpCode 1 立刻补发一次。不用 WebSocket 层的 Ping。
+- **发送超时**：httpx2 的写入没有超时，所以心跳、Identify、Resume 的每次发送都受 `send_timeout`（默认 10 秒）限制，超时即认为连接已死。其它发送失败只记日志，断开原因由读循环拿到。WebSocket 关闭阶段的异常不覆盖已拿到的断开原因。
 - **认证超时**：`handshake_timeout` 分别限制等 Hello 和等第一条 Dispatch 的时间。不等 RESUMED：它要在补发完遗漏事件之后才到。
 - **退避**：重连间隔从 1 秒起每次翻倍，上限 60 秒，乘以 [0.5, 1] 的随机抖动；收到 READY 或 RESUMED 后从头算。两次 Identify 至少间隔 5 秒（`/gateway/bot` 的 `max_concurrency` 是每 5 秒可新建的会话数）。
 - **坏帧**：单帧解不开（`PayloadError`）、非文本帧或意料之外的 OpCode，记日志后跳过，不影响连接。
-- **日志**：用标准库 `logging.getLogger("pyqbot")`，内容先脱敏（约定 7）。
+- **日志**：用标准库 `logging.getLogger("pyqbot")`，内容先脱敏（约定 7）。脱敏用这个连接取到过的所有 token（平台可能回显轮换前的），平台给的字符串（事件名、关闭原因、异常文案）一律先脱敏。
 
 ## 事件（已落地）
 
