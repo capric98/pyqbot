@@ -33,7 +33,11 @@ uv run --env-file .env pytest -m live --no-cov  # 实测，须先获用户同意
 - 直接用 3.14 的现代写法（`X | None`、PEP 695 泛型、`match` 等），不为旧版本写兼容代码。
 - 全量类型标注并通过 pyright strict；`Any`、`# type: ignore` 只在写明原因时使用。
 - 文档、注释、docstring、异常与日志文案、提交描述默认用中文（用户另有要求除外）；标识符用英文。
-- 注释只写「为什么」和文档没说清的坑，不复述代码。公共 API 必须有 Google 风格的 docstring，接口封装要注明对应的官方接口，如 `POST /v2/users/{openid}/messages`。
+- 注释与 docstring 要短而够用。判断标准：删掉这句，读者会不会用错、改错，或要重新推导？不会就不写。
+  - 只写代码表达不了的东西：为什么这样做、上游的坑、单位与约束。不复述代码、类型和参数名，不写改动过程。行内注释以两行为限。
+  - 同一件事只说一处：跨模块的决定写在 `docs/design.md`，代码里至多留一句指向它；docstring 说过的，注释不再说。
+  - 从包顶层导出的 API 必须有 Google 风格的 docstring：一句话摘要，加上调用方真正需要的 `Args` / `Raises`。摘要已说清返回值就不写 `Returns`，名字和类型已说清的参数不逐个解释；构造参数写在类的 docstring 里，`__init__` 不再重复。内部函数和类最多一句话。
+  - 接口封装要注明对应的官方接口，如 `POST /v2/users/{openid}/messages`。
 - 运行时依赖越少越好，新增前先征得用户同意。
 
 ## 接口设计
