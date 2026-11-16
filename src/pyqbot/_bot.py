@@ -10,6 +10,54 @@ from ._config import DEFAULT_BASE_URL, DEFAULT_TIMEOUT
 from ._events.dispatcher import Dispatcher, Handler
 from ._gateway.connection import GatewayConnection
 from ._gateway.intents import Intents
+from ._models.audio import (
+    AudioFinish,
+    AudioOffMic,
+    AudioOnMic,
+    AudioOrLiveChannelMemberEnter,
+    AudioOrLiveChannelMemberExit,
+    AudioStart,
+)
+from ._models.forum import (
+    ForumPostCreate,
+    ForumPostDelete,
+    ForumPublishAuditResult,
+    ForumReplyCreate,
+    ForumReplyDelete,
+    ForumThreadCreate,
+    ForumThreadDelete,
+    ForumThreadUpdate,
+    OpenForumPostCreate,
+    OpenForumPostDelete,
+    OpenForumReplyCreate,
+    OpenForumReplyDelete,
+    OpenForumThreadCreate,
+    OpenForumThreadDelete,
+    OpenForumThreadUpdate,
+)
+from ._models.guild import (
+    ChannelCreate,
+    ChannelDelete,
+    ChannelUpdate,
+    GuildCreate,
+    GuildDelete,
+    GuildMemberAdd,
+    GuildMemberRemove,
+    GuildMemberUpdate,
+    GuildUpdate,
+)
+from ._models.guild_message import (
+    ChannelAnyMessage,
+    ChannelMessage,
+    DirectMessage,
+    DirectMessageDelete,
+    MessageAuditPass,
+    MessageAuditReject,
+    MessageDelete,
+    MessageReactionAdd,
+    MessageReactionRemove,
+    PublicMessageDelete,
+)
 from ._models.interaction import Interaction
 from ._models.message import C2CMessage, GroupAnyMessage, GroupMessage
 from ._models.notice import (
@@ -219,6 +267,417 @@ class Bot(Client):
             TypeError: 处理函数不是 `async def` 定义的。
         """
         self._dispatcher.add_handler(Interaction, handler)
+        return handler
+
+    def on_guild_create[F: Handler[GuildCreate]](self, handler: F) -> F:
+        """注册机器人加入频道（`GUILD_CREATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(GuildCreate, handler)
+        return handler
+
+    def on_guild_update[F: Handler[GuildUpdate]](self, handler: F) -> F:
+        """注册频道资料变更（`GUILD_UPDATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(GuildUpdate, handler)
+        return handler
+
+    def on_guild_delete[F: Handler[GuildDelete]](self, handler: F) -> F:
+        """注册频道解散或机器人被移出（`GUILD_DELETE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(GuildDelete, handler)
+        return handler
+
+    def on_channel_create[F: Handler[ChannelCreate]](self, handler: F) -> F:
+        """注册子频道创建（`CHANNEL_CREATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(ChannelCreate, handler)
+        return handler
+
+    def on_channel_update[F: Handler[ChannelUpdate]](self, handler: F) -> F:
+        """注册子频道更新（`CHANNEL_UPDATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(ChannelUpdate, handler)
+        return handler
+
+    def on_channel_delete[F: Handler[ChannelDelete]](self, handler: F) -> F:
+        """注册子频道删除（`CHANNEL_DELETE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(ChannelDelete, handler)
+        return handler
+
+    def on_guild_member_add[F: Handler[GuildMemberAdd]](self, handler: F) -> F:
+        """注册用户加入频道（`GUILD_MEMBER_ADD`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(GuildMemberAdd, handler)
+        return handler
+
+    def on_guild_member_update[F: Handler[GuildMemberUpdate]](self, handler: F) -> F:
+        """注册频道成员资料变更（`GUILD_MEMBER_UPDATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(GuildMemberUpdate, handler)
+        return handler
+
+    def on_guild_member_remove[F: Handler[GuildMemberRemove]](self, handler: F) -> F:
+        """注册用户离开频道（`GUILD_MEMBER_REMOVE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(GuildMemberRemove, handler)
+        return handler
+
+    def on_channel_at_message[F: Handler[ChannelMessage]](self, handler: F) -> F:
+        """注册子频道里 @机器人 的消息（`AT_MESSAGE_CREATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(ChannelMessage, handler)
+        return handler
+
+    def on_channel_message[F: Handler[ChannelAnyMessage]](self, handler: F) -> F:
+        """注册子频道里的全部消息（`MESSAGE_CREATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        仅私域机器人可用。只收 @机器人 的消息用 `on_channel_at_message`，两者互不转发。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(ChannelAnyMessage, handler)
+        return handler
+
+    def on_direct_message[F: Handler[DirectMessage]](self, handler: F) -> F:
+        """注册频道私信（`DIRECT_MESSAGE_CREATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(DirectMessage, handler)
+        return handler
+
+    def on_message_delete[F: Handler[MessageDelete]](self, handler: F) -> F:
+        """注册子频道消息被删除（`MESSAGE_DELETE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        仅私域机器人可用；公域机器人用 `on_public_message_delete`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(MessageDelete, handler)
+        return handler
+
+    def on_public_message_delete[F: Handler[PublicMessageDelete]](self, handler: F) -> F:
+        """注册子频道消息被删除（公域）（`PUBLIC_MESSAGE_DELETE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(PublicMessageDelete, handler)
+        return handler
+
+    def on_direct_message_delete[F: Handler[DirectMessageDelete]](self, handler: F) -> F:
+        """注册频道私信被删除（`DIRECT_MESSAGE_DELETE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(DirectMessageDelete, handler)
+        return handler
+
+    def on_message_reaction_add[F: Handler[MessageReactionAdd]](self, handler: F) -> F:
+        """注册添加表情表态（`MESSAGE_REACTION_ADD`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(MessageReactionAdd, handler)
+        return handler
+
+    def on_message_reaction_remove[F: Handler[MessageReactionRemove]](self, handler: F) -> F:
+        """注册取消表情表态（`MESSAGE_REACTION_REMOVE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(MessageReactionRemove, handler)
+        return handler
+
+    def on_message_audit_pass[F: Handler[MessageAuditPass]](self, handler: F) -> F:
+        """注册消息审核通过（`MESSAGE_AUDIT_PASS`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(MessageAuditPass, handler)
+        return handler
+
+    def on_message_audit_reject[F: Handler[MessageAuditReject]](self, handler: F) -> F:
+        """注册消息审核不通过（`MESSAGE_AUDIT_REJECT`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(MessageAuditReject, handler)
+        return handler
+
+    def on_forum_thread_create[F: Handler[ForumThreadCreate]](self, handler: F) -> F:
+        """注册论坛发表主帖（`FORUM_THREAD_CREATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        仅私域机器人可用。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(ForumThreadCreate, handler)
+        return handler
+
+    def on_forum_thread_update[F: Handler[ForumThreadUpdate]](self, handler: F) -> F:
+        """注册论坛更新主帖（`FORUM_THREAD_UPDATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        仅私域机器人可用。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(ForumThreadUpdate, handler)
+        return handler
+
+    def on_forum_thread_delete[F: Handler[ForumThreadDelete]](self, handler: F) -> F:
+        """注册论坛删除主帖（`FORUM_THREAD_DELETE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        仅私域机器人可用。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(ForumThreadDelete, handler)
+        return handler
+
+    def on_forum_post_create[F: Handler[ForumPostCreate]](self, handler: F) -> F:
+        """注册论坛发表评论（`FORUM_POST_CREATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        仅私域机器人可用。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(ForumPostCreate, handler)
+        return handler
+
+    def on_forum_post_delete[F: Handler[ForumPostDelete]](self, handler: F) -> F:
+        """注册论坛删除评论（`FORUM_POST_DELETE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        仅私域机器人可用。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(ForumPostDelete, handler)
+        return handler
+
+    def on_forum_reply_create[F: Handler[ForumReplyCreate]](self, handler: F) -> F:
+        """注册论坛发表回复（`FORUM_REPLY_CREATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        仅私域机器人可用。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(ForumReplyCreate, handler)
+        return handler
+
+    def on_forum_reply_delete[F: Handler[ForumReplyDelete]](self, handler: F) -> F:
+        """注册论坛删除回复（`FORUM_REPLY_DELETE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        仅私域机器人可用。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(ForumReplyDelete, handler)
+        return handler
+
+    def on_forum_publish_audit_result[F: Handler[ForumPublishAuditResult]](self, handler: F) -> F:
+        """注册论坛发表的审核结果（`FORUM_PUBLISH_AUDIT_RESULT`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        仅私域机器人可用。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(ForumPublishAuditResult, handler)
+        return handler
+
+    def on_open_forum_thread_create[F: Handler[OpenForumThreadCreate]](self, handler: F) -> F:
+        """注册公域论坛发表主帖（`OPEN_FORUM_THREAD_CREATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        文档没有给出它的 Intent 位，SDK 不替你订阅：要收到它，须在构造 `Bot` 时传入完整的 `intents`
+        （传入后不再按处理函数推导）。只注册了这类处理函数又没传时，`start()` 抛 `RuntimeError`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(OpenForumThreadCreate, handler)
+        return handler
+
+    def on_open_forum_thread_update[F: Handler[OpenForumThreadUpdate]](self, handler: F) -> F:
+        """注册公域论坛更新主帖（`OPEN_FORUM_THREAD_UPDATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        文档没有给出它的 Intent 位，SDK 不替你订阅：要收到它，须在构造 `Bot` 时传入完整的 `intents`
+        （传入后不再按处理函数推导）。只注册了这类处理函数又没传时，`start()` 抛 `RuntimeError`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(OpenForumThreadUpdate, handler)
+        return handler
+
+    def on_open_forum_thread_delete[F: Handler[OpenForumThreadDelete]](self, handler: F) -> F:
+        """注册公域论坛删除主帖（`OPEN_FORUM_THREAD_DELETE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        文档没有给出它的 Intent 位，SDK 不替你订阅：要收到它，须在构造 `Bot` 时传入完整的 `intents`
+        （传入后不再按处理函数推导）。只注册了这类处理函数又没传时，`start()` 抛 `RuntimeError`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(OpenForumThreadDelete, handler)
+        return handler
+
+    def on_open_forum_post_create[F: Handler[OpenForumPostCreate]](self, handler: F) -> F:
+        """注册公域论坛发表评论（`OPEN_FORUM_POST_CREATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        文档没有给出它的 Intent 位，SDK 不替你订阅：要收到它，须在构造 `Bot` 时传入完整的 `intents`
+        （传入后不再按处理函数推导）。只注册了这类处理函数又没传时，`start()` 抛 `RuntimeError`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(OpenForumPostCreate, handler)
+        return handler
+
+    def on_open_forum_post_delete[F: Handler[OpenForumPostDelete]](self, handler: F) -> F:
+        """注册公域论坛删除评论（`OPEN_FORUM_POST_DELETE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        文档没有给出它的 Intent 位，SDK 不替你订阅：要收到它，须在构造 `Bot` 时传入完整的 `intents`
+        （传入后不再按处理函数推导）。只注册了这类处理函数又没传时，`start()` 抛 `RuntimeError`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(OpenForumPostDelete, handler)
+        return handler
+
+    def on_open_forum_reply_create[F: Handler[OpenForumReplyCreate]](self, handler: F) -> F:
+        """注册公域论坛发表回复（`OPEN_FORUM_REPLY_CREATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        文档没有给出它的 Intent 位，SDK 不替你订阅：要收到它，须在构造 `Bot` 时传入完整的 `intents`
+        （传入后不再按处理函数推导）。只注册了这类处理函数又没传时，`start()` 抛 `RuntimeError`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(OpenForumReplyCreate, handler)
+        return handler
+
+    def on_open_forum_reply_delete[F: Handler[OpenForumReplyDelete]](self, handler: F) -> F:
+        """注册公域论坛删除回复（`OPEN_FORUM_REPLY_DELETE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        文档没有给出它的 Intent 位，SDK 不替你订阅：要收到它，须在构造 `Bot` 时传入完整的 `intents`
+        （传入后不再按处理函数推导）。只注册了这类处理函数又没传时，`start()` 抛 `RuntimeError`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(OpenForumReplyDelete, handler)
+        return handler
+
+    def on_audio_start[F: Handler[AudioStart]](self, handler: F) -> F:
+        """注册音频开始播放（`AUDIO_START`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(AudioStart, handler)
+        return handler
+
+    def on_audio_finish[F: Handler[AudioFinish]](self, handler: F) -> F:
+        """注册音频播放结束（`AUDIO_FINISH`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(AudioFinish, handler)
+        return handler
+
+    def on_audio_on_mic[F: Handler[AudioOnMic]](self, handler: F) -> F:
+        """注册上麦（`AUDIO_ON_MIC`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(AudioOnMic, handler)
+        return handler
+
+    def on_audio_off_mic[F: Handler[AudioOffMic]](self, handler: F) -> F:
+        """注册下麦（`AUDIO_OFF_MIC`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(AudioOffMic, handler)
+        return handler
+
+    def on_audio_or_live_channel_member_enter[F: Handler[AudioOrLiveChannelMemberEnter]](
+        self, handler: F
+    ) -> F:
+        """注册用户进入音视频或直播子频道（`AUDIO_OR_LIVE_CHANNEL_MEMBER_ENTER`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        文档没有给出它的 Intent 位，SDK 不替你订阅：要收到它，须在构造 `Bot` 时传入完整的 `intents`
+        （传入后不再按处理函数推导）。只注册了这类处理函数又没传时，`start()` 抛 `RuntimeError`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(AudioOrLiveChannelMemberEnter, handler)
+        return handler
+
+    def on_audio_or_live_channel_member_exit[F: Handler[AudioOrLiveChannelMemberExit]](
+        self, handler: F
+    ) -> F:
+        """注册用户离开音视频或直播子频道（`AUDIO_OR_LIVE_CHANNEL_MEMBER_EXIT`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        文档没有给出它的 Intent 位，SDK 不替你订阅：要收到它，须在构造 `Bot` 时传入完整的 `intents`
+        （传入后不再按处理函数推导）。只注册了这类处理函数又没传时，`start()` 抛 `RuntimeError`。
+
+        Raises:
+            TypeError: 处理函数不是 `async def` 定义的。
+        """
+        self._dispatcher.add_handler(AudioOrLiveChannelMemberExit, handler)
         return handler
 
     def _resolve_intents(self) -> Intents:

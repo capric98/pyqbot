@@ -52,7 +52,7 @@ def bind_event_id(event: Event, event_id: str | None) -> None:
 class ReplyTarget(Event):
     """可以被动回复的事件：收到的消息用 `msg_id` 回复，其余事件用 `event_id`。
 
-    场景由子类继承 `C2CReplyTarget`、`GroupReplyTarget` 表明，发消息接口的 `reply_to` 按它限定类型。
+    场景由子类继承 `C2CReplyTarget`、`GroupReplyTarget` 等标记类表明，发消息接口的 `reply_to` 按它限定类型。
     """
 
 
@@ -62,6 +62,14 @@ class C2CReplyTarget(ReplyTarget):
 
 class GroupReplyTarget(ReplyTarget):
     """可以作为 `client.groups.send_message(..., reply_to=...)` 的事件，如 `GroupMessage`。"""
+
+
+class ChannelReplyTarget(ReplyTarget):
+    """可以被动回复到子频道（`POST /channels/{channel_id}/messages`）的事件，如 `ChannelMessage`。"""
+
+
+class DirectMessageReplyTarget(ReplyTarget):
+    """可以被动回复到频道私信（`POST /dms/{guild_id}/messages`）的事件，即 `DirectMessage`。"""
 
 
 class ReceivedMessage(ReplyTarget):

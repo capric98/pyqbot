@@ -6,7 +6,7 @@ import msgspec
 
 from .._gateway.intents import Intents
 from .._model import Model, OpenIntEnum, OpenStrEnum
-from .event import C2CReplyTarget, GroupReplyTarget
+from .event import C2CReplyTarget, ChannelReplyTarget, GroupReplyTarget
 from .message import SentMessage
 from .send import Card, Keyboard, Markdown, Media
 
@@ -160,7 +160,7 @@ _SCENES = {
 }
 
 
-class Interaction(C2CReplyTarget, GroupReplyTarget):
+class Interaction(C2CReplyTarget, GroupReplyTarget, ChannelReplyTarget):
     """用户与机器人的互动，如点击回调按钮、快捷菜单、授权，对应事件 `INTERACTION_CREATE`。
 
     回调按钮与快捷菜单（`type` 为 `INLINE_KEYBOARD`、`CALLBACK_COMMAND`）需要在 3 秒内 `ack()`，
