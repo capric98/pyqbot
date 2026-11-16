@@ -1,8 +1,7 @@
 """群聊接口。"""
 
 from .._http import HTTP, path_segment
-from .._models.event import ReceivedMessage
-from .._models.message import SentMessage
+from .._models.message import GroupMessage, SentMessage
 from .message import send_message
 
 
@@ -17,7 +16,7 @@ class Groups:
         openid: str,
         content: str,
         *,
-        reply_to: ReceivedMessage | None = None,
+        reply_to: GroupMessage | None = None,
     ) -> SentMessage:
         """向群发送一条文本消息。
 

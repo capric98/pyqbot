@@ -1,8 +1,7 @@
 """单聊接口。"""
 
 from .._http import HTTP, path_segment
-from .._models.event import ReceivedMessage
-from .._models.message import SentMessage
+from .._models.message import C2CMessage, SentMessage
 from .message import send_message
 
 
@@ -17,7 +16,7 @@ class Users:
         openid: str,
         content: str,
         *,
-        reply_to: ReceivedMessage | None = None,
+        reply_to: C2CMessage | None = None,
     ) -> SentMessage:
         """向用户发送一条文本消息。
 

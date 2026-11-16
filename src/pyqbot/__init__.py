@@ -7,20 +7,34 @@ from ._client import Client
 from ._config import Config
 from ._errors import APIError, GatewayError, NetworkError, PayloadError, QQBotError
 from ._gateway.intents import Intents
-from ._models.message import SentMessage
+from ._models.message import (
+    C2CMessage,
+    C2CUser,
+    GroupMember,
+    GroupMessage,
+    MessageAttachment,
+    ReceivedMessageType,
+    SentMessage,
+)
 
 __version__ = version("pyqbot")
 
 __all__ = [
     "APIError",
     "Bot",
+    "C2CMessage",
+    "C2CUser",
     "Client",
     "Config",
     "GatewayError",
+    "GroupMember",
+    "GroupMessage",
     "Intents",
+    "MessageAttachment",
     "NetworkError",
     "PayloadError",
     "QQBotError",
+    "ReceivedMessageType",
     "SentMessage",
     "__version__",
 ]

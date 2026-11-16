@@ -1,7 +1,8 @@
 """事件模型的基类。绑定的 `Client` 与回复计数存在实例的 `__dict__` 里，不是字段（见 `docs/design.md`）。"""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
+from .._gateway.intents import Intents
 from .._model import Model
 
 if TYPE_CHECKING:
@@ -13,7 +14,13 @@ _MSG_SEQ_KEY = "_msg_seq"
 
 
 class Event(Model, dict=True):
-    """平台推送的事件。`repr()`、`to_dict()` 与相等性只看字段。"""
+    """平台推送的事件。`repr()`、`to_dict()` 与相等性只看字段。
+
+    能被分发的子类必须给出 `event_name`（Dispatch 的 `t`）与 `intent`（订阅它所需的类别）。
+    """
+
+    event_name: ClassVar[str]
+    intent: ClassVar[Intents]
 
     def _bound_client(self) -> Client:
         """取回分发时绑定的 `Client`，没有绑定时抛 `RuntimeError`；供子类的快捷方法（如 `reply()`）使用。"""
