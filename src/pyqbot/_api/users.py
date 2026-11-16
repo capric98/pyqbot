@@ -130,7 +130,12 @@ class Users:
         await self._http.request("DELETE", message_path(base, message), type_=None)
 
     def stream_message(
-        self, user_openid: str, *, reply_to: C2CReplyTarget, markdown: bool = True
+        self,
+        user_openid: str,
+        *,
+        reply_to: C2CReplyTarget,
+        markdown: bool = True,
+        coalesce: bool = True,
     ) -> StreamMessage:
         """开始一条流式消息：内容分多次发出，用户看到的是同一条消息逐渐变长。只有单聊支持。
 
@@ -143,6 +148,7 @@ class Users:
             user_openid: 用户的 openid。
             reply_to: 被动回复的对象，同 `send_message()`；整条流式消息只占用它的一个 `msg_seq`。
             markdown: 内容按 Markdown 渲染；为 `False` 时按纯文本。
+            coalesce: 上一片还在发送时把之后的内容攒成一片（默认）；为 `False` 时每次调用发一片，见 `StreamMessage`。
 
         Raises:
             ValueError: `user_openid` 为空。
@@ -156,7 +162,7 @@ class Users:
         """
         path = f"/v2/users/{path_segment(user_openid, 'user_openid')}/stream_messages"
         content_type = StreamContentType.MARKDOWN if markdown else StreamContentType.TEXT
-        return StreamMessage(self._http, path, reply_to, content_type)
+        return StreamMessage(self._http, path, reply_to, content_type, coalesce=coalesce)
 
     async def upload(
         self,

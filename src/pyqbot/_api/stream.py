@@ -20,11 +20,14 @@ class StreamMessage:
     免得用户那边一直显示「生成中」，然后原样抛出该异常（被取消时不发）。
     不用 `async with` 时，发完后自己调用 `finish()`。
 
-    每次 `append()` / `replace()` 发出一个分片（一次请求），接口限频 50 QPS：内容来得很碎时，
-    先攒成一句或一小段再发。同一个对象的分片按调用顺序逐个发出。
+    默认合并分片（`coalesce=True`）：每个分片要等上一个的响应（约一次网络往返）才能发，所以上一片还在
+    发送时，之后 `append()` / `replace()` 的内容先攒着，等它回来再合成一片发出，同时只有一个请求在路上。
+    这时 `append()` / `replace()` 不等发送就返回；分片发送失败（包括客户端已关闭）在下一次 `append()` /
+    `replace()` / `finish()`（含正常退出 `async with`）时抛出。`coalesce=False` 时每次调用发出一个分片、
+    等它发完才返回，失败当场抛出。两种方式下分片都按调用顺序发出。
 
     分片发送失败（抛 `APIError` / `NetworkError`）后，平台那边的状态无从得知，这条流式消息就此终止：
-    之后的 `append()` / `replace()` 抛 `RuntimeError`，退出 `async with` 时也不再发结束分片。
+    失败抛出过一次之后，`append()` / `replace()` 抛 `RuntimeError`，退出 `async with` 时也不再发结束分片。
 
     Example:
         ```python
@@ -35,7 +38,13 @@ class StreamMessage:
     """
 
     def __init__(
-        self, http: HTTP, path: str, reply_to: C2CReplyTarget, content_type: StreamContentType
+        self,
+        http: HTTP,
+        path: str,
+        reply_to: C2CReplyTarget,
+        content_type: StreamContentType,
+        *,
+        coalesce: bool = True,
     ) -> None:
         self._http = http
         self._path = path
@@ -48,6 +57,10 @@ class StreamMessage:
         self._finished = False
         self._failed = False
         self._lock = asyncio.Lock()
+        self._coalesce = coalesce
+        self._pending: tuple[StreamInputMode, str] | None = None  # 合并模式下还没发出的内容
+        self._sender: asyncio.Task[None] | None = None
+        self._error: Exception | None = None  # 合并模式下发送失败、还没抛给调用方的异常
 
     @property
     def stream_msg_id(self) -> str | None:
@@ -68,14 +81,14 @@ class StreamMessage:
         """把 `text` 接在已发内容的后面。`text` 为空串时什么也不发。
 
         Raises:
-            APIError: 平台拒绝这个分片，如超出频率限制（`err_code` 50002）。
-            NetworkError: 没有拿到平台的响应。
+            APIError: 平台拒绝分片，如超出频率限制（`err_code` 50002）；合并模式下是之前某一片的失败。
+            NetworkError: 没有拿到平台的响应；合并模式下同上。
             ValueError: 被动回复的对象是没有事件 ID 的事件。
             RuntimeError: 已经结束，或客户端已关闭。
         """
         self._check_open()
         if text:
-            await self._send(StreamInputMode.APPEND, text, StreamInputState.GENERATING)
+            await self._submit(StreamInputMode.APPEND, text)
 
     async def replace(self, text: str) -> None:
         """把正文整体换成 `text`：`text` 是到目前为止的全文，必须以用户已经看到的内容开头。
@@ -83,22 +96,26 @@ class StreamMessage:
         适合手里只有全文、没有增量的场景；可以与 `append()` 混用。
 
         Raises:
-            APIError: 平台拒绝这个分片，如改动了已下发的开头（`err_code` 40007）。
-            NetworkError: 没有拿到平台的响应。
+            APIError: 平台拒绝分片，如改动了已下发的开头（`err_code` 40007）；合并模式下也可能是之前某一片的失败。
+            NetworkError: 没有拿到平台的响应；合并模式下同上。
             ValueError: 被动回复的对象是没有事件 ID 的事件。
             RuntimeError: 已经结束，或客户端已关闭。
         """
         self._check_open()
-        await self._send(StreamInputMode.REPLACE, text, StreamInputState.GENERATING)
+        await self._submit(StreamInputMode.REPLACE, text)
 
     async def finish(self) -> None:
-        """发出结束分片，之后不能再追加内容。可以重复调用；一个分片也没发过时不发请求。
+        """等攒着的内容发完，再发出结束分片，之后不能再追加内容。可以重复调用；一个分片也没发过时不发请求。
 
         Raises:
-            APIError: 平台拒绝结束分片。
+            APIError: 平台拒绝结束分片，或合并模式下之前某一片发送失败。
             NetworkError: 没有拿到平台的响应。
             RuntimeError: 客户端已关闭。
         """
+        if self._sender is not None:
+            # shield：调用方被取消时，正在发的分片照常发完，不把这条流打成「失败」。
+            await asyncio.shield(self._sender)
+        self._raise_unreported()
         await self._send(StreamInputMode.APPEND, "", StreamInputState.DONE)
 
     async def __aenter__(self) -> Self:
@@ -119,17 +136,49 @@ class StreamMessage:
         if exc_value is None:
             await self.finish()
         elif isinstance(exc_value, Exception):
-            # 取消等 BaseException 不发：此时再等一次网络请求会拖住取消。
+            # 取消等 BaseException 不发：此时再等一次网络请求会拖住取消。攒着的内容由发送任务照常发完。
             try:
                 await self.finish()
             except (QQBotError, RuntimeError) as exc:  # 不能盖过体内的异常；文案已脱敏
-                _logger.warning("流式消息的结束分片没有发出：%s", exc)
+                _logger.warning("流式消息没有正常结束：%s", exc)
 
     def _check_open(self) -> None:
+        self._raise_unreported()
         if self._failed:
             raise RuntimeError("流式消息的分片发送失败，已经终止，不能再追加内容")
         if self._finished:
             raise RuntimeError("流式消息已经结束，不能再追加内容")
+
+    def _raise_unreported(self) -> None:
+        """合并模式下发送失败的异常只抛一次，之后按「已终止」处理。"""
+        if self._error is not None:
+            error, self._error = self._error, None
+            raise error
+
+    async def _submit(self, mode: StreamInputMode, text: str) -> None:
+        if not self._coalesce:
+            await self._send(mode, text, StreamInputState.GENERATING)
+            return
+        if self._reply is None:
+            self._reply = reply_fields(self._reply_to)  # 用法错误当场抛，不留到发送任务里
+        pending = self._pending
+        if mode == StreamInputMode.REPLACE or pending is None:
+            self._pending = (mode, text)
+        else:  # 接在攒着的内容后面；攒着的是 replace 时，合起来仍是一次 replace
+            self._pending = (pending[0], pending[1] + text)
+        if self._sender is None or self._sender.done():
+            self._sender = asyncio.create_task(self._send_pending(), name="pyqbot:stream")
+
+    async def _send_pending(self) -> None:
+        while self._pending is not None:
+            mode, text = self._pending
+            self._pending = None
+            try:
+                await self._send(mode, text, StreamInputState.GENERATING)
+            except Exception as exc:  # noqa: BLE001  留给下一次调用抛出，见类的 docstring
+                self._error = exc
+                self._pending = None
+                return
 
     async def _send(self, mode: StreamInputMode, text: str, state: StreamInputState) -> None:
         async with self._lock:

@@ -279,7 +279,7 @@ class C2CMessage(_ChatMessage, C2CReplyTarget):
         client = self._bound_client()
         await client.users.send_typing(self.user_openid, seconds=seconds, reply_to=self)
 
-    def reply_stream(self, *, markdown: bool = True) -> StreamMessage:
+    def reply_stream(self, *, markdown: bool = True, coalesce: bool = True) -> StreamMessage:
         """以流式消息被动回复这条消息；参数同 `client.users.stream_message()`。
 
         对应官方接口 `POST /v2/users/{user_openid}/stream_messages`。
@@ -295,7 +295,9 @@ class C2CMessage(_ChatMessage, C2CReplyTarget):
             ```
         """
         client = self._bound_client()
-        return client.users.stream_message(self.user_openid, reply_to=self, markdown=markdown)
+        return client.users.stream_message(
+            self.user_openid, reply_to=self, markdown=markdown, coalesce=coalesce
+        )
 
     async def upload(
         self,

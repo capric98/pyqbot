@@ -80,7 +80,7 @@ async def test_chunks_share_msg_seq_and_carry_the_stream_id_after_the_first() ->
     message = c2c()
 
     async with client_for(platform) as client:
-        async with client.users.stream_message("u", reply_to=message) as stream:
+        async with client.users.stream_message("u", reply_to=message, coalesce=False) as stream:
             assert stream.stream_msg_id is None
             assert stream.last_sent is None
             await stream.append("你好")
@@ -107,7 +107,7 @@ async def test_replace_and_plain_text() -> None:
     platform = Platform()
 
     async with client_for(platform) as client:
-        stream = client.users.stream_message("u", reply_to=c2c(), markdown=False)
+        stream = client.users.stream_message("u", reply_to=c2c(), markdown=False, coalesce=False)
         await stream.replace("正在生成")
         await stream.append("。")
         await stream.replace("正在生成。完成")
@@ -188,7 +188,7 @@ def test_openid_must_not_be_empty() -> None:
         client.users.stream_message("", reply_to=c2c())
 
 
-async def test_concurrent_appends_are_sent_one_by_one() -> None:
+async def test_concurrent_appends_are_sent_one_by_one() -> None:  # 两种模式都一样
     first_arrived = asyncio.Event()
     release = asyncio.Event()
     bodies: list[dict[str, object]] = []
@@ -277,7 +277,7 @@ async def test_failed_final_chunk_is_logged_without_hiding_the_body_error(
         with pytest.raises(LookupError), caplog.at_level(logging.WARNING, logger="pyqbot"):
             await append_then_fail(client.users.stream_message("u", reply_to=c2c()))
 
-    assert "流式消息的结束分片没有发出" in caplog.text
+    assert "流式消息没有正常结束" in caplog.text
     assert "内部错误" in caplog.text
     assert APP_SECRET not in caplog.text
     assert TOKEN not in caplog.text
@@ -366,7 +366,7 @@ async def test_cancelling_a_chunk_in_flight_ends_the_stream() -> None:
             await stream.append("b")  # 这个请求在途时被取消
 
     async with blocking_client(platform) as client:
-        stream = client.users.stream_message("u", reply_to=c2c())
+        stream = client.users.stream_message("u", reply_to=c2c(), coalesce=False)
         task = asyncio.create_task(body(stream))
         await platform.arrived.wait()
         task.cancel()
@@ -386,7 +386,7 @@ async def test_cancelling_a_task_waiting_for_the_lock_leaves_the_stream_usable()
     platform = BlockingPlatform(block_at=0)
 
     async with blocking_client(platform) as client:
-        stream = client.users.stream_message("u", reply_to=c2c())
+        stream = client.users.stream_message("u", reply_to=c2c(), coalesce=False)
         holder = asyncio.create_task(stream.append("a"))
         await platform.arrived.wait()
         waiter = asyncio.create_task(stream.append("b"))
@@ -411,12 +411,121 @@ async def test_closed_client_ends_the_stream() -> None:
     platform = Platform()
 
     async with client_for(platform) as client:
-        stream = client.users.stream_message("u", reply_to=c2c())
+        stream = client.users.stream_message("u", reply_to=c2c(), coalesce=False)
     with pytest.raises(RuntimeError, match="已关闭"):
         await stream.append("a")
 
     assert stream.finished
     assert platform.requests == []
+
+
+# ---- 合并分片（默认） ----
+
+
+async def test_appends_during_a_chunk_in_flight_go_out_as_one_chunk() -> None:
+    platform = BlockingPlatform(block_at=0)
+
+    async with blocking_client(platform) as client:
+        stream = client.users.stream_message("u", reply_to=c2c())
+        await stream.append("你")  # 不等发送就返回
+        await platform.arrived.wait()
+        await stream.append("好")
+        await stream.append("，世界")
+        assert len(platform.bodies) == 1
+        platform.release.set()
+        await stream.finish()  # 等攒着的发完再发结束分片
+
+    assert platform.chunks() == [(0, 1, None), (1, 1, "stream-1"), (2, 10, "stream-1")]
+    assert [b["content_raw"] for b in platform.bodies] == ["你", "好，世界", ""]
+
+
+async def test_replace_absorbs_the_pending_text() -> None:
+    platform = BlockingPlatform(block_at=0)
+
+    async with blocking_client(platform) as client:
+        stream = client.users.stream_message("u", reply_to=c2c())
+        await stream.append("草稿")
+        await platform.arrived.wait()
+        await stream.append("，继续")
+        await stream.replace("定稿")
+        await stream.append("！")
+        platform.release.set()
+        await stream.finish()
+
+    assert [(b["input_mode"], b["content_raw"]) for b in platform.bodies] == [
+        ("append", "草稿"),
+        ("replace", "定稿！"),
+        ("append", ""),
+    ]
+
+
+async def test_a_failed_chunk_is_raised_once_by_the_next_call() -> None:
+    platform = Platform()
+    platform.responses = [httpx2.Response(400, json={"err_code": 40007, "message": "前缀不可修改"})]
+
+    async with client_for(platform) as client:
+        stream = client.users.stream_message("u", reply_to=c2c())
+        await stream.append("a")  # 失败发生在后台
+        with pytest.raises(pyqbot.APIError) as caught:
+            await stream.finish()
+        assert caught.value.err_code == 40007
+        assert stream.finished
+        with pytest.raises(RuntimeError, match="分片发送失败"):
+            await stream.append("b")
+        await stream.finish()  # 已经抛过，什么也不做
+
+    assert len(platform.requests) == 1
+
+
+async def test_a_failed_chunk_is_raised_when_leaving_async_with() -> None:
+    platform = Platform()
+    platform.responses = [httpx2.Response(400, json={"err_code": 40007, "message": "前缀不可修改"})]
+
+    async with client_for(platform) as client:
+        with pytest.raises(pyqbot.APIError):
+            async with client.users.stream_message("u", reply_to=c2c()) as stream:
+                await stream.append("a")
+
+    assert len(platform.requests) == 1  # 没有结束分片
+
+
+async def test_closed_client_is_reported_by_the_next_call() -> None:
+    platform = Platform()
+
+    async with client_for(platform) as client:
+        stream = client.users.stream_message("u", reply_to=c2c())
+    await stream.append("a")
+    with pytest.raises(RuntimeError, match="已关闭"):
+        await stream.finish()
+
+    assert stream.finished
+    assert platform.requests == []
+
+
+async def test_cancelled_body_still_sends_the_pending_text_but_no_final_chunk() -> None:
+    platform = BlockingPlatform(block_at=0)
+
+    async def body(stream: pyqbot.StreamMessage) -> None:
+        async with stream:
+            await stream.append("a")
+            await platform.arrived.wait()
+            await stream.append("b")
+            await asyncio.Event().wait()
+
+    async with blocking_client(platform) as client:
+        stream = client.users.stream_message("u", reply_to=c2c())
+        task = asyncio.create_task(body(stream))
+        await platform.arrived.wait()
+        await asyncio.sleep(0)  # 让 body 攒下「b」
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        platform.release.set()
+        sender = stream._sender  # pyright: ignore[reportPrivateUsage]  等后台发送任务结束
+        assert sender is not None
+        await sender
+
+    assert [(b["content_raw"], b["input_state"]) for b in platform.bodies] == [("a", 1), ("b", 1)]
 
 
 # ---- 类型 ----
