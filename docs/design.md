@@ -49,17 +49,17 @@ bot.run()  # 同步入口，阻塞到退出
 src/pyqbot/
   _errors.py  _config.py  _redact.py  地基，互不依赖（已落地）
   _model.py       Model、OpenIntEnum、宽容解码（已落地）     ← _redact
-  _models/        数据模型与事件模型，按领域分文件（部分落地） ← _model
+  _models/        数据模型与事件模型，按领域分文件（部分落地） ← _model _gateway.intents
   _credentials.py access_token 的获取、缓存、刷新（已落地）  ← _config _errors _model _redact
   _http.py        请求层：拼 URL、鉴权头、解码、错误映射（已落地） ← _credentials _errors _model _redact
   _api/           接口封装，每组一个持有请求层的小类（已落地） ← _http _models
   _client.py      Client = 生命周期 + 凭证 + 各组接口属性（已落地）
   _gateway/       WebSocket：协议数据、连接状态机（已落地）   ← _errors _model _redact
-  _events/        分发器，不依赖 _gateway                   ← _models
-  _bot.py         Bot(Client)：事件注册、start() / run()，把上面几块接起来
+  _events/        分发器（已落地），不依赖网关连接           ← _models _errors _gateway.intents
+  _bot.py         Bot(Client)：事件注册（已落地）、start() / run()，把上面几块接起来
 ```
 
-Webhook（未确认）：若做，是接到同一个分发器上的另一个事件源，放 `_webhook/`。签名校验要用 Ed25519，标准库没有，所以只能是可选 extra；现在不设计、不加依赖。`_events/` 不依赖 `_gateway/` 就是为它留的位置。
+Webhook（未确认）：若做，是接到同一个分发器上的另一个事件源，放 `_webhook/`。签名校验要用 Ed25519，标准库没有，所以只能是可选 extra；现在不设计、不加依赖。`_events/` 不依赖网关连接（只用 `Intents`）就是为它留的位置。
 
 ## 共用地基（已落地）
 
@@ -91,7 +91,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
   | 2xx、没有错误码，但解不成 `type_` | `APIError`（「响应无法识别」） |
 
 - **接口分组**：`_api/users.py`、`_api/groups.py` 各一个小类，挂成 `client.users`、`client.groups`。首批只有发文本消息：`send_message(openid, content, *, reply_to=None)`，返回 `pyqbot.SentMessage`。其它消息类型以后用仅限关键字的参数追加，不改已有签名。
-- **被动回复**：`reply_to` 接受 `ReceivedMessage`（见「事件」）。`msg_id` 取 `reply_to.id`，`msg_seq` 由 `next_msg_seq()` 在这个消息对象上从 1 递增，发送失败也不回退；调用方不用管。
+- **被动回复**：`reply_to` 只接受对应场景收到的消息（`users` 收 `C2CMessage`，`groups` 收 `GroupMessage`，见「事件」）。`msg_id` 取 `reply_to.id`，`msg_seq` 由 `next_msg_seq()` 在这个消息对象上从 1 递增，发送失败也不回退；调用方不用管。
 - **网关地址**：`Client._get_gateway_url()` 调 `GET /gateway`，由 `Bot.start()` 作为 `get_url` 注入网关连接。
 
 ## 网关连接（已落地）
@@ -125,16 +125,16 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 - **坏帧**：单帧解不开（`PayloadError`）、非文本帧或意料之外的 OpCode，记日志后跳过，不影响连接。
 - **日志**：用标准库 `logging.getLogger("pyqbot")`，内容先脱敏（约定 7）。
 
-## 事件（规划）
+## 事件（已落地，运行入口除外）
 
-- **事件模型的基类**（已落地，`_models/event.py`）：`Event` 是带 `__dict__` 的 `Model`（`dict=True`），绑定的 `Client` 与回复计数存在实例的 `__dict__` 里，`repr`、`to_dict()`、编码与相等性仍只看字段。`ReceivedMessage(Event)` 是收到的消息，带 `id`，可作 `reply_to`。
-- **事件模型**（规划）：每种事件一个 `Event` 的子类，收到的消息继承 `ReceivedMessage`。子类用 `ClassVar` 声明事件名与所需的 Intent：`event_name = "C2C_MESSAGE_CREATE"`、`intent = Intents.GROUP_AND_C2C_EVENT`。
-- **模型上的行为**：分发前由分发器调用 `bind_client(event, client)`（已落地），`await message.reply("收到")` 这类方法经 `self._bound_client()` 取回它再调用接口。没有绑定的对象（比如测试里自己构造的）调用时抛 `RuntimeError`，文案说明原因。
-- **注册**：`Bot` 上每种事件一个装饰器，名字按用户的说法起：`@bot.on_c2c_message`、`@bot.on_group_at_message`。装饰器原样返回处理函数；处理函数必须是 `async def`、只收一个事件对象，注册时不是协程函数就抛 `TypeError`。同一事件可以注册多个处理函数。
-- **Intents 自动推导**：默认按已注册的处理函数算出要订阅的 Intents，用户不必了解这个概念；需要时用 `Bot(..., intents=...)` 覆盖。
-- **分发器**（`_events/dispatcher.py`，内部）：`dispatch(payload, client)` 是同步的，立刻返回。没有处理函数的事件不解码；解码失败记日志后丢弃；每个处理函数在自己的任务里运行，互不影响，抛出的异常记日志，不影响连接和其它处理函数。`await dispatcher.aclose()` 取消并等待还在运行的处理函数。
-- **未知事件**：直接忽略。
-- **首批事件**：`C2C_MESSAGE_CREATE`（`C2CMessage`）、`GROUP_AT_MESSAGE_CREATE`（`GroupMessage`），都带 `reply()`。
+- **事件模型**（`_models/`）：每种事件一个 `Event` 的子类，收到的消息继承 `ReceivedMessage`（带 `id`）。首批是 `C2CMessage`、`GroupMessage`，都带 `reply()`。子类用 `ClassVar` 声明 `event_name`（Dispatch 的 `t`）与 `intent`。绑定的 `Client` 与回复计数存在实例的 `__dict__` 里（`dict=True`），`repr`、`to_dict()`、编码与相等性只看字段。
+- **模型上的行为**：分发器在调用处理函数前 `bind_client(event, client)`，`message.reply()` 这类快捷方法经 `self._bound_client()` 调用接口；没有绑定时抛 `RuntimeError`。同一事件的所有处理函数拿到同一个对象，所以 `msg_seq` 在它们之间也是递增的。
+- **常用信息一步拿到**：嵌在发送者里的 openid 在消息上另有属性（`message.user_openid`、`message.member_openid`）；用户写类型标注会用到的嵌套类型（发送者、附件）从顶层导出，其余不导出。文本字段缺失与空串没有区别时默认 `""`（如 `content`），省得处处判断 `None`。
+- **注册**（`Bot`）：每种事件一个装饰器 `@bot.on_<事件>`，原样返回处理函数；类型写成 `[F: Handler[事件模型]](handler: F) -> F`，参数类型不对时 pyright 报错。处理函数必须是 `async def`，否则注册时抛 `TypeError`。同一事件可以注册多个。
+- **Intents**：默认按已注册的处理函数推导（`Bot._resolve_intents()`），`Bot(..., intents=...)` 传入则以它为准。`Bot.start()` 用它 Identify，所以 `start()` 之后再注册的处理函数不会改变订阅。
+- **分发器**（`_events/dispatcher.py`）：`dispatch(payload, client)` 同步、立刻返回，`payload` 只需有 `t` 与 `decode_data()`（`GatewayPayload` 满足），所以不依赖网关。没有处理函数的事件与未知事件直接忽略、不解码，解码失败（`PayloadError`）记 WARNING 后丢弃；每个处理函数一个任务，异常记 ERROR（带事件名与处理函数名），不影响其它处理函数。`await aclose()` 之后不再分发，并取消、等待还在运行的处理函数（在处理函数里调用时不取消它自己）；`Bot.close()` 先调它再关连接。
+- **加一种事件**：在 `_models/` 按官方文档定义模型（声明 `event_name`、`intent`，只把 SDK 要用的字段写成必填，需要的话加 `reply()`），从顶层导出；在 `Bot` 上照 `on_c2c_message` 加一个装饰器。分发器与 Intents 推导不用改。
+- **待做**：`Bot.start()` / `run()` 把网关连接的 `on_dispatch` 接到 `lambda payload: self._dispatcher.dispatch(payload, self)`。
 
 ## 后续模块要遵守的约定
 
@@ -169,7 +169,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 | 1 | 凭证 `_credentials.py`（已落地） | 获取 access_token，缓存，临近过期时刷新，并发调用只发一次请求，失败映射成异常；并接到 `Client` 上。不管鉴权头怎么拼 | `dev-prepare/access-token.md` | `_config` `_errors` | 只有一个接口，状态机自成一体，其它所有模块都要用它 |
 | 2 | 网关协议数据 `_gateway/` 内（已落地） | OpCode、Intents、上下行 payload 的编解码、关闭码该恢复 / 重新鉴权 / 放弃的分类。纯数据，不建连接 | `dev-prepare/event-emit/payload.md`、`dev-prepare/event-emit/websocket.md`、`dev-prepare/error-trace/websocket.md` | `_model` | 无 IO，全是表格到代码的映射；与 1 不碰同一个文件 |
 | 3 | 错误映射（`_http.py` 的一部分，已落地） | 纯函数：状态码 + 响应头 + 响应体 → 异常或「成功」，含 `trace_id` 的提取与 `APIError` 的细分 | `dev-prepare/api-call-guide.md`、`dev-prepare/error-trace/index.md` | `_errors` | 无 IO，输入输出都能列成表；201/202 带 error body 的情况需要先想清楚 |
-| 4 | 事件分发器 `_events/` 内 | 处理函数的注册表与并发调用、处理函数出错不影响其它处理函数和连接。不含事件模型，不连网关 | `dev-prepare/event-emit/payload.md`、`autogen/index.md` 的「事件」 | 无 | 纯 asyncio，独立；但对外的注册方式是易用性的核心，设计空间比前三个大 |
+| 4 | 事件分发器 `_events/` 内（已落地） | 处理函数的注册表与并发调用、处理函数出错不影响其它处理函数和连接。不含事件模型，不连网关 | `dev-prepare/event-emit/payload.md`、`autogen/index.md` 的「事件」 | 无 | 纯 asyncio，独立；但对外的注册方式是易用性的核心，设计空间比前三个大 |
 | 5 | 请求层 + 第一个接口（已落地，首个接口改为发文本消息） | `_http.py` 的发送与解码，加 `GET /users/@me` 打通接口分组的写法 | `dev-prepare/api-call-guide.md`、`autogen/api/users_me.get.md` | 1、3 | 不能最先做，列在这里表明顺序 |
 
 官方文档的出入（含当前实现的取舍与待实测项）集中记在 [`errata.md`](errata.md)。
