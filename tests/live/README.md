@@ -75,7 +75,7 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 - `test_live.py::test_bot_replies_to_a_c2c_message`：测试用户发一条单聊，收到机器人的回复。
 - `test_live.py::test_gateway_identify_wait_for_message_then_resume`：等待期间可发一条单聊；看 `report.txt` 里 Resume 是否成功。
 - `test_live_bot.py::test_stream_reply`：测试用户发一条单聊，回复分段出现，最后不再显示「生成中」。
-- `test_live_bot.py::test_markdown_showcase_stream`：发「开始」后流式收到一段覆盖各种 Markdown 语法的内容（`LIVE_MARKDOWN_COMPARE=1` 时再收到普通版），看各语法的渲染。
+- `test_live_bot.py::test_markdown_showcase_stream`：发「开始」后流式收到一段覆盖各种 Markdown 语法的内容（`LIVE_MARKDOWN_COMPARE=1` 时再收到普通版），看各语法的渲染；`LIVE_STREAM_COALESCE=0` 时逐片发送，对比速度。
 - `test_live_events.py::test_friend_del_then_add`：删好友再加回（在 QQ 里打开 `test_generate_share_link` 生成的链接），收到「pyqbot：欢迎回来」。
 - `test_live_events.py::test_c2c_reply_limit_and_plain_stream`：先后发两条单聊；第一条收到「正在输入」与最多 4 条回复，第二条收到纯文本流式回复（`**` 不加粗）。
 - `test_live_events.py::test_c2c_reply_after_10_and_55_minutes`：发一条单聊后约 10、55 分钟各收到一条被动回复（被拒的收不到）；约 56 分钟，在后台跑。
