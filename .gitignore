@@ -218,3 +218,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Claude Code：子代理的 worktree 与本机设置
+.claude/worktrees/
+.claude/settings.local.json
