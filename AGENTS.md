@@ -59,10 +59,10 @@ uv run --env-file .env pytest -m live --no-cov  # 实测，须先获用户同意
 
 ## 实测
 
-`.env` 已被 git 忽略，永不提交。其中有 `APP_ID`、`APP_SECRET`，以及测试用户的单聊 openid `TEST_USER_OPENID`。
+`.env` 已被 git 忽略，永不提交。其中有 `APP_ID`、`APP_SECRET`，测试用户的单聊 openid `TEST_USER_OPENID`，以及测试群的 `TEST_GROUP_OPENID`。
 
 - 每次实测前向用户说明要调用哪些接口并取得同意，同意只对当次有效。
-- 经允许可向 `TEST_USER_OPENID` 发送一条或多条消息，发完请用户确认是否看到预期效果。不得向其他用户或群发消息，不得自行执行群管理等影响他人的操作。
+- 经允许可向 `TEST_USER_OPENID` 和测试群 `TEST_GROUP_OPENID` 发送一条或多条消息，也可以在测试群里执行群管理（禁言、移出、拉黑、审批入群等），发完请用户确认是否看到预期效果。群管理会影响群成员，每项都要单独同意。
 - 密钥与 access_token 不得出现在代码、日志、命令输出、fixture 或提交中。
 - 实测代码放在 `tests/live/` 并标记 `@pytest.mark.live`，默认不运行；与官方文档不符的结论记入 `docs/errata.md`。
 
