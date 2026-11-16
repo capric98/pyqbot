@@ -57,7 +57,7 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 - `test_live_upload.py::test_url_upload`：官方示意图。
 - `test_live_upload.py::test_inline_data_is_base64`：红色小方块与「内联上传」。
 - `test_live_upload.py::test_large_file_is_uploaded_in_parts`：约 1200×1000 的噪点图与「分片上传」。
-- `test_live_upload.py::test_file_over_10m_is_uploaded_in_several_parts`：约 2000×2000 的噪点图与「多片上传」；分片情况记进日志。
+- `test_live_upload.py::test_file_over_10m_is_uploaded`：约 2000×2000 的噪点图与「多片上传」；分片情况记进日志。
 - `test_live_upload.py::test_upload_and_send_directly`：同 `test_url_upload` 的图，由上传接口直接发出。
 
 ### 需要测试用户动手配合
@@ -67,8 +67,8 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 - `test_live.py::test_bot_replies_to_a_c2c_message`：测试用户发一条单聊，收到机器人的回复。
 - `test_live.py::test_gateway_identify_wait_for_message_then_resume`：等待期间可发一条单聊；看 `report.txt` 里 Resume 是否成功。
 - `test_live_bot.py::test_stream_reply`：测试用户发一条单聊，回复分段出现，最后不再显示「生成中」。
-- `test_live_events.py::test_friend_del_then_add`：删好友再加回，收到「pyqbot：欢迎回来」。
-- `test_live_events.py::test_c2c_msg_reject_then_receive`：资料卡里关闭再打开主动消息，收到「pyqbot：主动消息已打开」。
+- `test_live_events.py::test_friend_del_then_add`：删好友再加回（在 QQ 里打开 `test_generate_share_link` 生成的链接），收到「pyqbot：欢迎回来」。
+- `test_live_events.py::test_c2c_msg_reject_then_receive`：资料卡里关闭再打开主动消息；平台实际推的是授权互动，停手 15 秒后收到「pyqbot：授权已变更」。
 - `test_live_events.py::test_callback_button_interaction`：点「点我」，按钮不再转圈、文字变「已点」，再收到回复。
 - `test_live_misc.py::test_message_upload_shortcut`：测试用户发一条单聊，收到带图的「pyqbot：upload 快捷方法」。
 

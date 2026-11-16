@@ -6,7 +6,8 @@
 `LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_live_events.py::<用例> -s`。
 
 只处理 `TEST_USER_OPENID` 触发的事件，其他人的只记一笔。每条 Dispatch 的外层 `id` 与 `d.id`（如有）
-都记进日志与 `.cache/live/events.txt`（已被 git 忽略），不含 openid 与消息内容。
+都记进日志与 `.cache/live/events.txt`（已被 git 忽略），不含 openid 与消息内容；原始的 `d` 另存进
+`.cache/live/raw/`（含 openid，只留在本机）。
 """
 
 import asyncio
@@ -25,6 +26,7 @@ from pyqbot._gateway.payload import GatewayPayload
 pytestmark = pytest.mark.live
 
 OUTPUT = Path(__file__).parents[2] / ".cache" / "live" / "events.txt"
+RAW_DIR = OUTPUT.parent / "raw"
 _logger = logging.getLogger("pyqbot.live")
 
 
@@ -60,6 +62,9 @@ def record_event_ids(bot: pyqbot.Bot, monkeypatch: pytest.MonkeyPatch) -> None:
         data: object = json.loads(payload.data)
         inner = cast(dict[str, object], data).get("id") if isinstance(data, dict) else None
         note("dispatch", {"t": payload.t, "outer_id": payload.id, "d_id": inner})
+        RAW_DIR.mkdir(parents=True, exist_ok=True)
+        raw = json.dumps(data, ensure_ascii=False, indent=2)
+        (RAW_DIR / f"event_{payload.t}_{payload.s}.json").write_text(raw, encoding="utf-8")
         dispatch(payload, client)
 
     monkeypatch.setattr(dispatcher, "dispatch", recording)
@@ -110,6 +115,7 @@ async def test_friend_del_then_add(
         outcome["add"] = {
             "event_id": event.event_id,
             "scene": event.scene,
+            "scene_param": event.scene_param,
             "short_code": event.short_code,
         }
         sent = await event.reply("pyqbot：欢迎回来")
@@ -119,8 +125,7 @@ async def test_friend_del_then_add(
     await run_until_closed(bot, wait_seconds, outcome)
 
     note("friend_del_then_add", outcome)
-    assert "del" in outcome, outcome
-    assert "sent" in outcome, outcome
+    assert "sent" in outcome, outcome  # 已经删过时只加回也行，FRIEND_DEL 有就记下
 
 
 async def test_c2c_msg_reject_then_receive(
@@ -132,24 +137,50 @@ async def test_c2c_msg_reject_then_receive(
 ) -> None:
     """让测试用户在机器人资料卡里关闭「主动消息」，再打开。
 
-    应收到 `C2C_MSG_REJECT`、`C2C_MSG_RECEIVE` 各一条；打开后测试用户应看到机器人用 event_id 被动回复的
-    「pyqbot：主动消息已打开」。日志里看两条事件的外层 `id` 与 `d.id`，以及切换开关时有没有推送
-    `type=18`（用户授权）的 `INTERACTION_CREATE`、它带不带 `chat_type`。同时订阅了互动，需要该权限。
+    文档说应收到 `C2C_MSG_REJECT`、`C2C_MSG_RECEIVE` 各一条，打开后用 event_id 被动回复
+    「pyqbot：主动消息已打开」。2026-11-16 实测平台没有推这两个事件，只推了 `type=18`（用户授权）的
+    `INTERACTION_CREATE`：最后一条授权互动之后 15 秒没有新的（测试用户切换完了），就用它被动回复
+    「pyqbot：授权已变更」，看平台是否接受。授权数据记进日志，原始事件见 `.cache/live/raw/`。
     """
     bot = pyqbot.Bot(app_id, app_secret)
     record_event_ids(bot, monkeypatch)
     outcome: dict[str, object] = {}
     interactions: list[object] = []
     outcome["interactions"] = interactions
+    pending: list[asyncio.Task[None]] = []
+
+    async def reply_after_quiet(event: pyqbot.Interaction) -> None:
+        await asyncio.sleep(15)
+        try:
+            sent = await event.reply("pyqbot：授权已变更")
+            outcome["authorize_reply"] = sent.id
+        except pyqbot.APIError as error:
+            outcome["authorize_reply_error"] = {
+                "err_code": error.err_code,
+                "message": error.message,
+            }
+        await bot.close()
 
     @bot.on_interaction
     async def authorized(event: pyqbot.Interaction) -> None:
         if event.user_openid != openid:
             note("interaction.ignored", "不是测试用户")
             return
+        authorize = event.data.resolved.authorize_data
         interactions.append(
-            {"type": event.type, "chat_type": event.chat_type, "data_type": event.data.type}
+            {
+                "type": event.type,
+                "chat_type": event.chat_type,
+                "scene": event.scene,
+                "data_type": event.data.type,
+                "authorize": authorize.to_dict() if authorize is not None else None,
+                "timestamp": event.timestamp.isoformat() if event.timestamp else None,
+            }
         )
+        if event.type == pyqbot.InteractionType.USER_AUTHORIZE:
+            for task in pending:
+                task.cancel()
+            pending[:] = [asyncio.create_task(reply_after_quiet(event))]
 
     @bot.on_c2c_msg_reject
     async def rejected(event: pyqbot.C2CMsgReject) -> None:
@@ -164,15 +195,18 @@ async def test_c2c_msg_reject_then_receive(
             note("c2c_msg_receive.ignored", "不是测试用户")
             return
         outcome["receive"] = {"event_id": event.event_id, "timestamp": event.timestamp}
+        for task in pending:
+            task.cancel()
         sent = await event.reply("pyqbot：主动消息已打开")
         outcome["sent"] = sent.id
         await bot.close()
 
     await run_until_closed(bot, wait_seconds, outcome)
+    for task in pending:
+        task.cancel()
 
     note("c2c_msg_reject_then_receive", outcome)
-    assert "reject" in outcome, outcome
-    assert "sent" in outcome, outcome
+    assert "sent" in outcome or "authorize_reply" in outcome, outcome
 
 
 async def test_callback_button_interaction(

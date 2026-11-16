@@ -100,13 +100,13 @@ async def test_large_file_is_uploaded_in_parts(
     assert media.raw_url
 
 
-async def test_file_over_10m_is_uploaded_in_several_parts(
+async def test_file_over_10m_is_uploaded(
     app_id: str, app_secret: str, openid: str, tmp_path: Path
 ) -> None:
     """应看到：一张约 2000×2000 的彩色噪点图，下面一行「多片上传」。
 
-    约 12 MB，超过 `md5_10m` 的 10002432 字节。约 3.6 MB 的文件平台只给一片，这里看它分几片、
-    最后一片不足 `block_size` 时填实际大小是否被接受。分片情况记进日志（`--log-cli-level=WARNING`）。
+    约 12 MB，超过 `md5_10m` 的 10002432 字节。分片情况记进日志（`--log-cli-level=WARNING`）：
+    2026-11-16 实测平台仍只给一片，`block_size` 等于文件大小。
     """
     finished: list[dict[str, object]] = []
 
@@ -126,7 +126,6 @@ async def test_file_over_10m_is_uploaded_in_several_parts(
     parts = [(body["part_index"], body["block_size"]) for body in finished]
     _logger.warning("文件 %d 字节，分片（序号, 大小）：%s", file.stat().st_size, parts)
     assert sent.id
-    assert len(parts) > 1
     assert sum(int(str(size)) for _, size in parts) == file.stat().st_size
 
 

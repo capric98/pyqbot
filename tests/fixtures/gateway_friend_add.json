@@ -1,0 +1,16 @@
+{
+  "op": 0,
+  "id": "FRIEND_ADD:00000000-0000-0000-0000-000000000001",
+  "s": 2,
+  "t": "FRIEND_ADD",
+  "d": {
+    "author": {
+      "union_openid": ""
+    },
+    "openid": "0123456789ABCDEF0123456789ABCDEF",
+    "scene": 1000,
+    "scene_param": "pyqbot-live",
+    "short_code": "fakeCode01",
+    "timestamp": 1794861114
+  }
+}

@@ -12,6 +12,7 @@ import pytest
 import pyqbot
 from pyqbot._gateway.payload import READY_EVENT, OpCode, Ready, decode_payload
 from pyqbot._model import decode
+from pyqbot._models.event import Event, bind_event_id, reply_fields
 from pyqbot._models.upload import UploadPrepared
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -147,3 +148,42 @@ def test_upload_prepare_numbers_parts_from_one() -> None:
 
     assert (prepared.first_index, prepared.chunk_size, len(prepared.parts)) == (1, 3602158, 1)
     assert prepared.upload_config.retry_delay == 1
+
+
+def event_from[E: Event](name: str, type_: type[E]) -> E:
+    payload = decode_payload(sample(name))
+    event = payload.decode_data(type_)
+    bind_event_id(event, payload.id)
+    return event
+
+
+def test_friend_add_from_a_share_link_keeps_the_callback_data_with_default_scene() -> None:
+    event = event_from("gateway_friend_add.json", pyqbot.FriendAdd)
+
+    assert event.event_id == "FRIEND_ADD:00000000-0000-0000-0000-000000000001"
+    assert (event.scene, event.scene_param) == (pyqbot.FriendAddScene.DEFAULT, "pyqbot-live")
+    assert event.short_code == "fakeCode01"
+    assert event.author.union_openid == ""
+    assert reply_fields(event)["event_id"] == event.event_id
+
+
+def test_friend_del_has_an_author_with_empty_union_openid() -> None:
+    event = event_from("gateway_friend_del.json", pyqbot.FriendDel)
+
+    assert event.event_id == "FRIEND_DEL:00000000-0000-0000-0000-000000000002"
+    assert event.author.union_openid == ""
+
+
+def test_authorize_interaction_has_no_chat_type_and_replies_with_the_outer_id() -> None:
+    event = event_from("gateway_interaction_authorize.json", pyqbot.Interaction)
+
+    assert event.type == pyqbot.InteractionType.USER_AUTHORIZE
+    assert (event.chat_type, event.data.type) == (None, None)
+    assert event.id == "00000000-0000-0000-0000-000000000003"
+    authorize = event.data.resolved.authorize_data
+    assert authorize is not None
+    assert (authorize.opt_scene, authorize.scope) == (
+        pyqbot.AuthorizeOptScene.SETTING,
+        pyqbot.AuthorizeScope.C2C_PUSH,
+    )
+    assert reply_fields(event)["event_id"] == "INTERACTION_CREATE:" + event.id

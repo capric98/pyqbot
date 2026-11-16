@@ -91,13 +91,6 @@
 - **含糊**：单聊的实测结果多一个 `avatar`（已确认，见下）；群聊 `author` 是否同样有 `avatar`、`member_role` 的取值是否只有三种，都没测到。`message_type` 的 101「并行消息」也没有说明含义。
 - **当前做法**：`avatar` 两边都建模为可选；`member_role` 是 `GroupMemberRole`（`OpenStrEnum`，收录 member、admin、owner），未知取值得到伪成员、原值保留。
 
-### 被动回复的 `event_id`：取外层 `id` 还是 `d.id`
-
-- **位置**：`autogen/api/v2_users_user_openid_messages.post.md` 与群聊页的 `event_id` 一行；`autogen/event/interaction_create.md` 事件体的 `id`；`autogen/api/interactions_interaction_id.put.md` 的 `interaction_id`。
-- **矛盾**：发消息接口说 `event_id`「从事件最外层的 id 获取」；`interaction_create.md` 说 `d.id`「用于被动消息发送和互动回调」；回应互动的接口说 `d.id`「不带 `INTERACTION_CREATE:` 前缀」，暗示外层 `id` 带前缀、两者不同。另外 `msg_seq` 只说「与 msg_id 联合使用」，没说用 `event_id` 时要不要带。
-- **当前做法**：按发消息接口页，取外层 `id`（`event.event_id`）；`msg_seq` 照样按对象从 1 递增并带上。
-- **怎么测**：点一次回调按钮，记下外层 `id` 与 `d.id`；分别用两者作为 `event_id` 被动回复，看哪个被接受；再用同一个 `event_id` 带递增的 `msg_seq` 连发两条。`tests/live/test_live_events.py` 的三个用例会把每条事件的外层 `id` 与 `d.id` 记进 `.cache/live/events.txt`，并用外层 `id` 回复；互动用例回复成功即说明外层 `id` 可用。
-
 ### `msg_type` 的取值各页不一致
 
 - **位置**：单聊发消息页（0/2/6/7/8）、群聊发消息页（0/2/7/8）、`server-inter/message/overview.md`（0/2/7）、`server-inter/message/type/overview.md`（表格 0/2/7，表下又说「发送侧只有 msg_type=0/2/3/7 四种」）。
@@ -166,20 +159,6 @@
 - **当前做法**：按字段表与示例：`verify_info.method`（`JoinRequestVerifyMethod`），`auto_approved.strategy_id`，`apply_at` 解成 `datetime`（不是 RFC3339 时退回 `None`，不让整条事件丢掉）。`group_openid`、`join_request_id` 与 `member_openid` 必填：后者是审批接口 `POST /v2/groups/{group_openid}/approval_join_request/{member_openid}` 的路径参数，三个示例都有。
 - **怎么测**：要一个机器人是管理员的测试群，再请人申请加群，会影响其他用户，须单独征得同意；记下 `verify_info` 的键名与 `apply_at` 的格式。
 
-### 好友事件的 `author`、`short_code` 与 `union_openid`
-
-- **位置**：`autogen/event/friend_add.md`、`friend_del.md`；`server-inter/user/manage/event.md`；`server-inter/channel/manage/user/model.md`。
-- **矛盾**：`autogen` 的 `FRIEND_ADD`、`FRIEND_DEL` 都有 `author{union_openid}`，`FRIEND_ADD` 还有 `short_code`；`manage/event.md` 两个都没有，`FRIEND_DEL` 的 `autogen` 示例也没有 `author`。频道的用户模型说事件里的用户对象不带 `union_openid`，而单聊、群聊的消息事件和 `FRIEND_ADD` 都列了它。
-- **当前做法**：`author`、`short_code`、`union_openid` 都可缺省（`author` 缺失时各字段为 `None`），只有 `openid` 必填。
-- **怎么测**：实测用例 `test_friend_del_then_add` 记下两条事件是否带 `author`、`union_openid` 是否为空。
-
-### 互动事件 `INTERACTION_CREATE` 的类型与场景
-
-- **位置**：`autogen/event/interaction_create.md`。
-- **矛盾**：外层 `type` 有 11~16 与 18、19、20，`data.type` 说「与外层 type 含义一致」却只列了 11~16；20（群授权状态变更）没有说明；示例 3（用户授权）没有 `data.type` 与 `chat_type`，只有 `scene`。
-- **当前做法**：两处用同一个 `InteractionType`，未知取值保留原值；`chat_type`、`data.type` 都可缺省，`reply()` 在没有 `chat_type` 时按 `scene` 判断场景。
-- **怎么测**：实测用例 `test_callback_button_interaction` 记下按钮互动的 `chat_type` 与 `data.type`；`test_c2c_msg_reject_then_receive` 期间同时订阅互动，看切换主动消息开关时是否推送 `type=18`，以及它带不带 `chat_type`。
-
 ### 回应互动的期限
 
 - **位置**：`server-inter/message/trans/overview.md`「响应互动」；`autogen/api/interactions_interaction_id.put.md`；`autogen/event/interaction_create.md`。
@@ -213,15 +192,15 @@
 
 - **位置**：`rich-media.md`「注意事项」与预上传页 `block_size` 一行都说默认 5MB，预上传页的响应示例是 `"10485760"`（10 MiB）。
 - **当前做法**：不假设大小，一律按响应顶层的 `block_size` 切片；它是字符串还是数字都接受。
-- **已知**：约 3.6 MB 的图片只给一片，顶层与这一片的 `block_size` 都等于文件大小，见「已确认」的「分片上传：序号从 1 开始」。
-- **怎么测**：实测用例 `test_file_over_10m_is_uploaded_in_several_parts`（约 12 MB）记下各片大小。
+- **已知**：约 3.6 MB 的图片只给一片，顶层与这一片的 `block_size` 都等于文件大小，见「已确认」的「分片上传：序号从 1 开始，图片只有一片」。
+- **怎么测**：约 12 MB 的图片也只给一片（2026-11-16，`test_file_over_10m_is_uploaded`）；图片上限 20 MB，要看到多片得用更大的视频或文件。
 
 ### 分片上传：分片完成接口的 `block_size`
 
 - **位置**：单聊分片完成页写「分块大小（字节）」，群聊页写「该分块的实际大小」。
 - **含糊**：最后一片不足 `block_size` 时填哪个。
 - **当前做法**：填这一片的实际字节数，字符串。
-- **怎么测**：实测用例 `test_file_over_10m_is_uploaded_in_several_parts`，成功即确认（约 3.6 MB 的文件只有一片，没有测到）。
+- **怎么测**：要能分成多片的文件；约 3.6 MB 与约 12 MB 的图片都只有一片，没有测到。
 
 ### 分片上传：`upload_config.retry_timeout` 的含义
 
@@ -251,27 +230,12 @@
 - **当前做法**：`.jpg`、`.jpeg` 都发 `image/jpeg`；其它扩展名在本地抛 `ValueError`。
 - **怎么测**：在素材库上传一张文件名为 `.jpg` 的图片，看 prepare 是否返回 40035001。
 
-### 流式消息：路径参数与示例的 openid
-
-- **位置**：`autogen/api/v2_users_user_openid_stream_messages.post.md` 的「路径参数」与请求示例。
-- **含糊**：路径参数 `user_openid` 的描述是空的；第三个示例（结束片）路径里的 openid 有 44 位，前两个示例与真实的 `user_openid` 都是 32 位。
-- **当前做法**：按单聊发消息接口理解为用户的 `user_openid`，`message.reply_stream()` 取 `message.user_openid`。
-- **怎么测**：实测用例 `tests/live/test_live_bot.py::test_stream_reply`。
-
 ### 流式消息：`content_raw` 说是 Markdown，`content_type` 却可以是 text
 
 - **位置**：同上，请求体的 `content_type` 与 `content_raw` 两行。
 - **矛盾**：`content_type` 可选 `text` / `markdown`，`content_raw` 的描述却是「Markdown 格式的文本内容」。
 - **当前做法**：`markdown=True`（默认）发 `content_type=markdown`，`markdown=False` 发 `text`，`content_raw` 原样填调用方的文字。
 - **怎么测**：用 `reply_stream(markdown=False)` 发一段带 `**` 的文字，看是否按原文显示。
-
-### 流式消息：各分片的 `msg_seq`、`index` 与结束分片
-
-- **位置**：同上，请求体与三个请求示例。
-- **含糊**：`msg_seq` 只说「用于去重」，没说同一条流式消息的各分片是否共用一个（三个示例都是 1）；某个分片发送失败后 `index` 该重用还是跳过；结束分片（`input_state=10`）能否不带内容。
-- **当前做法**：所有分片共用第一次取的 `msg_seq`；`index` 每发一个分片加 1，失败的也算，且失败后这条流式消息在本地终止；结束分片是 `input_mode=append`、`content_raw=""`。
-- **怎么测**：实测用例 `test_stream_reply`。看两点：结束分片的请求是否成功（不抛 `APIError`）；测试账号的客户端里这条消息是否停止显示「生成中」、正文是否完整。请求成功但客户端仍显示「生成中」，同样算空的结束分片不可用。
-- **不可用时的备选**：结束分片改用 `input_mode=replace`、`content_raw` 带上完整正文（SDK 在本地累计 `append` / `replace` 过的内容，按 `replace` 的语义它一定以已下发的内容开头）；或者每次 `append` 先压住最后一段，到结束时随 `input_state=10` 一起发出（代价是最后一段晚一拍出现）。
 
 ### 自定义菜单：怎么清空，哪些字段必填
 
@@ -665,12 +629,13 @@
 - **结论**：没有设置过菜单的机器人，响应是 `{"menu": {}}`，没有 `version`。
 - **实现**：`CurrentMenu.version` 为 `None`，`items` 为空。fixture：`menu_unset.json`。
 
-### 分片上传：序号从 1 开始，文件不大时只有一片
+### 分片上传：序号从 1 开始，图片只有一片
 
 - **位置**：单聊预上传页 `UploadPart.index` 写「分片序号，从 0 开始」，示例也从 0 开始；分片完成页的示例 `part_index` 是 0。
 - **结论**（`test_large_file_is_uploaded_in_parts`，3602158 字节的 PNG）：
   - 预上传的响应：`parts` 只有一片，`index` 是 1；每一片另带文档没有的 `block_size`。顶层与这一片的 `block_size` 都是字符串 `"3602158"`，即文件大小。`upload_config` 是 `{"concurrency": 1, "retry_timeout": 300, "retry_delay": 1}`。
   - 分片完成时 `part_index` 原样填 1 被接受；`md5_10m` 填整个文件的 MD5（文件不足 10002432 字节）被接受；合并后返回 `raw_url`。
+  - 12005713 字节的 PNG（`test_file_over_10m_is_uploaded`）同样只有一片、`block_size` 等于文件大小；`md5_10m` 填前 10002432 字节的 MD5 被接受。
 - **实现**：允许序号从 0 或 1 开始（须连续），第 n 片的偏移按「序号 − 最小序号」计算，分片完成时原样回报平台给的序号。fixture：`upload_prepared.json`。
 
 ### 卡片：`pic_url` 用 .ico 时转存失败
@@ -678,3 +643,48 @@
 - **位置**：单聊发消息页的卡片（`msg_type=8`）。文档没有写 `pic_url` 支持哪些格式。
 - **结论**：`pic_url` 填 `https://www.qq.com/favicon.ico` 时，发消息返回 `err_code` 40034141「图片转存失败，请重试」；换成 jpg 后卡片正常显示，点击打开 `url`。
 - **实现**：不变，由平台拒绝。
+
+### 被动回复的 `event_id`：取外层 `id`
+
+- **位置**：发消息接口页的 `event_id` 一行（「从事件最外层的 id 获取」）；`autogen/event/interaction_create.md` 说 `d.id`「用于被动消息发送和互动回调」。
+- **结论**：外层 `id` 形如 `INTERACTION_CREATE:<uuid>`、`FRIEND_ADD:<uuid>`、`FRIEND_DEL:<uuid>`；互动的 `d.id` 是不带前缀的 `<uuid>`，好友事件的 `d` 里没有 `id`。用外层 `id` 作 `event_id`、带 `msg_seq` 1 被动回复，按钮互动、授权互动与 `FRIEND_ADD` 都被接受（`tests/live/test_live_events.py`）。
+- **没有测**：用 `d.id` 作 `event_id`；同一个 `event_id` 带递增的 `msg_seq` 连发两条。
+- **实现**：不变，`event.event_id` 取外层 `id`。fixture：`gateway_friend_add.json`、`gateway_interaction_authorize.json`。
+
+### 好友事件：都带 `author`，经分享链接添加时 `scene` 是 1000
+
+- **位置**：`autogen/event/friend_add.md`、`friend_del.md`；`server-inter/user/manage/event.md`。
+- **结论**（`test_friend_del_then_add`）：
+  - `FRIEND_DEL` 与 `FRIEND_ADD` 都带 `author`，里面只有 `union_openid`，是空串。
+  - 用 `generate_share_link(callback_data="pyqbot-live")` 生成的链接加回时，`FRIEND_ADD` 的 `scene_param` 是 `pyqbot-live`，`short_code` 是这条短链接的代码；`scene` 却是 1000（缺省），不是文档说的 2003 / 2004。
+- **实现**：字段都可缺省，不变；`FriendAdd.scene_param` 的 docstring 提示以它区分来源。fixture：`gateway_friend_add.json`、`gateway_friend_del.json`。
+
+### 互动事件：按钮与授权的类型、场景
+
+- **位置**：`autogen/event/interaction_create.md`。
+- **结论**：
+  - 单聊里点回调按钮：`type` 11，`chat_type` 2（单聊），`data.type` 11；用 `d.id` 调 `PUT /interactions/{id}` 回应后，按钮不再转圈、文字变成 `visited_label`（`test_callback_button_interaction`）。
+  - 切换资料卡的主动消息开关：`type` 18，没有 `chat_type` 和 `data.type`，`scene` 是 `"c2c"`，`data.resolved.authorize_data` 是 `{"opt_scene": "setting", "scope": "c2c_push"}`；另有文档没提的 `union_openid`（空串）。
+  - `type` 20 没有见到。
+- **实现**：不变；`reply()` 没有 `chat_type` 时按 `scene` 判断场景。fixture：`gateway_interaction_authorize.json`。
+
+### 单聊主动消息开关：不推 `C2C_MSG_REJECT` / `C2C_MSG_RECEIVE`
+
+- **位置**：`autogen/event/c2c_msg_reject.md`、`c2c_msg_receive.md`：用户在资料卡关闭 / 打开主动消息时触发。
+- **结论**（`test_c2c_msg_reject_then_receive`，订阅了 `GROUP_AND_C2C_EVENT` 与互动）：
+  - 切换资料卡的开关时，两个事件都没有推送，推的是 `type` 18 的 `INTERACTION_CREATE`（见上一条）。
+  - 授权互动里没有开关状态，分不出是关还是开。
+  - 推送的条数也不固定：连续切换 4 次收到 4 条；先关、约 20 秒后再开，只收到 1 条。
+  - 用这条授权互动的外层 `id` 被动回复被接受，测试用户收到了。
+- **实现**：`on_c2c_msg_reject`、`on_c2c_msg_receive` 保留（文档仍有），docstring 写明实测没有推送、改看授权互动。
+
+### 流式消息：路径用 `user_openid`，空的结束分片可用
+
+- **位置**：`autogen/api/v2_users_user_openid_stream_messages.post.md` 的路径参数、请求体与三个示例。
+- **结论**（`test_stream_reply`，被动回复一条单聊消息）：
+  - 路径参数就是用户的 `user_openid`。
+  - 所有分片共用第一次取的 `msg_seq`，`index` 从 0 起每片加 1，都被接受。
+  - 结束分片 `input_mode=append`、`content_raw=""` 被接受。
+  - 客户端里消息逐段出现：生成中显示跳动的三个点，每来一片手机轻微震动，发出结束分片后三个点消失，正文完整。
+  - 每个分片响应的 `remain_msg_len` 都是 0。
+- **实现**：不变。

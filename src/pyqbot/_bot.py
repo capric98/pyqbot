@@ -169,6 +169,10 @@ class Bot(Client):
     def on_c2c_msg_reject[F: Handler[C2CMsgReject]](self, handler: F) -> F:
         """注册用户关闭主动消息（`C2C_MSG_REJECT`）的处理函数，原样返回它；要求同 `on_c2c_message`。
 
+        2026-11-16 实测切换资料卡的主动消息开关时，平台没有推送这个事件，而是推送
+        `type` 为 `USER_AUTHORIZE`、`authorize_data.scope` 为 `C2C_PUSH` 的 `Interaction`，且分不出开关
+        （`docs/errata.md`）。
+
         Raises:
             TypeError: 处理函数不是 `async def` 定义的。
         """
@@ -177,6 +181,10 @@ class Bot(Client):
 
     def on_c2c_msg_receive[F: Handler[C2CMsgReceive]](self, handler: F) -> F:
         """注册用户打开主动消息（`C2C_MSG_RECEIVE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
+
+        2026-11-16 实测切换资料卡的主动消息开关时，平台没有推送这个事件，而是推送
+        `type` 为 `USER_AUTHORIZE`、`authorize_data.scope` 为 `C2C_PUSH` 的 `Interaction`，且分不出开关
+        （`docs/errata.md`）。
 
         Raises:
             TypeError: 处理函数不是 `async def` 定义的。

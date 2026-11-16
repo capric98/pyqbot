@@ -95,9 +95,10 @@ class FriendAdd(_C2CReplyNotice):
         openid: 用户的 openid，即单聊的 `user_openid`。
         timestamp: 添加时间，Unix 秒。
         scene: 从哪里添加的。
-        scene_param: 开发者分享链接里的 `callback_data`，用来区分来源；没有时为空串。
-        short_code: 机器人分享链接的短链 code。
-        author: 用户信息，含 `union_openid`。
+        scene_param: 开发者分享链接里的 `callback_data`，用来区分来源；没有时为空串。实测经分享链接添加时
+            `scene` 是 `DEFAULT`，以它为准。
+        short_code: 添加时用的分享链接的短链 code。
+        author: 用户信息，含 `union_openid`（实测为空串）。
 
     Example:
         ```python
