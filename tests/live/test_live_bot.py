@@ -180,7 +180,7 @@ async def test_panel_lifecycle(client: pyqbot.Client, openid: str) -> None:
         assert panel_id in listed
 
         item = pyqbot.PanelItem.command_button("pyqbot2", desc="修改后")
-        version = await client.panels.update(panel_id, [item], remark="pyqbot 实测，可删除")
+        version = await client.panels.set(panel_id, [item], remark="pyqbot 实测，可删除")
         note(client, f"修改后版本 {version}；去测试账号确认面板已变成「pyqbot2」")
         await asyncio.sleep(20)
 

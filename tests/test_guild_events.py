@@ -181,9 +181,9 @@ EVENTS: list[tuple[type[Event], str, pyqbot.Intents]] = [
     (pyqbot.GuildMemberAdd, "GUILD_MEMBER_ADD", pyqbot.Intents.GUILD_MEMBERS),
     (pyqbot.GuildMemberUpdate, "GUILD_MEMBER_UPDATE", pyqbot.Intents.GUILD_MEMBERS),
     (pyqbot.GuildMemberRemove, "GUILD_MEMBER_REMOVE", pyqbot.Intents.GUILD_MEMBERS),
-    (pyqbot.ChannelAnyMessage, "MESSAGE_CREATE", pyqbot.Intents.GUILD_MESSAGES),
+    (pyqbot.ChannelMessage, "MESSAGE_CREATE", pyqbot.Intents.GUILD_MESSAGES),
     (pyqbot.MessageDelete, "MESSAGE_DELETE", pyqbot.Intents.GUILD_MESSAGES),
-    (pyqbot.ChannelMessage, "AT_MESSAGE_CREATE", pyqbot.Intents.PUBLIC_GUILD_MESSAGES),
+    (pyqbot.ChannelAtMessage, "AT_MESSAGE_CREATE", pyqbot.Intents.PUBLIC_GUILD_MESSAGES),
     (pyqbot.PublicMessageDelete, "PUBLIC_MESSAGE_DELETE", pyqbot.Intents.PUBLIC_GUILD_MESSAGES),
     (pyqbot.DirectMessage, "DIRECT_MESSAGE_CREATE", pyqbot.Intents.DIRECT_MESSAGE),
     (pyqbot.DirectMessageDelete, "DIRECT_MESSAGE_DELETE", pyqbot.Intents.DIRECT_MESSAGE),
@@ -242,8 +242,8 @@ def test_event_names_are_unique() -> None:
 def test_only_events_the_send_api_lists_can_be_replied_to() -> None:
     # 子频道消息用 msg_id；send.md 的 event_id 列表里有成员、表态与论坛的主题、评论、回复。
     channel = {
-        pyqbot.ChannelAnyMessage,
         pyqbot.ChannelMessage,
+        pyqbot.ChannelAtMessage,
         pyqbot.GuildMemberAdd,
         pyqbot.GuildMemberUpdate,
         pyqbot.GuildMemberRemove,
@@ -282,7 +282,7 @@ def test_interaction_can_also_happen_in_a_channel() -> None:
 
 def test_messages_reply_with_msg_id_and_other_events_with_event_id() -> None:
     # WP7 的发送接口照单聊、群聊用 reply_fields() 填写被动回复的字段。
-    message = decoded(pyqbot.ChannelMessage, MESSAGE, "AT_MESSAGE_CREATE:1")
+    message = decoded(pyqbot.ChannelAtMessage, MESSAGE, "AT_MESSAGE_CREATE:1")
     direct = decoded(pyqbot.DirectMessage, MESSAGE)
     reaction = decoded(pyqbot.MessageReactionAdd, REACTION, "MESSAGE_REACTION_ADD:2")
 
@@ -393,10 +393,10 @@ def test_role_and_member_models() -> None:
 
 
 @pytest.mark.parametrize(
-    "event_type", [pyqbot.ChannelMessage, pyqbot.ChannelAnyMessage, pyqbot.DirectMessage]
+    "event_type", [pyqbot.ChannelAtMessage, pyqbot.ChannelMessage, pyqbot.DirectMessage]
 )
 def test_message_examples_decode(
-    event_type: type[pyqbot.ChannelMessage | pyqbot.ChannelAnyMessage | pyqbot.DirectMessage],
+    event_type: type[pyqbot.ChannelAtMessage | pyqbot.ChannelMessage | pyqbot.DirectMessage],
 ) -> None:
     message = decoded(event_type, MESSAGE)
 
@@ -444,7 +444,7 @@ def test_message_decodes_every_documented_field() -> None:
         "seq_in_channel": "101",
         "message_reference": {"message_id": "0812345677890abcdee"},
     }
-    message = decoded(pyqbot.ChannelMessage, data)
+    message = decoded(pyqbot.ChannelAtMessage, data)
 
     assert message.edited_timestamp == datetime(2021, 5, 20, 15, 20, tzinfo=UTC8)
     assert message.mention_everyone is True
@@ -466,17 +466,17 @@ def test_message_decodes_every_documented_field() -> None:
 
 
 def test_channel_at_message_is_a_channel_any_message_but_not_the_other_way() -> None:
-    message = decoded(pyqbot.ChannelAnyMessage, MESSAGE)
+    message = decoded(pyqbot.ChannelMessage, MESSAGE)
 
-    assert not isinstance(message, pyqbot.ChannelMessage)
-    assert isinstance(decoded(pyqbot.ChannelMessage, MESSAGE), pyqbot.ChannelAnyMessage)
-    assert not isinstance(decoded(pyqbot.DirectMessage, MESSAGE), pyqbot.ChannelAnyMessage)
+    assert not isinstance(message, pyqbot.ChannelAtMessage)
+    assert isinstance(decoded(pyqbot.ChannelAtMessage, MESSAGE), pyqbot.ChannelMessage)
+    assert not isinstance(decoded(pyqbot.DirectMessage, MESSAGE), pyqbot.ChannelMessage)
 
 
 @pytest.mark.parametrize(
     ("event_type", "data"),
     [
-        (pyqbot.ChannelMessage, {"id": "m", "guild_id": "g"}),
+        (pyqbot.ChannelAtMessage, {"id": "m", "guild_id": "g"}),
         (pyqbot.DirectMessage, {"id": "m", "channel_id": "c"}),
         (pyqbot.GuildCreate, {"name": "频道"}),
         (pyqbot.ChannelCreate, {"guild_id": "g"}),
@@ -909,9 +909,9 @@ async def test_events_without_an_intent_bit_need_explicit_intents() -> None:
 async def test_handlers_for_the_wrong_event_are_type_errors() -> None:
     async with pyqbot.Bot("app-id", "app-secret") as bot:
 
-        async def on_at(message: pyqbot.ChannelMessage) -> None: ...
+        async def on_at(message: pyqbot.ChannelAtMessage) -> None: ...
 
-        async def on_any(message: pyqbot.ChannelAnyMessage) -> None: ...
+        async def on_any(message: pyqbot.ChannelMessage) -> None: ...
 
         async def on_deleted(event: pyqbot.MessageDelete) -> None: ...
 
@@ -935,11 +935,11 @@ async def test_channel_messages_go_only_to_the_decorator_of_their_event_name() -
     async with pyqbot.Bot("app-id", "app-secret") as bot:
 
         @bot.on_channel_at_message
-        async def at(message: pyqbot.ChannelMessage) -> None:
+        async def at(message: pyqbot.ChannelAtMessage) -> None:
             record("at", message)
 
         @bot.on_channel_message
-        async def every(message: pyqbot.ChannelAnyMessage) -> None:
+        async def every(message: pyqbot.ChannelMessage) -> None:
             record("any", message)
 
         @bot.on_audio_or_live_channel_member_exit
@@ -957,7 +957,7 @@ async def test_channel_messages_go_only_to_the_decorator_of_their_event_name() -
             await done.wait()
 
     assert sorted(seen) == [
-        ("any", "ChannelAnyMessage", "MESSAGE_CREATE:1"),
-        ("at", "ChannelMessage", "AT_MESSAGE_CREATE:2"),
+        ("any", "ChannelMessage", "MESSAGE_CREATE:1"),
+        ("at", "ChannelAtMessage", "AT_MESSAGE_CREATE:2"),
         ("exit", "AudioOrLiveChannelMemberExit", "EXIT:3"),
     ]

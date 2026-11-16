@@ -14,9 +14,9 @@ from .._models.forum import (
     ForumThreadList,
     ThreadResponse,
 )
-from .._models.guild import Channel, GuildUser, PrivateType, SpeakPermission
+from .._models.guild import Channel, ChannelPermission, GuildUser, PrivateType, SpeakPermission
 from .._models.guild_content import PinnedMessages, RemindType, Schedule
-from .._models.guild_manage import ChannelPermission, OnlineNums, PermissionsResponse
+from .._models.guild_manage import OnlineNums, PermissionsResponse
 from .._models.guild_message import Emoji, GuildMessage, ReactionUserPage
 from .._models.send import Ark, Embed, Keyboard, Markdown
 from .guild_message import (

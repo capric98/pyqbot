@@ -79,8 +79,8 @@ def multipart(request: httpx2.Request) -> dict[str, tuple[str | None, bytes]]:
     return parts
 
 
-def channel_message(event_id: str | None = None) -> pyqbot.ChannelMessage:
-    message = pyqbot.ChannelMessage(id="m", channel_id="c", guild_id="g")
+def channel_message(event_id: str | None = None) -> pyqbot.ChannelAtMessage:
+    message = pyqbot.ChannelAtMessage(id="m", channel_id="c", guild_id="g")
     bind_event_id(message, event_id)
     return message
 
@@ -356,7 +356,7 @@ async def test_reply_to_an_event_without_event_id_is_rejected() -> None:
 async def test_event_shortcuts_reply_where_the_event_happened() -> None:
     platform = Platform()
     message = channel_message()
-    any_message = pyqbot.ChannelAnyMessage(id="a", channel_id="c2", guild_id="g")
+    any_message = pyqbot.ChannelMessage(id="a", channel_id="c2", guild_id="g")
     direct = pyqbot.DirectMessage(id="d", channel_id="dc", guild_id="dm")
     event = reaction()
     thread = pyqbot.ForumThreadCreate(

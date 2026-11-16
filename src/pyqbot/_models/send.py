@@ -37,7 +37,7 @@ class Markdown(RequestModel):
         markdown = pyqbot.Markdown(
             content="![图 #200px #100px](https://...)", force_verify_image_resource=True
         )
-        await client.users.send_message(openid, markdown=markdown)
+        await client.users.send_message(user_openid, markdown=markdown)
         ```
     """
 
@@ -228,7 +228,7 @@ class Button(RequestModel):
     ) -> Button:
         """跳转按钮：点击后打开 `url`。
 
-        `permission` 默认所有人，点击后文字不变，下同。
+        `permission=None` 表示所有人可点；点击后按钮文字不变。
         """
         return cls._make(
             label,
@@ -257,7 +257,11 @@ class Button(RequestModel):
         modal: ButtonModal | None = None,
         unsupport_tips: str | None = None,
     ) -> Button:
-        """回调按钮：点击后平台推送 `INTERACTION_CREATE` 事件，带上 `data` 与 `id`。"""
+        """回调按钮：点击后平台推送 `INTERACTION_CREATE` 事件，带上 `data` 与 `id`。
+
+        `permission=None` 表示所有人可点；`visited_label=None` 表示点击后文字不变；
+        `group_id` 相同的回调按钮被点了一个，其余变灰不可点。
+        """
         return cls._make(
             label,
             ButtonAction(
@@ -291,7 +295,8 @@ class Button(RequestModel):
         """指令按钮：点击后在输入框插入 `@机器人 data`。
 
         `enter=True` 时点击后直接发送，不用用户再按发送（官方说只有单聊可用）；
-        `reply=True` 时发送的指令引用这条消息。
+        `reply=True` 时发送的指令引用这条消息。`permission=None` 表示所有人可点；
+        `visited_label=None` 表示点击后文字不变。
         """
         return cls._make(
             label,
@@ -352,7 +357,7 @@ class Keyboard(RequestModel):
             [pyqbot.Button.callback("赞", "like"), pyqbot.Button.callback("踩", "dislike")],
             [pyqbot.Button.link("主页", "https://example.com")],
         )
-        await client.users.send_message(openid, markdown="**投票**", keyboard=keyboard)
+        await client.users.send_message(user_openid, markdown="**投票**", keyboard=keyboard)
         ```
     """
 

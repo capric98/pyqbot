@@ -4,6 +4,7 @@
 `autogen/event/group_at_message_create.md`、`autogen/event/group_message_create.md`。
 """
 
+import os
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -13,6 +14,7 @@ from .._gateway.intents import Intents
 from .._model import Model, OpenIntEnum, OpenStrEnum
 from .event import C2CReplyTarget, GroupReplyTarget, ReceivedMessage
 from .send import Card, Keyboard, Markdown, Media
+from .upload import FileType
 
 if TYPE_CHECKING:
     from .._api.stream import StreamMessage
@@ -70,7 +72,7 @@ class ReceivedMessageType(OpenIntEnum):
     QUOTE = 103
 
 
-class MemberRole(OpenStrEnum):
+class GroupMemberRole(OpenStrEnum):
     """群成员在群里的角色（`member_role`）。"""
 
     MEMBER = "member"
@@ -101,7 +103,7 @@ class C2CUser(_UserBase):
     user_openid: str
 
 
-class GroupMember(_UserBase):
+class GroupMessageMember(_UserBase):
     """群消息的发送者或被 @ 的群成员。
 
     Attributes:
@@ -112,7 +114,7 @@ class GroupMember(_UserBase):
     """
 
     member_openid: str | None = None
-    member_role: MemberRole | None = None
+    member_role: GroupMemberRole | None = None
 
 
 class MessageElementAuthor(_UserBase):
@@ -120,7 +122,7 @@ class MessageElementAuthor(_UserBase):
 
     user_openid: str | None = None
     member_openid: str | None = None
-    member_role: MemberRole | None = None
+    member_role: GroupMemberRole | None = None
 
 
 class MessageAttachment(Model):
@@ -264,6 +266,8 @@ class C2CMessage(_ChatMessage, C2CReplyTarget):
     async def send_typing(self, *, seconds: int = 60) -> None:
         """向发送者显示「正在输入」，作为对这条消息的被动回复；参数同 `client.users.send_typing()`。
 
+        对应官方接口 `POST /v2/users/{user_openid}/messages`（`msg_type=6`）。
+
         Raises:
             APIError: 平台拒绝。
             NetworkError: 没有拿到平台的响应。
@@ -275,6 +279,8 @@ class C2CMessage(_ChatMessage, C2CReplyTarget):
 
     def reply_stream(self, *, markdown: bool = True) -> StreamMessage:
         """以流式消息被动回复这条消息；参数同 `client.users.stream_message()`。
+
+        对应官方接口 `POST /v2/users/{user_openid}/stream_messages`。
 
         Raises:
             RuntimeError: 消息不是 `Bot` 分发来的（没有绑定客户端）。
@@ -289,12 +295,49 @@ class C2CMessage(_ChatMessage, C2CReplyTarget):
         client = self._bound_client()
         return client.users.stream_message(self.user_openid, reply_to=self, markdown=markdown)
 
+    async def upload(
+        self,
+        *,
+        path: str | os.PathLike[str] | None = None,
+        url: str | None = None,
+        data: bytes | None = None,
+        file_name: str | None = None,
+        file_type: FileType | None = None,
+        send: bool = False,
+    ) -> Media:
+        """上传要发给发送者的图片、视频、语音或文件；参数同 `client.users.upload()`，只是固定了用户。
 
-class GroupAnyMessage(_ChatMessage, GroupReplyTarget):
+        对应官方接口 `POST /v2/users/{user_openid}/files`（大文件另走分片上传）。
+
+        Raises:
+            APIError: 平台拒绝，例如格式不支持。
+            NetworkError: 没有拿到平台或对象存储的响应。
+            ValueError: 参数组合不合法，同 `client.users.upload()`。
+            OSError: 读取文件失败。
+            RuntimeError: 消息不是 `Bot` 分发来的（没有绑定客户端），或客户端已关闭。
+
+        Example:
+            ```python
+            await message.reply(media=await message.upload(path="cat.png"))
+            ```
+        """
+        client = self._bound_client()
+        return await client.users.upload(
+            self.user_openid,
+            path=path,
+            url=url,
+            data=data,
+            file_name=file_name,
+            file_type=file_type,
+            send=send,
+        )
+
+
+class GroupMessage(_ChatMessage, GroupReplyTarget):
     """群里的任意一条消息（不限于 @机器人），对应事件 `GROUP_MESSAGE_CREATE`。
 
-    机器人开启了「接收所有消息」才会收到。`GroupMessage`（@机器人 的消息）是它的子类，
-    所以一个标注为 `GroupAnyMessage` 的处理函数可以同时注册到 `@bot.on_group_message` 与
+    机器人开启了「接收所有消息」才会收到。`GroupAtMessage`（@机器人 的消息）是它的子类，
+    所以一个标注为 `GroupMessage` 的处理函数可以同时注册到 `@bot.on_group_message` 与
     `@bot.on_group_at_message`；反过来不行。平台可能重复推送同一条消息（`id` 相同），需要时自行去重。
 
     Attributes:
@@ -308,7 +351,7 @@ class GroupAnyMessage(_ChatMessage, GroupReplyTarget):
     Example:
         ```python
         @bot.on_group_message
-        async def watch(message: pyqbot.GroupAnyMessage) -> None:
+        async def watch(message: pyqbot.GroupMessage) -> None:
             if "<@all>" in message.content:
                 await message.reply("收到通知")
         ```
@@ -318,8 +361,8 @@ class GroupAnyMessage(_ChatMessage, GroupReplyTarget):
     intent = Intents.GROUP_AND_C2C_EVENT
 
     group_openid: str
-    author: GroupMember = msgspec.field(default_factory=GroupMember)
-    mentions: tuple[GroupMember, ...] = ()
+    author: GroupMessageMember = msgspec.field(default_factory=GroupMessageMember)
+    mentions: tuple[GroupMessageMember, ...] = ()
 
     @property
     def member_openid(self) -> str | None:
@@ -334,7 +377,7 @@ class GroupAnyMessage(_ChatMessage, GroupReplyTarget):
         keyboard: Keyboard | None = None,
         media: Media | None = None,
         card: Card | None = None,
-        quote: str | SentMessage | GroupAnyMessage | None = None,
+        quote: str | SentMessage | GroupMessage | None = None,
     ) -> SentMessage:
         """被动回复这条消息，`msg_id` 与 `msg_seq` 由 SDK 填写；参数同 `client.groups.send_message()`。
 
@@ -358,8 +401,45 @@ class GroupAnyMessage(_ChatMessage, GroupReplyTarget):
             reply_to=self,
         )
 
+    async def upload(
+        self,
+        *,
+        path: str | os.PathLike[str] | None = None,
+        url: str | None = None,
+        data: bytes | None = None,
+        file_name: str | None = None,
+        file_type: FileType | None = None,
+        send: bool = False,
+    ) -> Media:
+        """上传要发到这个群的图片、视频、语音或文件；参数同 `client.groups.upload()`，只是固定了群。
 
-class GroupMessage(GroupAnyMessage):
+        对应官方接口 `POST /v2/groups/{group_openid}/files`（大文件另走分片上传）。
+
+        Raises:
+            APIError: 平台拒绝，例如机器人被禁言、格式不支持。
+            NetworkError: 没有拿到平台或对象存储的响应。
+            ValueError: 参数组合不合法，同 `client.users.upload()`。
+            OSError: 读取文件失败。
+            RuntimeError: 消息不是 `Bot` 分发来的（没有绑定客户端），或客户端已关闭。
+
+        Example:
+            ```python
+            await message.reply(media=await message.upload(path="cat.png"))
+            ```
+        """
+        client = self._bound_client()
+        return await client.groups.upload(
+            self.group_openid,
+            path=path,
+            url=url,
+            data=data,
+            file_name=file_name,
+            file_type=file_type,
+            send=send,
+        )
+
+
+class GroupAtMessage(GroupMessage):
     """群里 @机器人 的消息，对应事件 `GROUP_AT_MESSAGE_CREATE`。
 
     平台可能重复推送同一条消息（`id` 相同），需要时自行去重。
@@ -368,12 +448,12 @@ class GroupMessage(GroupAnyMessage):
         content: 文本内容，已去掉开头的 @机器人；官方示例里带首尾空格，需要时自行 `strip()`。
         mentions: 消息里 @ 的其他成员，不含机器人自己。
 
-    其余字段与方法同 `GroupAnyMessage`。
+    其余字段与方法同 `GroupMessage`。
 
     Example:
         ```python
         @bot.on_group_at_message
-        async def pong(message: pyqbot.GroupMessage) -> None:
+        async def pong(message: pyqbot.GroupAtMessage) -> None:
             if message.content.strip() == "/ping":
                 await message.reply("pong")
         ```

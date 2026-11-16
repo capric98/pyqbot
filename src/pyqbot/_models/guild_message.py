@@ -77,7 +77,7 @@ class MessageReference(Model):
 class GuildMessage(ReceivedMessage):
     """频道里的一条消息（子频道消息或私信），即官方的 Message 对象，如 `MessageDelete.message`。
 
-    收到消息的事件是它的子类：`ChannelAnyMessage`、`ChannelMessage`、`DirectMessage`。
+    收到消息的事件是它的子类：`ChannelMessage`、`ChannelAtMessage`、`DirectMessage`。
 
     Attributes:
         id: 消息 ID。
@@ -115,10 +115,10 @@ class GuildMessage(ReceivedMessage):
     message_reference: MessageReference | None = None
 
 
-class ChannelAnyMessage(GuildMessage, ChannelReplyTarget):
+class ChannelMessage(GuildMessage, ChannelReplyTarget):
     """子频道里的任意一条消息（不限于 @机器人），对应事件 `MESSAGE_CREATE`；仅私域机器人可用。
 
-    `ChannelMessage`（@机器人 的消息）是它的子类，所以标注为 `ChannelAnyMessage` 的处理函数可以同时注册到
+    `ChannelAtMessage`（@机器人 的消息）是它的子类，所以标注为 `ChannelMessage` 的处理函数可以同时注册到
     `@bot.on_channel_message` 与 `@bot.on_channel_at_message`。消息不保证严格有序，需要时按 `seq_in_channel` 排序。
     字段同 `GuildMessage`。
     """
@@ -167,13 +167,13 @@ class ChannelAnyMessage(GuildMessage, ChannelReplyTarget):
         )
 
 
-class ChannelMessage(ChannelAnyMessage):
+class ChannelAtMessage(ChannelMessage):
     """子频道里 @机器人 或回复机器人的消息，对应事件 `AT_MESSAGE_CREATE`。字段同 `GuildMessage`。
 
     Example:
         ```python
         @bot.on_channel_at_message
-        async def pong(message: pyqbot.ChannelMessage) -> None:
+        async def pong(message: pyqbot.ChannelAtMessage) -> None:
             if "/ping" in message.content:
                 ...
         ```

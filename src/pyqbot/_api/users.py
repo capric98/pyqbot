@@ -21,7 +21,7 @@ class Users:
 
     async def send_message(
         self,
-        openid: str,
+        user_openid: str,
         content: str | None = None,
         *,
         markdown: str | Markdown | None = None,
@@ -40,7 +40,7 @@ class Users:
         对应官方接口 `POST /v2/users/{user_openid}/messages`。
 
         Args:
-            openid: 用户的 `user_openid`。
+            user_openid: 用户的 openid。
             content: 文本内容；与 `media`、`card` 同时传时一起发送。
             markdown: Markdown 正文，或 `Markdown` 对象（模板、图片校验等）。不能与 `content` 同时传。
             keyboard: 消息下方的按钮，只能随 `markdown` 发送。
@@ -54,18 +54,18 @@ class Users:
         Raises:
             APIError: 平台拒绝发送，例如被动回复已过期（`err_code` 见官方接口文档）。
             NetworkError: 没有拿到平台的响应。
-            ValueError: `openid` 为空；没有内容，或 `markdown`、`media`、`card` 传了不止一个，
+            ValueError: `user_openid` 为空；没有内容，或 `markdown`、`media`、`card` 传了不止一个，
                 或 `markdown` 与 `content` 同时传，或 `keyboard` 没有随 `markdown`；
                 `quote` 没有引用索引；`reply_to` 是没有事件 ID 的事件；`wakeup` 与 `reply_to` 同时使用。
             RuntimeError: 客户端已关闭。
 
         Example:
             ```python
-            await client.users.send_message(openid, "你好")
-            await client.users.send_message(openid, markdown="**你好**", keyboard=keyboard)
+            await client.users.send_message(user_openid, "你好")
+            await client.users.send_message(user_openid, markdown="**你好**", keyboard=keyboard)
             ```
         """
-        path = f"/v2/users/{path_segment(openid, 'openid')}/messages"
+        path = f"/v2/users/{path_segment(user_openid, 'user_openid')}/messages"
         body = message_body(
             content, markdown=markdown, keyboard=keyboard, media=media, card=card, quote=quote
         )
@@ -77,7 +77,7 @@ class Users:
 
     async def send_typing(
         self,
-        openid: str,
+        user_openid: str,
         *,
         seconds: int = 60,
         reply_to: C2CReplyTarget | None = None,
@@ -89,48 +89,48 @@ class Users:
         对应官方接口 `POST /v2/users/{user_openid}/messages`（`msg_type=6`）。
 
         Args:
-            openid: 用户的 `user_openid`。
+            user_openid: 用户的 openid。
             seconds: 持续时间，1～60 秒。
             reply_to: 被动回复的对象，同 `send_message()`。
 
         Raises:
             APIError: 平台拒绝。
             NetworkError: 没有拿到平台的响应。
-            ValueError: `openid` 为空，`seconds` 不是 1～60 之间的整数，或 `reply_to` 是没有事件 ID 的事件。
+            ValueError: `user_openid` 为空，`seconds` 不是 1～60 之间的整数，或 `reply_to` 是没有事件 ID 的事件。
             RuntimeError: 客户端已关闭。
 
         Example:
             ```python
-            await client.users.send_typing(openid, seconds=30, reply_to=message)
+            await client.users.send_typing(user_openid, seconds=30, reply_to=message)
             ```
         """
-        path = f"/v2/users/{path_segment(openid, 'openid')}/messages"
+        path = f"/v2/users/{path_segment(user_openid, 'user_openid')}/messages"
         body = typing_body(seconds)
         if reply_to is not None:
             body |= reply_fields(reply_to)
         # 文档没有给出响应体，不解码。
         await self._http.request("POST", path, type_=None, json=body)
 
-    async def recall_message(self, openid: str, message: str | SentMessage) -> None:
+    async def recall_message(self, user_openid: str, message: str | SentMessage) -> None:
         """撤回机器人发给用户的一条消息。发出超过 2 分钟的消息不能撤回。
 
         对应官方接口 `DELETE /v2/users/{user_openid}/messages/{message_id}`。
 
         Args:
-            openid: 用户的 `user_openid`。
+            user_openid: 用户的 openid。
             message: 要撤回的消息：`send_message()` 的返回值或它的 `id`。
 
         Raises:
             APIError: 平台拒绝，例如已超过撤回时限（`err_code` 为 40064004）。
             NetworkError: 没有拿到平台的响应。
-            ValueError: `openid` 或消息 ID 为空。
+            ValueError: `user_openid` 或消息 ID 为空。
             RuntimeError: 客户端已关闭。
         """
-        base = f"/v2/users/{path_segment(openid, 'openid')}/messages"
+        base = f"/v2/users/{path_segment(user_openid, 'user_openid')}/messages"
         await self._http.request("DELETE", message_path(base, message), type_=None)
 
     def stream_message(
-        self, openid: str, *, reply_to: C2CReplyTarget, markdown: bool = True
+        self, user_openid: str, *, reply_to: C2CReplyTarget, markdown: bool = True
     ) -> StreamMessage:
         """开始一条流式消息：内容分多次发出，用户看到的是同一条消息逐渐变长。只有单聊支持。
 
@@ -140,27 +140,27 @@ class Users:
         对应官方接口 `POST /v2/users/{user_openid}/stream_messages`。
 
         Args:
-            openid: 用户的 `user_openid`。
+            user_openid: 用户的 openid。
             reply_to: 被动回复的对象，同 `send_message()`；整条流式消息只占用它的一个 `msg_seq`。
             markdown: 内容按 Markdown 渲染；为 `False` 时按纯文本。
 
         Raises:
-            ValueError: `openid` 为空。
+            ValueError: `user_openid` 为空。
 
         Example:
             ```python
-            async with client.users.stream_message(openid, reply_to=message) as stream:
+            async with client.users.stream_message(user_openid, reply_to=message) as stream:
                 async for piece in llm():
                     await stream.append(piece)
             ```
         """
-        path = f"/v2/users/{path_segment(openid, 'openid')}/stream_messages"
+        path = f"/v2/users/{path_segment(user_openid, 'user_openid')}/stream_messages"
         content_type = StreamContentType.MARKDOWN if markdown else StreamContentType.TEXT
         return StreamMessage(self._http, path, reply_to, content_type)
 
     async def upload(
         self,
-        openid: str,
+        user_openid: str,
         *,
         path: str | os.PathLike[str] | None = None,
         url: str | None = None,
@@ -178,7 +178,7 @@ class Users:
         `POST /v2/users/{user_id}/upload_prepare` 与 `POST /v2/users/{user_id}/upload_part_finish`。
 
         Args:
-            openid: 用户的 `user_openid`。
+            user_openid: 用户的 openid。
             path: 本地文件的路径。
             url: 公网可访问的 http(s) 地址。
             data: 文件内容，此时必须给出 `file_name`。
@@ -192,18 +192,18 @@ class Users:
         Raises:
             APIError: 平台拒绝，例如格式不支持（`err_code` 850019）、超过大小上限（850031）。
             NetworkError: 没有拿到平台或对象存储的响应（分片会先按平台的配置重试）。
-            ValueError: `openid` 为空，`path`、`url`、`data` 不是恰好传了一个，`data` 没有 `file_name`，
+            ValueError: `user_openid` 为空，`path`、`url`、`data` 不是恰好传了一个，`data` 没有 `file_name`，
                 `url` 带了 `file_name`，文件为空，或推断不出 `file_type`。
             OSError: 读取文件失败。
             RuntimeError: 客户端已关闭。
 
         Example:
             ```python
-            media = await client.users.upload(openid, path="photo.png")
+            media = await client.users.upload(user_openid, path="photo.png")
             await message.reply("图来了", media=media)
             ```
         """
-        base = f"/v2/users/{path_segment(openid, 'openid')}"
+        base = f"/v2/users/{path_segment(user_openid, 'user_openid')}"
         return await upload_media(
             self._http,
             base,

@@ -1,8 +1,10 @@
-"""异常层级。SDK 的所有失败都以这里的异常抛出，不用返回值表达错误。"""
+"""异常层级。平台与网络的失败都以这里的异常抛出，不用返回值表达错误。"""
 
 
 class QQBotError(Exception):
-    """pyqbot 抛出的所有异常的基类。
+    """平台与网络失败的统一基类。
+
+    用法错误（参数不合法、关闭后再用）抛内置的 `ValueError` / `RuntimeError`，读不了本地文件抛 `OSError`。
 
     Attributes:
         message: 错误描述，只用于人工排查；判断错误类型请用异常类型和 `err_code`。
@@ -54,7 +56,7 @@ class PartialFailureError(APIError):
     """批量操作里有一部分对象失败了，其余已经生效；文案说明是哪一步失败。
 
     Attributes:
-        failed_ids: 失败的对象（如 `member_openid`），顺序同平台给出的。
+        failed_ids: 失败的对象（如 `member_openid`）。平台给出失败清单时顺序同它，只给成功清单时按请求的顺序。
     """
 
     def __init__(
@@ -100,7 +102,7 @@ class AuditPendingError(APIError):
 class NetworkError(QQBotError):
     """没有拿到平台的响应：连接失败、超时、连接中途断开等。
 
-    底层的 httpx2 异常保留在 `__cause__` 上。
+    底层异常能安全保留（不含凭证）时放在 `__cause__` 上，否则丢弃。
     """
 
 

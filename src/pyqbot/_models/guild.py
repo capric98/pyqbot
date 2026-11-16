@@ -5,6 +5,7 @@
 频道、子频道、用户的 ID 都是只在机器人场景流通的字符串，与真实的 ID 无关。
 """
 
+import enum
 from datetime import datetime
 
 from .._gateway.intents import Intents
@@ -102,6 +103,27 @@ class SpeakPermission(OpenIntEnum):
     ADMINS_AND_MEMBERS = 2
 
 
+class ChannelPermission(enum.IntFlag):
+    """子频道权限位，多个权限用 `|` 组合；未列出的位（上游新增的权限）原样保留。
+
+    Attributes:
+        VIEW: 可查看子频道。
+        MANAGE: 可管理子频道；创建者、管理员、子频道管理员都有，不能通过接口修改。
+        SPEAK: 可在子频道发言。
+
+    Example:
+        ```python
+        await client.channels.update_member_permissions(
+            channel_id, user_id, add=pyqbot.ChannelPermission.VIEW | pyqbot.ChannelPermission.SPEAK
+        )
+        ```
+    """
+
+    VIEW = 1 << 0
+    MANAGE = 1 << 1
+    SPEAK = 1 << 2
+
+
 class Channel(Model):
     """子频道。
 
@@ -117,7 +139,7 @@ class Channel(Model):
         private_type: 对谁可见。
         speak_permission: 谁能发言。
         application_id: 应用子频道的应用类型，如 `"1000000"`（王者开黑大厅）。
-        permissions: 机器人在这个子频道拥有的权限，是十进制数字的字符串。
+        permissions: 机器人在这个子频道拥有的权限，是十进制数字的字符串；按位使用时取 `permission_flags`。
     """
 
     id: str
@@ -132,6 +154,17 @@ class Channel(Model):
     speak_permission: SpeakPermission | None = None
     application_id: str | None = None
     permissions: str | None = None
+
+    @property
+    def permission_flags(self) -> ChannelPermission | None:
+        """`permissions` 换成的权限位；没有或认不出时为 `None`。"""
+        value = self.permissions
+        if value is None or not (value.isascii() and value.isdecimal()):
+            return None
+        try:
+            return ChannelPermission(int(value))
+        except ValueError:  # 位数超过整数转换的上限
+            return None
 
 
 class GuildUser(Model):

@@ -131,7 +131,7 @@ async def client_for(platform: Platform) -> AsyncGenerator[pyqbot.Client]:
         (pyqbot.GroupMemberAdd, "GROUP_MEMBER_ADD", pyqbot.Intents.GROUP_MEMBER_EVENT),
         (pyqbot.GroupMemberRemove, "GROUP_MEMBER_REMOVE", pyqbot.Intents.GROUP_MEMBER_EVENT),
         (pyqbot.GroupJoinRequest, "GROUP_JOIN_REQUEST", pyqbot.Intents.GROUP_MEMBER_EVENT),
-        (pyqbot.GroupAnyMessage, "GROUP_MESSAGE_CREATE", pyqbot.Intents.GROUP_AND_C2C_EVENT),
+        (pyqbot.GroupMessage, "GROUP_MESSAGE_CREATE", pyqbot.Intents.GROUP_AND_C2C_EVENT),
         (
             pyqbot.SubscribeMessageStatus,
             "SUBSCRIBE_MESSAGE_STATUS",
@@ -264,6 +264,14 @@ def test_join_request_examples_decode() -> None:
     assert approved.auto_approved.strategy_id == "st_7c0b77d442"
 
 
+def test_join_request_event_is_the_listed_request_plus_the_group() -> None:
+    event = decoded(pyqbot.GroupJoinRequest, JOIN_SELF)
+    listed = pyqbot.GroupJoinRequestInfo(join_request_id="r", member_openid="m")
+
+    assert isinstance(event, pyqbot.GroupJoinRequestInfo)
+    assert set(event.to_dict()) == set(listed.to_dict()) | {"group_openid", "auto_approved"}
+
+
 def test_join_request_string_values_decode_to_enums() -> None:
     applied = decoded(pyqbot.GroupJoinRequest, JOIN_SELF)
     invited = decoded(pyqbot.GroupJoinRequest, JOIN_INVITED)
@@ -293,15 +301,15 @@ def test_member_role_decodes_to_an_enum() -> None:
     quote = {
         "msg_elements": [{"author": {"member_openid": MEMBER, "member_role": "owner"}}],
     }
-    known = decoded(pyqbot.GroupAnyMessage, {**GROUP_ANY, **quote})
-    unknown = decoded(pyqbot.GroupAnyMessage, {**GROUP_ANY, "author": {"member_role": "guest"}})
-    wrong = decoded(pyqbot.GroupAnyMessage, {**GROUP_ANY, "author": {"member_role": 1}})
+    known = decoded(pyqbot.GroupMessage, {**GROUP_ANY, **quote})
+    unknown = decoded(pyqbot.GroupMessage, {**GROUP_ANY, "author": {"member_role": "guest"}})
+    wrong = decoded(pyqbot.GroupMessage, {**GROUP_ANY, "author": {"member_role": 1}})
 
-    assert known.author.member_role == pyqbot.MemberRole.MEMBER
+    assert known.author.member_role == pyqbot.GroupMemberRole.MEMBER
     assert known.author.member_role == "member"  # StrEnum：与原字符串比较照样成立
     element_author = known.msg_elements[0].author
     assert element_author is not None
-    assert element_author.member_role == pyqbot.MemberRole.OWNER
+    assert element_author.member_role == pyqbot.GroupMemberRole.OWNER
     assert unknown.author.member_role == "guest"
     assert unknown.author.member_role is not None
     assert unknown.author.member_role.name == "UNKNOWN"
@@ -356,7 +364,7 @@ def test_subscribe_status_decodes() -> None:
         (pyqbot.GroupMemberAdd, {"group_openid": GROUP}),
         (pyqbot.GroupJoinRequest, {"group_openid": GROUP}),
         (pyqbot.GroupJoinRequest, {"group_openid": GROUP, "join_request_id": "r"}),
-        (pyqbot.GroupAnyMessage, {"id": "m"}),
+        (pyqbot.GroupMessage, {"id": "m"}),
     ],
 )
 def test_events_without_what_the_sdk_needs_are_rejected(
@@ -367,7 +375,7 @@ def test_events_without_what_the_sdk_needs_are_rejected(
 
 
 def test_group_any_message_keeps_mentions_in_the_content() -> None:
-    message = decoded(pyqbot.GroupAnyMessage, GROUP_ANY)
+    message = decoded(pyqbot.GroupMessage, GROUP_ANY)
 
     assert message.content == f"<@{MEMBER}> 早上好 <@all>"
     assert message.member_openid == MEMBER
@@ -375,8 +383,8 @@ def test_group_any_message_keeps_mentions_in_the_content() -> None:
     assert message.msg_idx == "REFIDX_any=="
     assert message.timestamp == datetime(2026, 7, 21, 8, 0, tzinfo=UTC8)
     # 与 @机器人 的消息字段相同，但不是它。
-    assert not isinstance(message, pyqbot.GroupMessage)
-    assert isinstance(pyqbot.GroupMessage(id="m", group_openid="g"), pyqbot.GroupAnyMessage)
+    assert not isinstance(message, pyqbot.GroupAtMessage)
+    assert isinstance(pyqbot.GroupAtMessage(id="m", group_openid="g"), pyqbot.GroupMessage)
 
 
 # ---- 被动回复 ----
@@ -480,7 +488,7 @@ async def test_reply_on_an_unbound_event_raises(
 
 async def test_group_any_message_replies_and_quotes_like_a_group_message() -> None:
     platform = Platform()
-    message = decoded(pyqbot.GroupAnyMessage, GROUP_ANY)
+    message = decoded(pyqbot.GroupMessage, GROUP_ANY)
 
     async with client_for(platform) as client:
         bind_client(message, client)
@@ -518,7 +526,7 @@ async def test_group_any_message_can_be_recalled() -> None:
         httpx2.AsyncClient(transport=httpx2.MockTransport(handle)) as http_client,
         pyqbot.Client("app-id", "app-secret", http_client=http_client) as client,
     ):
-        await client.groups.recall_message(GROUP, decoded(pyqbot.GroupAnyMessage, GROUP_ANY))
+        await client.groups.recall_message(GROUP, decoded(pyqbot.GroupMessage, GROUP_ANY))
 
     assert paths == [("DELETE", f"/v2/groups/{GROUP}/messages/ROBOT1.0_any")]
 
@@ -530,7 +538,7 @@ async def wrong_scene_is_rejected_by_pyright(client: pyqbot.Client) -> None:
     await client.groups.send_message("g", "x", reply_to=added)  # pyright: ignore[reportArgumentType]
     await client.users.send_message("u", "x", reply_to=joined)  # pyright: ignore[reportArgumentType]
     await client.users.send_message("u", "x", reply_to=pyqbot.FriendDel(openid="u"))  # pyright: ignore[reportArgumentType]
-    await added.reply("x", quote=pyqbot.GroupAnyMessage(id="m", group_openid="g"))  # pyright: ignore[reportArgumentType]
+    await added.reply("x", quote=pyqbot.GroupMessage(id="m", group_openid="g"))  # pyright: ignore[reportArgumentType]
 
 
 # ---- 注册与分发 ----
@@ -548,7 +556,7 @@ async def test_each_event_has_a_decorator_that_derives_its_intent() -> None:
     async def on_member_add(event: pyqbot.GroupMemberAdd) -> None: ...
     async def on_member_remove(event: pyqbot.GroupMemberRemove) -> None: ...
     async def on_join(event: pyqbot.GroupJoinRequest) -> None: ...
-    async def on_any(event: pyqbot.GroupAnyMessage) -> None: ...
+    async def on_any(event: pyqbot.GroupMessage) -> None: ...
     async def on_subscribe(event: pyqbot.SubscribeMessageStatus) -> None: ...
 
     async with pyqbot.Bot("app-id", "app-secret") as bot:
@@ -575,9 +583,9 @@ async def test_each_event_has_a_decorator_that_derives_its_intent() -> None:
 async def test_handlers_for_the_wrong_event_are_type_errors() -> None:
     async with pyqbot.Bot("app-id", "app-secret") as bot:
 
-        async def on_at(message: pyqbot.GroupMessage) -> None: ...
+        async def on_at(message: pyqbot.GroupAtMessage) -> None: ...
 
-        async def on_any(message: pyqbot.GroupAnyMessage) -> None: ...
+        async def on_any(message: pyqbot.GroupMessage) -> None: ...
 
         # 只收 @ 消息的处理函数不能接全量消息；收全量消息的可以两处都注册。
         bot.on_group_message(on_at)  # pyright: ignore[reportArgumentType]
@@ -589,7 +597,7 @@ async def test_group_messages_go_only_to_the_decorator_of_their_event_name() -> 
     seen: list[tuple[str, str]] = []
     done = asyncio.Event()
 
-    def record(decorator: str, message: pyqbot.GroupAnyMessage) -> None:
+    def record(decorator: str, message: pyqbot.GroupMessage) -> None:
         seen.append((decorator, type(message).__name__))
         if len(seen) == 2:
             done.set()
@@ -597,11 +605,11 @@ async def test_group_messages_go_only_to_the_decorator_of_their_event_name() -> 
     async with pyqbot.Bot("app-id", "app-secret") as bot:
 
         @bot.on_group_at_message
-        async def at(message: pyqbot.GroupMessage) -> None:
+        async def at(message: pyqbot.GroupAtMessage) -> None:
             record("at", message)
 
         @bot.on_group_message
-        async def every(message: pyqbot.GroupAnyMessage) -> None:
+        async def every(message: pyqbot.GroupMessage) -> None:
             record("any", message)
 
         dispatcher = bot._dispatcher  # pyright: ignore[reportPrivateUsage]  代替 Bot.start()
@@ -610,7 +618,7 @@ async def test_group_messages_go_only_to_the_decorator_of_their_event_name() -> 
         async with asyncio.timeout(HANG_GUARD):
             await done.wait()
 
-    assert sorted(seen) == [("any", "GroupAnyMessage"), ("at", "GroupMessage")]
+    assert sorted(seen) == [("any", "GroupMessage"), ("at", "GroupAtMessage")]
 
 
 async def test_dispatched_friend_add_replies_with_the_outer_payload_id() -> None:

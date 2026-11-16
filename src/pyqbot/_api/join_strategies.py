@@ -71,7 +71,7 @@ class JoinStrategies:
             APIError: 平台拒绝，例如策略数已达上限。
             NetworkError: 没有拿到平台的响应。
             ValueError: `group_openids` 与 `group_ids` 不是恰好传了一个，或 `expire_at` 不合法
-                （同 `client.groups.mute()` 的 `until`）。
+                （同 `client.groups.mute_members()` 的 `until`）。
             RuntimeError: 客户端已关闭。
 
         Example:
@@ -200,7 +200,7 @@ class JoinStrategies:
     async def add_whitelist_users(
         self, strategy: str | JoinStrategy, users: int | str | Iterable[int | str]
     ) -> WhitelistUpdate:
-        """往策略的白名单里加 QQ 号，返回操作后的号码数。
+        """往策略的白名单里加 QQ 号，返回 `WhitelistUpdate`（含平台估算的号码数）。
 
         对应官方接口 `POST /v2/groups/join_approval_strategy/{strategy_id}/whitelist_users`
         （`op` 为 `add`）。
@@ -220,7 +220,7 @@ class JoinStrategies:
     async def remove_whitelist_users(
         self, strategy: str | JoinStrategy, users: int | str | Iterable[int | str]
     ) -> WhitelistUpdate:
-        """从策略的白名单里删 QQ 号，返回操作后的号码数。参数同 `add_whitelist_users()`。
+        """从策略的白名单里删 QQ 号，返回 `WhitelistUpdate`（含平台估算的号码数）；参数同 `add_whitelist_users()`。
 
         对应官方接口 `POST /v2/groups/join_approval_strategy/{strategy_id}/whitelist_users`
         （`op` 为 `del`）。

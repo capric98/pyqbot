@@ -54,7 +54,7 @@ class Client:
     Example:
         ```python
         async with pyqbot.Client("APP_ID", "APP_SECRET") as client:
-            await client.users.send_message(openid, "你好")
+            await client.users.send_message(user_openid, "你好")
         ```
     """
 

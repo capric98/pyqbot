@@ -4,13 +4,12 @@
 """
 
 from datetime import datetime
-from typing import cast
 
 import msgspec
 
-from .._model import Model, OpenStrEnum
-from .message import MemberRole
-from .notice import JoinRequestSource, JoinRequestVerifyInfo
+from .._model import Model, OpenStrEnum, outcome_ids
+from .message import GroupMemberRole
+from .notice import GroupJoinRequestInfo
 
 # ---- 群信息与机器人状态 ----
 
@@ -64,13 +63,13 @@ class GroupBotState(Model):
     joined_at: datetime | None = None
     allow_proactive_msg: bool | None = None
     recv_msg_setting: RecvMsgSetting | None = None
-    member_role: MemberRole | None = None
+    member_role: GroupMemberRole | None = None
 
 
 # ---- 成员与黑名单 ----
 
 
-class GroupMemberInfo(Model):
+class GroupMember(Model):
     """群成员的信息（成员列表与成员查询的结果）。
 
     Attributes:
@@ -84,7 +83,7 @@ class GroupMemberInfo(Model):
 
     member_openid: str
     username: str | None = None
-    member_role: MemberRole | None = None
+    member_role: GroupMemberRole | None = None
     bot: bool | None = None
     joined_at: datetime | None = None
     union_openid: str | None = None
@@ -93,27 +92,12 @@ class GroupMemberInfo(Model):
 class MemberPage(Model):
     """群成员列表的一页。"""
 
-    members: tuple[GroupMemberInfo, ...] = ()
+    members: tuple[GroupMember, ...] = ()
     next_cursor: str | None = None
 
 
-def _failed_openids(value: object, name: str) -> tuple[str, ...]:
-    """失败清单：缺失或 `null` 是没有失败。
-
-    Raises:
-        ValueError: 不是字符串列表。宽容解码若退回默认值，已知的失败就成了全部成功，所以宁可让响应失败。
-    """
-    if value is None:
-        return ()
-    if isinstance(value, list):
-        items = cast(list[object], value)
-        if all(isinstance(item, str) for item in items):
-            return tuple(cast(list[str], items))
-    raise ValueError(f"{name} 不是字符串列表")
-
-
 class RemoveMembersResult(Model):
-    """批量移除成员的响应。两个字段都写成 `object` 并在解码时校验，理由见 `_failed_openids()`。"""
+    """批量移除成员的响应。两个字段都写成 `object` 并在解码时校验，理由见 `_model.outcome_ids()`。"""
 
     remove_members_result: object = None
     add_to_member_blacklist_fail_openids: object = None
@@ -122,7 +106,7 @@ class RemoveMembersResult(Model):
         # 解码时就校验：不合法即「响应无法识别」。
         if not isinstance(self.remove_members_result, str | None):
             raise TypeError("remove_members_result 不是字符串")
-        _failed_openids(
+        outcome_ids(
             self.add_to_member_blacklist_fail_openids, "add_to_member_blacklist_fail_openids"
         )
 
@@ -134,7 +118,7 @@ class RemoveMembersResult(Model):
     @property
     def blacklist_failed(self) -> tuple[str, ...]:
         """未能加入黑名单的 openid。"""
-        return _failed_openids(
+        return outcome_ids(
             self.add_to_member_blacklist_fail_openids, "add_to_member_blacklist_fail_openids"
         )
 
@@ -170,12 +154,12 @@ class BlacklistResult(Model):
     fail_openids: object = None
 
     def __post_init__(self) -> None:
-        _failed_openids(self.fail_openids, "fail_openids")
+        outcome_ids(self.fail_openids, "fail_openids")
 
     @property
     def failed(self) -> tuple[str, ...]:
         """操作失败的 openid。"""
-        return _failed_openids(self.fail_openids, "fail_openids")
+        return outcome_ids(self.fail_openids, "fail_openids")
 
 
 # ---- 禁言 ----
@@ -282,38 +266,10 @@ class MuteOp(OpenStrEnum):
 # ---- 入群申请 ----
 
 
-class JoinRequest(Model):
-    """待审批的一条入群申请（`iter_join_requests()` 的结果）。字段同事件 `GroupJoinRequest`。
-
-    Attributes:
-        join_request_id: 申请 ID，审批时要用。
-        member_openid: 申请人的 openid，审批时要用。
-        union_openid: 申请人跨应用统一的 openid（如有）。
-        username: 申请人昵称。
-        bot: 申请人是否为机器人。
-        apply_at: 申请时间，带时区。
-        apply_source: 主动申请还是被邀请。
-        invited_by: 邀请人的 openid，被邀请时才有。
-        risk_tips: 安全提示语。
-        verify_info: 验证方式与申请人填写的内容。
-    """
-
-    join_request_id: str
-    member_openid: str
-    union_openid: str | None = None
-    username: str | None = None
-    bot: bool | None = None
-    apply_at: datetime | None = None
-    apply_source: JoinRequestSource | None = None
-    invited_by: str | None = None
-    risk_tips: str | None = None
-    verify_info: JoinRequestVerifyInfo | None = None
-
-
 class JoinRequestPage(Model):
     """入群申请列表的一页。"""
 
-    requests: tuple[JoinRequest, ...] = msgspec.field(default=(), name="list")
+    requests: tuple[GroupJoinRequestInfo, ...] = msgspec.field(default=(), name="list")
     next_cursor: str | None = None
 
 

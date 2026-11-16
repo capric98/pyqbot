@@ -92,7 +92,7 @@ class MenuItem(RequestModel):
 
     @classmethod
     def switch_button(cls, name: str, switch_id: str, *, default: bool = False) -> MenuItem:
-        """开关：用户切换后发出一条消息，打开时消息的 `ext` 里带 `{switch_id}=1`。"""
+        """开关：用户切换后发出一条消息，打开时消息的 `ext` 里带 `{switch_id}=1`；`default` 是初始是否打开。"""
         switch = MenuSwitch(switch_id=switch_id, default=default)
         return cls(name=name, type=MenuItemType.SWITCH, switch=switch)
 

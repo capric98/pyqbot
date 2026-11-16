@@ -324,6 +324,24 @@ async def test_create_with_targets_is_specific() -> None:
     ]
 
 
+async def test_a_single_string_is_one_openid() -> None:
+    platform = Platform({("POST", "/v2/panels"): {"panel_id": "p_new"}})
+    item = pyqbot.PanelItem.command_button("群签到")
+
+    async with client_for(platform) as client:
+        await client.panels.create(pyqbot.PanelScope.GROUP, [item], group_openids="g123")
+        await client.panels.add_targets("p_1", user_openids="u123")
+        await client.panels.remove_targets("p_1", group_openids="g123")
+
+    bodies = [body for *_, body in platform.requests]
+    assert isinstance(bodies[0], dict)
+    assert bodies[0]["group_openids"] == ["g123"]
+    assert bodies[1:] == [
+        {"op": "add", "user_openids": ["u123"]},
+        {"op": "del", "group_openids": ["g123"]},
+    ]
+
+
 @pytest.mark.parametrize(
     ("scope", "users", "groups", "match"),
     [
@@ -369,13 +387,13 @@ async def test_panel_record_without_panel_has_no_items() -> None:
     assert panel.items == ()
 
 
-async def test_update_overwrites_items_and_remark() -> None:
+async def test_set_overwrites_items_and_remark() -> None:
     platform = Platform({("PUT", "/v2/panels/p_1"): {"version": 2}})
     item = pyqbot.PanelItem.command_button("新指令", desc="更新后的指令")
 
     async with client_for(platform) as client:
-        assert await client.panels.update("p_1", [item], remark="更新备注") == 2
-        assert await client.panels.update("p_1", []) == 2
+        assert await client.panels.set("p_1", [item], remark="更新备注") == 2
+        assert await client.panels.set("p_1", []) == 2
 
     assert [body for *_, body in platform.requests] == [
         {
@@ -450,7 +468,7 @@ CALLS: dict[str, Call] = {
     "GET /v2/panels": _first_panel,
     "POST /v2/panels": lambda c: c.panels.create(pyqbot.PanelScope.C2C, []),
     "GET /v2/panels/p": lambda c: c.panels.get("p"),
-    "PUT /v2/panels/p": lambda c: c.panels.update("p", []),
+    "PUT /v2/panels/p": lambda c: c.panels.set("p", []),
     "DELETE /v2/panels/p": lambda c: c.panels.delete("p"),
     "PUT /v2/panels/p/target": lambda c: c.panels.add_targets("p", user_openids=["u"]),
 }

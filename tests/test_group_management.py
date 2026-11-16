@@ -64,7 +64,7 @@ def paged(pages: dict[str | None, object]) -> Respond:
 # ---- 群信息与机器人状态 ----
 
 
-async def test_get_info_decodes_the_documented_example() -> None:
+async def test_get_group_decodes_the_documented_example() -> None:
     platform = Platform(
         {
             "group_openid": GROUP,
@@ -77,7 +77,7 @@ async def test_get_info_decodes_the_documented_example() -> None:
     )
 
     async with client_for(platform) as client:
-        info = await client.groups.get_info(GROUP)
+        info = await client.groups.get(GROUP)
 
     assert info == pyqbot.GroupInfo(
         group_openid=GROUP,
@@ -109,7 +109,7 @@ async def test_get_bot_state_decodes_to_enums_and_datetimes() -> None:
         joined_at=datetime(2025, 6, 15, 14, 30, tzinfo=CST),
         allow_proactive_msg=False,
         recv_msg_setting=pyqbot.RecvMsgSetting.ONLY_MENTION,
-        member_role=pyqbot.MemberRole.ADMIN,
+        member_role=pyqbot.GroupMemberRole.ADMIN,
     )
     assert platform.requests() == [("GET", f"/v2/groups/{GROUP}/bot_state", {}, None)]
 
@@ -134,7 +134,7 @@ async def test_without_whitelist_the_platform_error_is_raised() -> None:
 
     async with client_for(platform) as client:
         with pytest.raises(pyqbot.APIError, match="应用无接口访问权限") as caught:
-            await client.groups.get_info(GROUP)
+            await client.groups.get(GROUP)
 
     assert (caught.value.err_code, caught.value.trace_id) == (11253, "tr-1")
     assert str(caught.value).startswith(f"GET /v2/groups/{GROUP}/info 失败：")
@@ -148,7 +148,7 @@ async def test_path_parameters_are_escaped_and_must_not_be_empty() -> None:
         with pytest.raises(ValueError, match="member_openid"):
             await client.groups.get_member(GROUP, "")
         with pytest.raises(ValueError, match="openid"):
-            await client.groups.get_info("")
+            await client.groups.get("")
 
     assert platform.requests() == [("GET", "/v2/groups/a%2Fb/members/..%2Fm", {}, None)]
 
@@ -163,10 +163,10 @@ MEMBER_JSON: dict[str, object] = {
     "joined_at": "2025-08-20T09:15:00+08:00",
     "union_openid": "B4C6D8E0F2A4B6C8D0E2F4A6B8C0D2E4",
 }
-MEMBER_INFO = pyqbot.GroupMemberInfo(
+MEMBER_INFO = pyqbot.GroupMember(
     member_openid=MEMBER,
     username="小明",
-    member_role=pyqbot.MemberRole.ADMIN,
+    member_role=pyqbot.GroupMemberRole.ADMIN,
     bot=False,
     joined_at=datetime(2025, 8, 20, 9, 15, tzinfo=CST),
     union_openid="B4C6D8E0F2A4B6C8D0E2F4A6B8C0D2E4",
@@ -203,7 +203,7 @@ async def test_iter_members_follows_the_cursor_in_the_query_string() -> None:
     async with client_for(platform) as client:
         members = [member async for member in client.groups.iter_members(GROUP)]
 
-    assert members == [MEMBER_INFO, pyqbot.GroupMemberInfo(member_openid="m2")]
+    assert members == [MEMBER_INFO, pyqbot.GroupMember(member_openid="m2")]
     path = f"/v2/groups/{GROUP}/members"
     assert platform.requests() == [
         ("GET", path, {}, None),
@@ -492,7 +492,7 @@ def frozen_clock(monkeypatch: pytest.MonkeyPatch) -> None:
 async def mute_expiry(until: datetime | timedelta, *, update: bool = False) -> str:
     platform = Platform()
     async with client_for(platform) as client:
-        mute = client.groups.update_mute if update else client.groups.mute
+        mute = client.groups.update_member_mutes if update else client.groups.mute_members
         await mute(GROUP, MEMBER, until)
     [(_, _, _, body)] = platform.requests()
     assert isinstance(body, dict)
@@ -505,7 +505,7 @@ async def test_mute_until_an_aware_datetime_is_sent_in_utc() -> None:
     until = datetime(2026, 8, 5, 11, 23, 5, tzinfo=CST)
 
     async with client_for(platform) as client:
-        await client.groups.mute(GROUP, ["m1", "m2"], until)
+        await client.groups.mute_members(GROUP, ["m1", "m2"], until)
 
     stamp = "2026-08-05T03:23:05+00:00"
     assert platform.requests() == [
@@ -571,7 +571,7 @@ async def test_update_mute_request() -> None:
     until = datetime(2026, 8, 6, tzinfo=UTC)
 
     async with client_for(platform) as client:
-        await client.groups.update_mute(GROUP, ["m1", "m2"], until)
+        await client.groups.update_member_mutes(GROUP, ["m1", "m2"], until)
 
     stamp = "2026-08-06T00:00:00+00:00"
     assert platform.requests() == [
@@ -604,9 +604,9 @@ async def test_mute_rejects_ambiguous_or_past_times_before_sending(
 
     async with client_for(platform) as client:
         with pytest.raises(ValueError, match=message):
-            await client.groups.mute(GROUP, MEMBER, until)
+            await client.groups.mute_members(GROUP, MEMBER, until)
         with pytest.raises(ValueError, match=message):
-            await client.groups.update_mute(GROUP, MEMBER, until)
+            await client.groups.update_member_mutes(GROUP, MEMBER, until)
 
     assert platform.calls == []
 
@@ -615,7 +615,7 @@ async def test_unmute_sends_an_empty_expiry() -> None:
     platform = Platform()
 
     async with client_for(platform) as client:
-        await client.groups.unmute(GROUP, "m1")
+        await client.groups.unmute_members(GROUP, "m1")
 
     assert platform.requests() == [
         (
@@ -635,7 +635,7 @@ async def test_mute_rejected_because_the_bot_is_not_an_admin() -> None:
 
     async with client_for(platform) as client:
         with pytest.raises(pyqbot.APIError, match="机器人不是管理员") as caught:
-            await client.groups.mute(GROUP, MEMBER, timedelta(minutes=1))
+            await client.groups.mute_members(GROUP, MEMBER, timedelta(minutes=1))
 
     assert (caught.value.status_code, caught.value.err_code) == (403, 11264)
 
@@ -691,7 +691,7 @@ async def test_join_request_page_keeps_the_interface_field_name() -> None:
     async with client_for(platform) as client:
         [request] = [request async for request in client.groups.iter_join_requests(GROUP)]
 
-    assert isinstance(request, pyqbot.JoinRequest)
+    assert isinstance(request, pyqbot.GroupJoinRequestInfo)
 
 
 async def test_approve_and_decline_join_requests() -> None:

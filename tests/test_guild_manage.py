@@ -310,6 +310,29 @@ async def test_online_nums_treats_an_empty_object_as_zero(body: object, expected
 # ---- 子频道权限 ----
 
 
+@pytest.mark.parametrize(
+    ("permissions", "flags"),
+    [
+        ("0", pyqbot.ChannelPermission(0)),
+        ("5", pyqbot.ChannelPermission.VIEW | pyqbot.ChannelPermission.SPEAK),
+        ("69", pyqbot.ChannelPermission(69)),  # 64 是文档里没有的位，原样保留
+        (None, None),
+        ("", None),
+        ("-1", None),
+        ("0x5", None),
+        ("５", None),  # 全角数字：int() 收，接口里不会有
+        ("9" * 5000, None),  # 超过整数转换的位数上限
+    ],
+)
+def test_channel_permission_flags(
+    permissions: str | None, flags: pyqbot.ChannelPermission | None
+) -> None:
+    channel = pyqbot.Channel(id="c1", permissions=permissions)
+
+    assert channel.permission_flags == flags
+    assert channel.permissions == permissions
+
+
 async def test_channel_permissions_are_decoded_into_flags() -> None:
     platform = Platform(
         {
@@ -433,7 +456,7 @@ async def test_remove_member_sends_the_body_with_delete() -> None:
     async with client_for(platform) as client:
         await client.guilds.remove_member("g1", "u1")
         await client.guilds.remove_member(
-            "g1", "u2", add_blacklist=True, recall=pyqbot.RecallDays.ALL
+            "g1", "u2", add_to_blacklist=True, recall=pyqbot.RecallDays.ALL
         )
 
     assert platform.requests == [
@@ -567,19 +590,17 @@ async def test_member_roles_send_the_channel_only_when_given() -> None:
 
 async def test_mute_sends_the_end_timestamp_and_unmute_sends_zero() -> None:
     until = datetime(2022, 1, 11, 16, 0, tzinfo=UTC)
-    pages = [Page({}), Page({}), Page({"user_ids": ["u1"]}), Page({})]
+    pages = [Page({}), Page({}), Page({"user_ids": ["u2", "u1"]}), Page({"user_ids": ["u1"]})]
     platform = Platform({("PATCH", "/guilds/g1/mute"): pages})
 
     async with client_for(platform) as client:
         await client.guilds.mute_all("g1", until)
         await client.guilds.unmute_all("g1")
-        muted = await client.guilds.mute_members("g1", ["u1", "u2"], until)
-        unmuted = await client.guilds.unmute_members("g1", "u1")
+        assert await client.guilds.mute_members("g1", ["u1", "u2"], until) is None
+        assert await client.guilds.unmute_members("g1", "u1") is None
         await client.guilds.mute_member("g1", "u3", until)
         await client.guilds.unmute_member("g1", "u3")
 
-    assert muted == ("u1",)
-    assert unmuted == ()
     zero = {"mute_end_timestamp": "0", "mute_seconds": "0"}
     assert [(method, path, body) for method, path, _, body in platform.requests] == [
         ("PATCH", "/guilds/g1/mute", {"mute_end_timestamp": "1641916800"}),
@@ -593,6 +614,67 @@ async def test_mute_sends_the_end_timestamp_and_unmute_sends_zero() -> None:
         ("PATCH", "/guilds/g1/members/u3/mute", {"mute_end_timestamp": "1641916800"}),
         ("PATCH", "/guilds/g1/members/u3/mute", zero),
     ]
+
+
+async def test_batch_mute_reports_members_missing_from_the_success_list() -> None:
+    # 官方示例：请求两个，只成功一个。
+    platform = Platform()
+    platform.fallback = httpx2.Response(
+        200, json={"user_ids": ["1201318637970874066"]}, headers={"X-Tps-trace-ID": "trace-1"}
+    )
+    requested = iter(["1201318637970874066", "1201318637970874067"])
+
+    async with client_for(platform) as client:
+        with pytest.raises(pyqbot.PartialFailureError) as caught:
+            await client.guilds.mute_members("g1", requested, timedelta(minutes=1))
+
+    error = caught.value
+    assert error.failed_ids == ("1201318637970874067",)
+    assert (error.status_code, error.err_code, error.trace_id) == (200, None, "trace-1")
+    assert "1 个成员未能禁言：1201318637970874067" in str(error)
+    [(_, _, _, body)] = platform.requests
+    assert isinstance(body, dict)
+    assert body["user_ids"] == ["1201318637970874066", "1201318637970874067"]
+
+
+@pytest.mark.parametrize("response", [{}, {"user_ids": None}, {"user_ids": []}])
+async def test_batch_unmute_without_a_success_list_fails_every_member(
+    response: dict[str, object],
+) -> None:
+    platform = Platform()
+    platform.fallback = httpx2.Response(200, json=response)
+
+    async with client_for(platform) as client:
+        with pytest.raises(pyqbot.PartialFailureError, match="未能解除禁言") as caught:
+            await client.guilds.unmute_members("g1", ["u1", "u2", "u1"])
+
+    assert caught.value.failed_ids == ("u1", "u2")
+
+
+@pytest.mark.parametrize("user_ids", ["u1", [1], {"u1": True}])
+async def test_batch_mute_rejects_a_malformed_success_list(user_ids: object) -> None:
+    platform = Platform()
+    platform.fallback = httpx2.Response(200, json={"user_ids": user_ids})
+
+    async with client_for(platform) as client:
+        with pytest.raises(pyqbot.APIError, match="响应无法识别") as caught:
+            await client.guilds.unmute_members("g1", "u1")
+
+    assert not isinstance(caught.value, pyqbot.PartialFailureError)
+
+
+async def test_batch_mute_partial_failure_is_redacted() -> None:
+    platform = Platform()
+    platform.fallback = httpx2.Response(
+        200, json={"user_ids": []}, headers={"X-Tps-trace-ID": TOKEN}
+    )
+
+    async with client_for(platform) as client:
+        with pytest.raises(pyqbot.PartialFailureError) as caught:
+            await client.guilds.unmute_members("g1", f"echo-{APP_SECRET}")
+
+    assert APP_SECRET not in str(caught.value)
+    assert caught.value.trace_id == "***"
 
 
 async def test_mute_rejects_a_naive_time_before_sending() -> None:

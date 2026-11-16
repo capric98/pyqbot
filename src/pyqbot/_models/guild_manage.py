@@ -3,12 +3,11 @@
 官方文档：`server-inter/channel/role-group/`、`role/member/`、`api_permissions/`、`speak/`。
 """
 
-import enum
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 import msgspec
 
-from .._model import Model, OpenIntEnum
+from .._model import Model, OpenIntEnum, outcome_ids
 from .guild import Channel, Guild, GuildMember, GuildRole
 
 if TYPE_CHECKING:
@@ -16,27 +15,6 @@ if TYPE_CHECKING:
 else:
     # 表格说是字符串、示例是布尔（docs/errata.md），两种都收，由 MessageSetting 统一成布尔。
     _Flag = bool | str
-
-
-class ChannelPermission(enum.IntFlag):
-    """子频道权限位，多个权限用 `|` 组合；未列出的位（上游新增的权限）原样保留。
-
-    Attributes:
-        VIEW: 可查看子频道。
-        MANAGE: 可管理子频道；创建者、管理员、子频道管理员都有，不能通过接口修改。
-        SPEAK: 可在子频道发言。
-
-    Example:
-        ```python
-        await client.channels.update_member_permissions(
-            channel_id, user_id, add=pyqbot.ChannelPermission.VIEW | pyqbot.ChannelPermission.SPEAK
-        )
-        ```
-    """
-
-    VIEW = 1 << 0
-    MANAGE = 1 << 1
-    SPEAK = 1 << 2
 
 
 class RecallDays(OpenIntEnum):
@@ -199,9 +177,17 @@ class RoleResponse(Model):
 
 
 class MuteResult(Model):
-    """批量禁言的响应：设置成功的成员。"""
+    """批量禁言、解除禁言的响应。成功清单写成 `object` 并在解码时校验，理由见 `_model.outcome_ids()`。"""
 
-    user_ids: tuple[str, ...] = ()
+    user_ids: object = None
+
+    def __post_init__(self) -> None:
+        outcome_ids(self.user_ids, "user_ids")
+
+    @property
+    def succeeded(self) -> tuple[str, ...]:
+        """设置成功的用户 ID。"""
+        return outcome_ids(self.user_ids, "user_ids")
 
 
 class APIPermissionList(Model):

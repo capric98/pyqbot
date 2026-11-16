@@ -59,7 +59,7 @@ class Images:
         Example:
             ```python
             image = await client.images.upload(path="kline.png")
-            await client.users.send_message(openid, markdown=f"![K 线 #800px #400px]({image.url})")
+            await client.users.send_message(user_openid, markdown=f"![K 线 #800px #400px]({image.url})")
             ```
         """
         source, name, size = await local_source(path, data, file_name)

@@ -1,5 +1,6 @@
 """互动事件 `INTERACTION_CREATE`（`autogen/event/interaction_create.md`）及回应它用的枚举。"""
 
+import os
 from datetime import datetime
 
 import msgspec
@@ -9,7 +10,7 @@ from .._model import Model, OpenIntEnum, OpenStrEnum
 from .event import C2CReplyTarget, ChannelReplyTarget, GroupReplyTarget
 from .guild_message import GuildMessage
 from .message import SentMessage
-from .send import Card, Keyboard, Markdown, Media
+from .send import Ark, Card, Embed, Keyboard, Markdown, Media
 
 
 class InteractionType(OpenIntEnum):
@@ -223,6 +224,8 @@ class Interaction(C2CReplyTarget, GroupReplyTarget, ChannelReplyTarget):
 
         只有回调按钮与快捷菜单需要回应，且每次互动只能回应一次，要在 3 秒内完成。
 
+        对应官方接口 `PUT /interactions/{interaction_id}`。
+
         Raises:
             APIError: 平台拒绝，例如已经回应过或已超时。
             NetworkError: 没有拿到平台的响应。
@@ -238,13 +241,20 @@ class Interaction(C2CReplyTarget, GroupReplyTarget, ChannelReplyTarget):
         keyboard: Keyboard | None = None,
         media: Media | None = None,
         card: Card | None = None,
-        quote: str | SentMessage | None = None,
+        embed: Embed | None = None,
+        ark: Ark | None = None,
+        image: str | None = None,
+        image_path: str | os.PathLike[str] | None = None,
+        image_data: bytes | None = None,
+        quote: str | SentMessage | GuildMessage | None = None,
     ) -> SentMessage | GuildMessage:
         """用事件 ID 被动回复：单聊发给操作者，群聊发到群里，频道发到互动所在的子频道。
 
-        `event_id` 与 `msg_seq`（频道不带）由 SDK 填写。参数同 `client.users.send_message()`，
-        只是 `quote` 不接受收到的消息；频道里 `quote` 是消息 ID，不支持 `media`、`card` 与 `SentMessage`。
+        `event_id` 与 `msg_seq`（频道不带）由 SDK 填写。单聊、群聊的参数同 `client.users.send_message()`，
+        频道的同 `client.channels.send_message()`。只有一边支持的参数，在另一边传了就抛 `ValueError`：
+        `media`、`card` 与 `SentMessage` 引用只用于单聊、群聊，`embed`、`ark`、图片与 `GuildMessage` 引用只用于频道。
         返回值在频道里是 `GuildMessage`，否则是 `SentMessage`。
+
         对应官方接口 `POST /v2/users/{user_openid}/messages`、`POST /v2/groups/{group_openid}/messages`
         或 `POST /channels/{channel_id}/messages`。
 
@@ -252,8 +262,9 @@ class Interaction(C2CReplyTarget, GroupReplyTarget, ChannelReplyTarget):
             AuditPendingError: 频道里的消息要等人工审核。
             APIError: 平台拒绝发送，例如事件 ID 已过期（`err_code` 为 40034026）。
             NetworkError: 没有拿到平台的响应。
-            ValueError: 内容参数的组合不合法；事件没有事件 ID；认不出场景，或缺少该场景的 openid、
-                子频道 ID；频道里传了 `media`、`card` 或 `SentMessage`。
+            ValueError: 内容参数的组合不合法，或传了这个场景不支持的参数；事件没有事件 ID；
+                认不出场景，或缺少该场景的 openid、子频道 ID。
+            OSError: 读取 `image_path` 失败。
             RuntimeError: 事件不是 `Bot` 分发来的（没有绑定客户端），或客户端已关闭。
         """
         client = self._bound_client()
@@ -269,7 +280,7 @@ class Interaction(C2CReplyTarget, GroupReplyTarget, ChannelReplyTarget):
                     keyboard=keyboard,
                     media=media,
                     card=card,
-                    quote=quote,
+                    quote=_chat_quote(quote, embed, ark, image, image_path, image_data),
                     reply_to=self,
                 )
             case ChatType.GROUP if self.group_openid is not None:
@@ -280,17 +291,22 @@ class Interaction(C2CReplyTarget, GroupReplyTarget, ChannelReplyTarget):
                     keyboard=keyboard,
                     media=media,
                     card=card,
-                    quote=quote,
+                    quote=_chat_quote(quote, embed, ark, image, image_path, image_data),
                     reply_to=self,
                 )
             case ChatType.GUILD if self.channel_id is not None:
                 if media is not None or card is not None or isinstance(quote, SentMessage):
-                    raise ValueError("频道消息不支持 media、card，quote 要用消息 ID")
+                    raise ValueError("频道消息不支持 media、card，quote 不能是 SentMessage")
                 return await client.channels.send_message(
                     self.channel_id,
                     content,
                     markdown=markdown,
                     keyboard=keyboard,
+                    embed=embed,
+                    ark=ark,
+                    image=image,
+                    image_path=image_path,
+                    image_data=image_data,
                     quote=quote,
                     reply_to=self,
                 )
@@ -301,3 +317,12 @@ class Interaction(C2CReplyTarget, GroupReplyTarget, ChannelReplyTarget):
                     f"无法回复这次互动（chat_type={chat_type_value}）：认不出场景，"
                     "或缺少该场景的 user_openid / group_openid / channel_id"
                 )
+
+
+def _chat_quote(
+    quote: str | SentMessage | GuildMessage | None, *channel_only: object
+) -> str | SentMessage | None:
+    """单聊、群聊回复的 `quote`；传了只有频道支持的参数时抛 `ValueError`。"""
+    if isinstance(quote, GuildMessage) or any(value is not None for value in channel_only):
+        raise ValueError("单聊、群聊消息不支持 embed、ark 与图片，quote 不能是频道消息")
+    return quote

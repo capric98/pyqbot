@@ -98,6 +98,23 @@ class RequestModel(Model, omit_defaults=True):
     """由调用方构造、编码进请求体的模型：取默认值的字段不编码，`to_dict()` 里也没有。"""
 
 
+def outcome_ids(value: object, name: str) -> tuple[str, ...]:
+    """表示成败的 ID 清单（如失败的 openid、设置成功的用户 ID）：缺失或 `null` 为空。
+
+    这类字段在模型里写成 `object`，在 `__post_init__` 与属性里经它校验。
+
+    Raises:
+        ValueError: 不是字符串列表。宽容解码若退回默认值，成败就会被算错，所以宁可让整条响应「无法识别」。
+    """
+    if value is None:
+        return ()
+    if isinstance(value, list):
+        items = cast(list[object], value)
+        if all(isinstance(item, str) for item in items):
+            return tuple(cast(list[str], items))
+    raise ValueError(f"{name} 不是字符串列表")
+
+
 def decode[T](data: bytes | str, type_: type[T]) -> T:
     """把 JSON 解码成 `type_`；`Model` 里有默认值的字段类型不符时退回默认值，不让整条数据失败。
 

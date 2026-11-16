@@ -15,6 +15,7 @@ from .._models.panel import (
     PanelVersion,
 )
 from .paging import Page, paginate
+from .params import str_list
 
 
 class Panels:
@@ -62,8 +63,8 @@ class Panels:
         items: Iterable[PanelItem],
         *,
         remark: str | None = None,
-        user_openids: Iterable[str] = (),
-        group_openids: Iterable[str] = (),
+        user_openids: str | Iterable[str] = (),
+        group_openids: str | Iterable[str] = (),
     ) -> str:
         """创建面板，返回面板 ID。一个机器人最多 20 个面板。
 
@@ -77,8 +78,8 @@ class Panels:
             scope: 生效场景。
             items: 面板元素。
             remark: 备注，只给开发者看，最多 255 个字符。
-            user_openids: 只对这些用户生效，只能用于 `PanelScope.C2C`。
-            group_openids: 只对这些群生效，只能用于 `PanelScope.GROUP`。
+            user_openids: 只对这些用户生效，只能用于 `PanelScope.C2C`；单个字符串当作一个 openid。
+            group_openids: 只对这些群生效，只能用于 `PanelScope.GROUP`；单个字符串同上。
 
         Raises:
             APIError: 平台拒绝，如超出数量（`err_code` 40030013）、内容有安全风险（40030020）。
@@ -91,7 +92,7 @@ class Panels:
             panel_id = await client.panels.create(
                 pyqbot.PanelScope.C2C,
                 [pyqbot.PanelItem.command_button("/天气", desc="查询当前天气")],
-                user_openids=[openid],
+                user_openids=user_openid,
             )
             ```
         """
@@ -118,7 +119,7 @@ class Panels:
         """
         return await self._http.request("GET", _path(panel_id), type_=PanelDetail)
 
-    async def update(
+    async def set(
         self, panel_id: str, items: Iterable[PanelItem], *, remark: str | None = None
     ) -> int | None:
         """用 `items` 与 `remark` 覆盖面板的内容，关联的用户或群不变；返回新的版本号（平台没给时为 `None`）。
@@ -154,8 +155,8 @@ class Panels:
         self,
         panel_id: str,
         *,
-        user_openids: Iterable[str] = (),
-        group_openids: Iterable[str] = (),
+        user_openids: str | Iterable[str] = (),
+        group_openids: str | Iterable[str] = (),
     ) -> None:
         """让面板对更多用户（单聊面板）或群（群聊面板）生效。只能用于 `specific` 面板。
 
@@ -163,8 +164,8 @@ class Panels:
 
         Args:
             panel_id: 面板 ID。
-            user_openids: 要关联的用户，一次最多 20 个。
-            group_openids: 要关联的群，一次最多 20 个。
+            user_openids: 要关联的用户（一个或多个 openid），一次最多 20 个。
+            group_openids: 要关联的群（一个或多个 openid），一次最多 20 个。
 
         Raises:
             APIError: 平台拒绝，如面板是全局面板（`err_code` 40030021）、超出数量（40030013）。
@@ -178,8 +179,8 @@ class Panels:
         self,
         panel_id: str,
         *,
-        user_openids: Iterable[str] = (),
-        group_openids: Iterable[str] = (),
+        user_openids: str | Iterable[str] = (),
+        group_openids: str | Iterable[str] = (),
     ) -> None:
         """让面板不再对这些用户或群生效，参数同 `add_targets()`。
 
@@ -197,10 +198,10 @@ class Panels:
         self,
         panel_id: str,
         op: PanelTargetOp,
-        user_openids: Iterable[str],
-        group_openids: Iterable[str],
+        user_openids: str | Iterable[str],
+        group_openids: str | Iterable[str],
     ) -> None:
-        users, groups = list(user_openids), list(group_openids)
+        users, groups = str_list(user_openids), str_list(group_openids)
         if bool(users) == bool(groups):
             raise ValueError("user_openids 与 group_openids 必须恰好传一个，且不能为空")
         body: dict[str, object] = {"op": op}
@@ -220,14 +221,14 @@ def _panel(items: Iterable[PanelItem], remark: str | None) -> dict[str, object]:
 
 
 def _targets(
-    scope: PanelScope, user_openids: Iterable[str], group_openids: Iterable[str]
+    scope: PanelScope, user_openids: str | Iterable[str], group_openids: str | Iterable[str]
 ) -> dict[str, list[str]]:
     """`create()` 的关联对象字段；没有关联对象时为空字典。
 
     Raises:
         ValueError: 关联对象与 `scope` 不匹配：平台只认 c2c 的用户、group 的群，其余会被忽略。
     """
-    users, groups = list(user_openids), list(group_openids)
+    users, groups = str_list(user_openids), str_list(group_openids)
     if users and scope != PanelScope.C2C:
         raise ValueError(f"user_openids 只能用于 c2c 场景的面板，scope 是 {scope}")
     if groups and scope != PanelScope.GROUP:

@@ -10,7 +10,7 @@ import msgspec
 from .._gateway.intents import Intents
 from .._model import Model, OpenIntEnum, OpenStrEnum
 from .event import C2CReplyTarget, Event, GroupReplyTarget
-from .message import C2CMessage, GroupAnyMessage, SentMessage
+from .message import C2CMessage, GroupMessage, SentMessage
 from .send import Card, Keyboard, Markdown, Media
 
 # ---- 单聊 ----
@@ -173,7 +173,7 @@ class _GroupReplyNotice(_GroupNotice, GroupReplyTarget):
         keyboard: Keyboard | None = None,
         media: Media | None = None,
         card: Card | None = None,
-        quote: str | SentMessage | GroupAnyMessage | None = None,
+        quote: str | SentMessage | GroupMessage | None = None,
     ) -> SentMessage:
         """用事件 ID 被动回复这个群，`event_id` 与 `msg_seq` 由 SDK 填写；参数同 `client.groups.send_message()`。
 
@@ -339,15 +339,12 @@ class JoinRequestAutoApproved(Model):
     strategy_id: str | None = None
 
 
-class GroupJoinRequest(Event):
-    """有人申请加群，对应事件 `GROUP_JOIN_REQUEST`。只有机器人是群管理员时才会收到。
-
-    可以用 `approve()` / `decline()` 直接审批。
+class GroupJoinRequestInfo(Model):
+    """一条入群申请：申请人与申请的信息，`iter_join_requests()` 的结果；事件 `GroupJoinRequest` 继承它。
 
     Attributes:
-        group_openid: 群的 openid。
         join_request_id: 申请 ID，审批时要用。
-        member_openid: 申请人的 openid，审批接口要用。
+        member_openid: 申请人的 openid，审批时要用。
         union_openid: 申请人跨应用统一的 openid（如有）。
         username: 申请人昵称。
         bot: 申请人是否为机器人。
@@ -356,6 +353,27 @@ class GroupJoinRequest(Event):
         invited_by: 邀请人的 openid，被邀请时才有。
         risk_tips: 安全提示语。
         verify_info: 验证方式与申请人填写的内容。
+    """
+
+    join_request_id: str
+    member_openid: str
+    union_openid: str | None = None
+    username: str | None = None
+    bot: bool | None = None
+    apply_at: datetime | None = None
+    apply_source: JoinRequestSource | None = None
+    invited_by: str | None = None
+    risk_tips: str | None = None
+    verify_info: JoinRequestVerifyInfo | None = None
+
+
+class GroupJoinRequest(GroupJoinRequestInfo, Event):
+    """有人申请加群，对应事件 `GROUP_JOIN_REQUEST`。只有机器人是群管理员时才会收到。
+
+    可以用 `approve()` / `decline()` 直接审批。申请的字段同 `GroupJoinRequestInfo`。
+
+    Attributes:
+        group_openid: 群的 openid。
         auto_approved: 已被自动通过时才有，含策略 ID。
 
     Example:
@@ -371,16 +389,6 @@ class GroupJoinRequest(Event):
     intent = Intents.GROUP_MEMBER_EVENT
 
     group_openid: str
-    join_request_id: str
-    member_openid: str
-    union_openid: str | None = None
-    username: str | None = None
-    bot: bool | None = None
-    apply_at: datetime | None = None
-    apply_source: JoinRequestSource | None = None
-    invited_by: str | None = None
-    risk_tips: str | None = None
-    verify_info: JoinRequestVerifyInfo | None = None
     auto_approved: JoinRequestAutoApproved | None = None
 
     async def approve(self) -> None:

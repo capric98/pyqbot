@@ -18,6 +18,7 @@ import pytest
 import pyqbot
 import pyqbot._api.upload as upload_module
 from pyqbot._model import decode
+from pyqbot._models.event import bind_client
 from pyqbot._models.upload import UploadPrepared
 
 APP_SECRET = "secret-value-never-shown"
@@ -244,6 +245,42 @@ async def test_uploaded_media_can_be_sent() -> None:
         await client.users.send_message("u", media=media)
 
     assert platform.calls[-1][2] == {"msg_type": 7, "media": {"file_info": "INFO"}}
+
+
+async def test_received_messages_upload_to_their_own_user_or_group(tmp_path: Path) -> None:
+    platform = Platform()
+    path = tmp_path / "cat.png"
+    path.write_bytes(b"png")
+    private = pyqbot.C2CMessage(id="m1", author=pyqbot.C2CUser(user_openid="u1"))
+    group = pyqbot.GroupAtMessage(id="m2", group_openid="g1")
+
+    async with client_for(platform) as client:
+        bind_client(private, client)
+        bind_client(group, client)
+        await private.upload(path=path)
+        await group.upload(url="https://example.com/a.mp4", send=True)
+
+    assert [(method, target) for method, target, _ in platform.calls] == [
+        ("POST", "/v2/users/u1/files"),
+        ("POST", "/v2/groups/g1/files"),
+    ]
+    assert platform.calls[0][2] == {
+        "file_type": 1,
+        "file_data": base64.b64encode(b"png").decode(),
+        "file_name": "cat.png",
+        "srv_send_msg": False,
+    }
+    assert platform.calls[1][2] == {
+        "file_type": 2,
+        "url": "https://example.com/a.mp4",
+        "srv_send_msg": True,
+    }
+
+
+async def test_upload_on_an_unbound_message_raises() -> None:
+    message = pyqbot.GroupMessage(id="m", group_openid="g")
+    with pytest.raises(RuntimeError, match="没有绑定 Client"):
+        await message.upload(url="https://example.com/a.png")
 
 
 @pytest.mark.parametrize(

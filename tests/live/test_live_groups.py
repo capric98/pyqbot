@@ -58,9 +58,9 @@ async def client(app_id: str, app_secret: str) -> AsyncGenerator[pyqbot.Client]:
 # ---- 只读 ----
 
 
-async def test_get_info(client: pyqbot.Client, group: str) -> None:
+async def test_get_group(client: pyqbot.Client, group: str) -> None:
     """须用户提供测试群并单独同意，可能需要白名单。应看到：打印的群名、人数与客户端里一致。"""
-    info = await client.groups.get_info(group)
+    info = await client.groups.get(group)
 
     note("群信息", info)
     assert info.group_openid in (None, group)
@@ -80,11 +80,11 @@ async def test_get_bot_state(client: pyqbot.Client, group: str) -> None:
 async def test_iter_members_and_get_member(client: pyqbot.Client, group: str) -> None:
     """须用户提供测试群并单独同意，可能需要白名单。
 
-    应看到：成员数与 `get_info()` 的人数一致（超过 30 人时说明 `cursor` 放在查询串里能翻页）；
+    应看到：成员数与 `get()` 的人数一致（超过 30 人时说明 `cursor` 放在查询串里能翻页）；
     第一个成员单独查到的信息与列表里相同。
     """
     members = [member async for member in client.groups.iter_members(group)]
-    info = await client.groups.get_info(group)
+    info = await client.groups.get(group)
 
     note("成员数 / 群人数", (len(members), info.group_member_num))
     assert members
@@ -155,14 +155,16 @@ async def test_mute_update_then_unmute(client: pyqbot.Client, write_allowed: str
     if member in await muted_openids(client, group):
         pytest.skip("该成员已在禁言中，用例结束时没法恢复原来的到期时间")
 
-    async with undo_on_failure(lambda: client.groups.unmute(group, member)):
-        await client.groups.mute(group, member, timedelta(minutes=2))
-        await client.groups.update_mute(group, member, datetime.now(UTC) + timedelta(minutes=5))
+    async with undo_on_failure(lambda: client.groups.unmute_members(group, member)):
+        await client.groups.mute_members(group, member, timedelta(minutes=2))
+        await client.groups.update_member_mutes(
+            group, member, datetime.now(UTC) + timedelta(minutes=5)
+        )
         muted = {m.member_openid: m for m in (await client.groups.get_mute_settings(group)).members}
         expire_at = muted[member].mute_expire_at
         assert expire_at is not None
         assert expire_at > datetime.now(UTC) + timedelta(minutes=3)
-        await client.groups.unmute(group, member)
+        await client.groups.unmute_members(group, member)
 
     assert member not in await muted_openids(client, group)
 
@@ -178,12 +180,12 @@ async def test_mute_twice_with_add(client: pyqbot.Client, write_allowed: str) ->
     if member in await muted_openids(client, group):
         pytest.skip("该成员已在禁言中，用例结束时没法恢复原来的到期时间")
 
-    async with undo_on_failure(lambda: client.groups.unmute(group, member)):
-        await client.groups.mute(group, member, timedelta(minutes=2))
-        await client.groups.mute(group, member, timedelta(minutes=5))
+    async with undo_on_failure(lambda: client.groups.unmute_members(group, member)):
+        await client.groups.mute_members(group, member, timedelta(minutes=2))
+        await client.groups.mute_members(group, member, timedelta(minutes=5))
         muted = {m.member_openid: m for m in (await client.groups.get_mute_settings(group)).members}
         note("再次 add 之后", muted[member])
-        await client.groups.unmute(group, member)
+        await client.groups.unmute_members(group, member)
 
 
 async def test_blacklist_add_only_works_for_users_outside_the_group(

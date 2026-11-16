@@ -5,6 +5,7 @@ import json
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import httpx2
 import pytest
@@ -71,7 +72,11 @@ class Platform:
     def handle(self, request: httpx2.Request) -> httpx2.Response:
         if request.url.path == "/app/getAppAccessToken":
             return httpx2.Response(200, json={"access_token": "t", "expires_in": "7200"})
-        body = json.loads(request.content) if request.content else None
+        body: object = None
+        if request.headers.get("content-type", "").startswith("multipart/"):
+            body = request.content  # 本地图片：multipart 原样记下
+        elif request.content:
+            body = json.loads(request.content)
         self.requests.append((request.method, request.url.raw_path.decode(), body))
         if request.method == "POST" and request.url.path.startswith("/channels/"):
             return httpx2.Response(200, json={"id": "sent", "channel_id": "c", "guild_id": "g"})
@@ -356,6 +361,79 @@ async def test_guild_interaction_reply_goes_to_its_channel_without_msg_seq() -> 
             {"markdown": {"content": "**好**"}, "keyboard": {"id": "k"}, "event_id": "E2"},
         ),
     ]
+
+
+async def test_guild_interaction_reply_sends_channel_only_content() -> None:
+    platform = Platform()
+    event = interaction({"id": "i", "chat_type": 0, "channel_id": "c"}, "E1")
+    quoted = pyqbot.GuildMessage(id="m1", channel_id="c", guild_id="g")
+
+    async with client_for(platform) as client:
+        bind_client(event, client)
+        await event.reply(
+            embed=pyqbot.Embed(title="标题"),
+            ark=pyqbot.Ark(template_id=23),
+            image="https://example.com/a.png",
+            quote=quoted,
+        )
+
+    assert platform.requests == [
+        (
+            "POST",
+            "/channels/c/messages",
+            {
+                "embed": {"title": "标题"},
+                "ark": {"template_id": 23},
+                "image": "https://example.com/a.png",
+                "message_reference": {"message_id": "m1"},
+                "event_id": "E1",
+            },
+        )
+    ]
+
+
+async def test_guild_interaction_reply_uploads_a_local_image(tmp_path: Path) -> None:
+    platform = Platform()
+    event = interaction({"id": "i", "chat_type": 0, "channel_id": "c"}, "E1")
+    path = tmp_path / "cat.png"
+    path.write_bytes(b"png")
+
+    async with client_for(platform) as client:
+        bind_client(event, client)
+        await event.reply("看图", image_path=path)
+
+    [(method, target, body)] = platform.requests
+    assert (method, target) == ("POST", "/channels/c/messages")
+    assert isinstance(body, bytes)
+    assert b'name="file_image"; filename="cat.png"' in body
+    assert b"E1" in body
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {"embed": pyqbot.Embed(title="t")},
+        {"ark": pyqbot.Ark(template_id=23)},
+        {"image": "https://example.com/a.png"},
+        {"image_path": "cat.png"},
+        {"image_data": b"png"},
+        {"quote": pyqbot.GuildMessage(id="m", channel_id="c", guild_id="g")},
+    ],
+    ids=["embed", "ark", "image", "image-path", "image-data", "guild-message-quote"],
+)
+@pytest.mark.parametrize("data", [C2C_CLICK, GROUP_CLICK], ids=["c2c", "group"])
+async def test_chat_interaction_reply_rejects_what_only_channels_send(
+    data: object, arguments: dict[str, object]
+) -> None:
+    platform = Platform()
+    event = interaction(data)
+
+    async with client_for(platform) as client:
+        bind_client(event, client)
+        with pytest.raises(ValueError, match="单聊、群聊消息不支持"):
+            await event.reply("x", **arguments)  # pyright: ignore[reportArgumentType]
+
+    assert platform.requests == []
 
 
 @pytest.mark.parametrize(

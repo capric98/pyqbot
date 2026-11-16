@@ -74,7 +74,7 @@ async def test_decorators_return_the_handler_unchanged() -> None:
 
         async def on_c2c(message: pyqbot.C2CMessage) -> None: ...
 
-        async def on_group(message: pyqbot.GroupMessage) -> None: ...
+        async def on_group(message: pyqbot.GroupAtMessage) -> None: ...
 
         assert bot.on_c2c_message(on_c2c) is on_c2c
         assert bot.on_group_at_message(on_group) is on_group
@@ -86,9 +86,9 @@ async def test_sync_handler_is_rejected_at_registration() -> None:
 
         def on_c2c(message: pyqbot.C2CMessage) -> None: ...
 
-        async def handle(message: pyqbot.GroupMessage) -> None: ...
+        async def handle(message: pyqbot.GroupAtMessage) -> None: ...
 
-        def on_group(message: pyqbot.GroupMessage) -> Coroutine[None, None, None]:
+        def on_group(message: pyqbot.GroupAtMessage) -> Coroutine[None, None, None]:
             return handle(message)  # 类型检查放行，但不是 async def
 
         with pytest.raises(TypeError, match="async def"):
@@ -102,7 +102,7 @@ async def test_sync_handler_is_rejected_at_registration() -> None:
 async def test_handler_for_the_wrong_event_type_is_a_type_error() -> None:
     async with pyqbot.Bot("app-id", "app-secret") as bot:
 
-        async def on_group(message: pyqbot.GroupMessage) -> None: ...
+        async def on_group(message: pyqbot.GroupAtMessage) -> None: ...
 
         # 本文件开启了 reportUnnecessaryTypeIgnoreComment：pyright 不再报错时这里会失败。
         bot.on_c2c_message(on_group)  # pyright: ignore[reportArgumentType]

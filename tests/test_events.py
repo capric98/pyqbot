@@ -138,7 +138,7 @@ def with_event_id[E: Event](event: E, event_id: str | None) -> E:
 
 async def test_reply_to_fills_msg_id_and_increments_msg_seq() -> None:
     platform = Platform()
-    first, second = c2c("m-1"), pyqbot.GroupMessage(id="m-2", group_openid="g")
+    first, second = c2c("m-1"), pyqbot.GroupAtMessage(id="m-2", group_openid="g")
 
     async with client_for(platform) as client:
         await client.users.send_message("u", "a", reply_to=first)
@@ -231,7 +231,7 @@ def test_event_id_is_hidden_from_the_fields() -> None:
 def test_reply_targets_say_which_scene_they_belong_to() -> None:
     assert isinstance(c2c(), pyqbot.C2CReplyTarget)
     assert not isinstance(c2c(), pyqbot.GroupReplyTarget)
-    message = pyqbot.GroupMessage(id="m", group_openid="g")
+    message = pyqbot.GroupAtMessage(id="m", group_openid="g")
     assert isinstance(message, pyqbot.GroupReplyTarget)
     assert not isinstance(message, pyqbot.C2CReplyTarget)
 
@@ -273,7 +273,7 @@ def test_message_events_declare_their_name_and_intent() -> None:
         "C2C_MESSAGE_CREATE",
         pyqbot.Intents.GROUP_AND_C2C_EVENT,
     )
-    assert (pyqbot.GroupMessage.event_name, pyqbot.GroupMessage.intent) == (
+    assert (pyqbot.GroupAtMessage.event_name, pyqbot.GroupAtMessage.intent) == (
         "GROUP_AT_MESSAGE_CREATE",
         pyqbot.Intents.GROUP_AND_C2C_EVENT,
     )
@@ -304,9 +304,9 @@ def test_real_c2c_message_decodes() -> None:
 
 
 def test_group_message_from_the_official_examples_decodes() -> None:
-    text = dispatch_of("GROUP_AT_MESSAGE_CREATE", GROUP_TEXT).decode_data(pyqbot.GroupMessage)
-    image = dispatch_of("GROUP_AT_MESSAGE_CREATE", GROUP_IMAGE).decode_data(pyqbot.GroupMessage)
-    quote = dispatch_of("GROUP_AT_MESSAGE_CREATE", GROUP_QUOTE).decode_data(pyqbot.GroupMessage)
+    text = dispatch_of("GROUP_AT_MESSAGE_CREATE", GROUP_TEXT).decode_data(pyqbot.GroupAtMessage)
+    image = dispatch_of("GROUP_AT_MESSAGE_CREATE", GROUP_IMAGE).decode_data(pyqbot.GroupAtMessage)
+    quote = dispatch_of("GROUP_AT_MESSAGE_CREATE", GROUP_QUOTE).decode_data(pyqbot.GroupAtMessage)
 
     assert text.group_openid == "B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5"
     assert text.member_openid == "A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4"
@@ -329,7 +329,7 @@ def test_group_message_from_the_official_examples_decodes() -> None:
 
 
 def test_msg_idx_is_read_from_the_message_scene() -> None:
-    group = dispatch_of("GROUP_AT_MESSAGE_CREATE", GROUP_TEXT).decode_data(pyqbot.GroupMessage)
+    group = dispatch_of("GROUP_AT_MESSAGE_CREATE", GROUP_TEXT).decode_data(pyqbot.GroupAtMessage)
 
     assert c2c_sample().decode_data(pyqbot.C2CMessage).msg_idx == "REFIDX_fake"
     assert group.msg_idx == "REFIDX_xxxxxxxxxxxxxxx=="
@@ -387,11 +387,11 @@ def test_secondary_fields_of_the_wrong_type_fall_back_to_defaults() -> None:
         "attachments": [{"url": 1, "size": "大"}],
         "mentions": "nobody",
     }
-    message = dispatch_of("GROUP_AT_MESSAGE_CREATE", data).decode_data(pyqbot.GroupMessage)
+    message = dispatch_of("GROUP_AT_MESSAGE_CREATE", data).decode_data(pyqbot.GroupAtMessage)
 
     assert message.id == "ROBOT1.0_x"
     assert message.group_openid == GROUP_TEXT["group_openid"]
-    assert message.author == pyqbot.GroupMember()
+    assert message.author == pyqbot.GroupMessageMember()
     assert message.member_openid is None
     assert (message.content, message.timestamp, message.message_type) == ("", None, None)
     # 元组里的模型逐个清理：附件只丢掉坏字段；mentions 本身不是列表，退回默认值。
@@ -439,11 +439,11 @@ def test_unknown_message_type_and_fields_are_tolerated() -> None:
         (pyqbot.C2CMessage, {"id": "m", "content": "没有发送者，无法回复"}),
         (pyqbot.C2CMessage, {"id": "m", "author": {"id": "u"}}),
         (pyqbot.C2CMessage, {"author": {"user_openid": "u"}}),
-        (pyqbot.GroupMessage, {"id": "m", "author": {"member_openid": "u"}}),
+        (pyqbot.GroupAtMessage, {"id": "m", "author": {"member_openid": "u"}}),
     ],
 )
 def test_message_without_what_reply_needs_is_rejected(
-    event_type: type[pyqbot.C2CMessage | pyqbot.GroupMessage], data: object
+    event_type: type[pyqbot.C2CMessage | pyqbot.GroupAtMessage], data: object
 ) -> None:
     with pytest.raises(PayloadError):
         dispatch_of(event_type.event_name, data).decode_data(event_type)
@@ -476,7 +476,7 @@ async def test_c2c_reply_answers_the_sender_with_increasing_msg_seq() -> None:
 
 async def test_group_reply_answers_the_group() -> None:
     platform = Platform()
-    message = dispatch_of("GROUP_AT_MESSAGE_CREATE", GROUP_TEXT).decode_data(pyqbot.GroupMessage)
+    message = dispatch_of("GROUP_AT_MESSAGE_CREATE", GROUP_TEXT).decode_data(pyqbot.GroupAtMessage)
 
     async with client_for(platform) as client:
         bind_client(message, client)
@@ -498,7 +498,7 @@ async def test_group_reply_answers_the_group() -> None:
 async def test_reply_accepts_the_same_content_as_send_message() -> None:
     platform = Platform()
     private = c2c_sample().decode_data(pyqbot.C2CMessage)
-    group = dispatch_of("GROUP_AT_MESSAGE_CREATE", GROUP_TEXT).decode_data(pyqbot.GroupMessage)
+    group = dispatch_of("GROUP_AT_MESSAGE_CREATE", GROUP_TEXT).decode_data(pyqbot.GroupAtMessage)
     keyboard = pyqbot.Keyboard(id="kb")
     card = pyqbot.Card(title="t", description="d", url="https://a", pic_url="https://b")
 
@@ -557,10 +557,10 @@ async def test_send_typing_on_a_message_is_a_passive_reply() -> None:
 
 
 @pytest.mark.parametrize(
-    "message", [c2c(), pyqbot.GroupMessage(id="m", group_openid="g")], ids=["c2c", "group"]
+    "message", [c2c(), pyqbot.GroupAtMessage(id="m", group_openid="g")], ids=["c2c", "group"]
 )
 async def test_reply_on_an_unbound_message_raises(
-    message: pyqbot.C2CMessage | pyqbot.GroupMessage,
+    message: pyqbot.C2CMessage | pyqbot.GroupAtMessage,
 ) -> None:
     with pytest.raises(RuntimeError, match="没有绑定 Client"):
         await message.reply("收到")

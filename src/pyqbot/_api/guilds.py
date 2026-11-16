@@ -321,7 +321,7 @@ class Guilds:
         guild_id: str,
         user_id: str,
         *,
-        add_blacklist: bool = False,
+        add_to_blacklist: bool = False,
         recall: RecallDays = RecallDays.NONE,
     ) -> None:
         """把成员移出频道。私域；管理员。不能移出管理员。
@@ -333,7 +333,7 @@ class Guilds:
         Args:
             guild_id: 频道 ID。
             user_id: 要移出的用户 ID。
-            add_blacklist: 同时把该用户加入频道黑名单。
+            add_to_blacklist: 同时把该用户加入频道黑名单。
             recall: 同时撤回该成员多少天内的消息。
 
         Raises:
@@ -342,7 +342,7 @@ class Guilds:
             ValueError: `guild_id` 或 `user_id` 为空。
             RuntimeError: 客户端已关闭。
         """
-        body = {"add_blacklist": add_blacklist, "delete_history_msg_days": recall}
+        body = {"add_blacklist": add_to_blacklist, "delete_history_msg_days": recall}
         await self._http.request("DELETE", _member_path(guild_id, user_id), type_=None, json=body)
 
     def iter_role_members(
@@ -561,8 +561,8 @@ class Guilds:
 
     async def mute_members(
         self, guild_id: str, user_ids: str | Iterable[str], until: datetime | timedelta
-    ) -> tuple[str, ...]:
-        """批量禁言成员（不能禁言管理员），返回设置成功的用户 ID。管理员。
+    ) -> None:
+        """批量禁言成员（不能禁言管理员）。管理员。
 
         对应官方接口 `PATCH /guilds/{guild_id}/mute`（带 `user_ids`）。
 
@@ -572,33 +572,41 @@ class Guilds:
             until: 同 `mute_all()`。
 
         Raises:
+            PartialFailureError: 有的成员没有设置成功（`failed_ids`），其余已禁言。
             APIError: 平台拒绝，例如机器人不是管理员。
             NetworkError: 没有拿到平台的响应。
             ValueError: 同 `mute_all()`。
             RuntimeError: 客户端已关闭。
         """
-        body = {"mute_end_timestamp": unix_seconds(until, "until"), "user_ids": str_list(user_ids)}
-        result = await self._http.request(
-            "PATCH", _mute_path(guild_id), type_=MuteResult, json=body
-        )
-        return result.user_ids
+        body = {"mute_end_timestamp": unix_seconds(until, "until")}
+        await self._mute_members(guild_id, user_ids, body, "禁言")
 
-    async def unmute_members(self, guild_id: str, user_ids: str | Iterable[str]) -> tuple[str, ...]:
-        """批量解除成员的禁言，返回设置成功的用户 ID。管理员。
+    async def unmute_members(self, guild_id: str, user_ids: str | Iterable[str]) -> None:
+        """批量解除成员的禁言。管理员。
 
         对应官方接口 `PATCH /guilds/{guild_id}/mute`（带 `user_ids`）。
 
         Raises:
+            PartialFailureError: 有的成员没有解除成功（`failed_ids`），其余已解除。
             APIError: 平台拒绝，例如机器人不是管理员。
             NetworkError: 没有拿到平台的响应。
             ValueError: `guild_id` 为空。
             RuntimeError: 客户端已关闭。
         """
-        body = {**_UNMUTE, "user_ids": str_list(user_ids)}
-        result = await self._http.request(
-            "PATCH", _mute_path(guild_id), type_=MuteResult, json=body
+        await self._mute_members(guild_id, user_ids, _UNMUTE, "解除禁言")
+
+    async def _mute_members(
+        self, guild_id: str, user_ids: str | Iterable[str], body: dict[str, str], step: str
+    ) -> None:
+        requested = str_list(user_ids)
+        response = await self._http.request_decoded(
+            "PATCH", _mute_path(guild_id), type_=MuteResult, json={**body, "user_ids": requested}
         )
-        return result.user_ids
+        # 响应只列出设置成功的成员，没列出的算失败（docs/errata.md「频道批量禁言」）。
+        succeeded = set(response.data.succeeded)
+        if failed := tuple(dict.fromkeys(i for i in requested if i not in succeeded)):
+            reason = f"{len(failed)} 个成员未能{step}：{'、'.join(failed)}"
+            raise response.partial_failure(reason, failed)
 
     async def mute_member(self, guild_id: str, user_id: str, until: datetime | timedelta) -> None:
         """禁言一个成员。管理员。

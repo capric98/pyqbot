@@ -47,7 +47,7 @@ from ._models.guild import (
     GuildUpdate,
 )
 from ._models.guild_message import (
-    ChannelAnyMessage,
+    ChannelAtMessage,
     ChannelMessage,
     DirectMessage,
     DirectMessageDelete,
@@ -59,7 +59,7 @@ from ._models.guild_message import (
     PublicMessageDelete,
 )
 from ._models.interaction import Interaction
-from ._models.message import C2CMessage, GroupAnyMessage, GroupMessage
+from ._models.message import C2CMessage, GroupAtMessage, GroupMessage
 from ._models.notice import (
     C2CMsgReceive,
     C2CMsgReject,
@@ -126,18 +126,18 @@ class Bot(Client):
         self._dispatcher.add_handler(C2CMessage, handler)
         return handler
 
-    def on_group_at_message[F: Handler[GroupMessage]](self, handler: F) -> F:
+    def on_group_at_message[F: Handler[GroupAtMessage]](self, handler: F) -> F:
         """注册群里 @机器人 的消息（`GROUP_AT_MESSAGE_CREATE`）的处理函数，原样返回它。
 
-        处理函数必须是 `async def`，只收一个 `GroupMessage`；同一事件可以注册多个。
+        处理函数必须是 `async def`，只收一个 `GroupAtMessage`；同一事件可以注册多个。
 
         Raises:
             TypeError: 处理函数不是 `async def` 定义的。
         """
-        self._dispatcher.add_handler(GroupMessage, handler)
+        self._dispatcher.add_handler(GroupAtMessage, handler)
         return handler
 
-    def on_group_message[F: Handler[GroupAnyMessage]](self, handler: F) -> F:
+    def on_group_message[F: Handler[GroupMessage]](self, handler: F) -> F:
         """注册群里的全部消息（`GROUP_MESSAGE_CREATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
 
         机器人须开启「接收所有消息」。只收 @机器人 的消息用 `on_group_at_message`，两者互不转发。
@@ -145,7 +145,7 @@ class Bot(Client):
         Raises:
             TypeError: 处理函数不是 `async def` 定义的。
         """
-        self._dispatcher.add_handler(GroupAnyMessage, handler)
+        self._dispatcher.add_handler(GroupMessage, handler)
         return handler
 
     def on_friend_add[F: Handler[FriendAdd]](self, handler: F) -> F:
@@ -350,16 +350,16 @@ class Bot(Client):
         self._dispatcher.add_handler(GuildMemberRemove, handler)
         return handler
 
-    def on_channel_at_message[F: Handler[ChannelMessage]](self, handler: F) -> F:
+    def on_channel_at_message[F: Handler[ChannelAtMessage]](self, handler: F) -> F:
         """注册子频道里 @机器人 的消息（`AT_MESSAGE_CREATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
 
         Raises:
             TypeError: 处理函数不是 `async def` 定义的。
         """
-        self._dispatcher.add_handler(ChannelMessage, handler)
+        self._dispatcher.add_handler(ChannelAtMessage, handler)
         return handler
 
-    def on_channel_message[F: Handler[ChannelAnyMessage]](self, handler: F) -> F:
+    def on_channel_message[F: Handler[ChannelMessage]](self, handler: F) -> F:
         """注册子频道里的全部消息（`MESSAGE_CREATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
 
         仅私域机器人可用。只收 @机器人 的消息用 `on_channel_at_message`，两者互不转发。
@@ -367,7 +367,7 @@ class Bot(Client):
         Raises:
             TypeError: 处理函数不是 `async def` 定义的。
         """
-        self._dispatcher.add_handler(ChannelAnyMessage, handler)
+        self._dispatcher.add_handler(ChannelMessage, handler)
         return handler
 
     def on_direct_message[F: Handler[DirectMessage]](self, handler: F) -> F:
