@@ -548,6 +548,23 @@ async def test_known_tokens_echoed_by_the_platform_are_redacted(clock: FakeClock
     assert_hidden(caught.value, "token-1", "token-9")
 
 
+async def test_token_replaced_by_a_refresh_is_still_redacted(clock: FakeClock) -> None:
+    server = TokenServer()
+
+    async with client_for(server) as client:
+        await client.get_access_token()  # token-1
+        clock.advance(7200)
+        await client.get_access_token()  # 换成了 token-2，token-1 平台还会再认 60 秒
+        clock.advance(7200)
+        server.respond = responding(
+            httpx2.Response(200, json={"code": 1, "message": "prior token-1, current token-2"})
+        )
+        with pytest.raises(pyqbot.APIError) as caught:
+            await client.get_access_token()
+
+    assert_hidden(caught.value, "token-1", "token-2")
+
+
 @pytest.mark.parametrize("where", ["header", "body"])
 async def test_secret_echoed_in_the_trace_id_is_redacted(where: str) -> None:
     echoed = f"trace-{APP_SECRET}"

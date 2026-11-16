@@ -35,6 +35,7 @@ class AccessTokenManager:
         self._config = config
         self._http_client = http_client
         self._token: _CachedToken | None = None
+        self._replaced_token: str | None = None
         self._refreshing: asyncio.Future[str] | None = None
 
     async def get(self) -> str:
@@ -79,6 +80,8 @@ class AccessTokenManager:
             future.cancel()
             raise
         else:
+            if self._token is not None and self._token.value != token.value:
+                self._replaced_token = self._token.value
             self._token = token
             future.set_result(token.value)
             return token.value
@@ -117,8 +120,10 @@ class AccessTokenManager:
         return token
 
     def known_secrets(self) -> tuple[str | None, ...]:
-        """`app_secret` 与当前缓存的 access_token（还没有时为 `None`），供脱敏使用。"""
-        return (self._config.app_secret, self._token.value if self._token else None)
+        """`app_secret`、当前的 access_token 和刚被换掉的那个（没有时为 `None`），供脱敏使用。"""
+        # 刚被换掉的 token 平台还会再认 60 秒，仍可能被回显。
+        current = self._token.value if self._token else None
+        return (self._config.app_secret, current, self._replaced_token)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
