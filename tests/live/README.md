@@ -75,7 +75,7 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 ### 影响机器人全局配置，须单独同意
 
 - `test_live_bot.py::test_set_menu_to_itself`（`LIVE_GLOBAL_CONFIG`）：菜单原样设回，版本号变大、菜单看起来不变。
-- `test_live_bot.py::test_panel_lifecycle`（`LIVE_GLOBAL_CONFIG`）：在单聊输入框输入 `/` 唤出面板，约 30 秒内是「pyqbot」，之后约 30 秒是「pyqbot2」，结束后消失。
+- `test_live_bot.py::test_panel_lifecycle`（`LIVE_GLOBAL_CONFIG`）：在单聊输入框输入 `/` 唤出面板，约 30 秒内是「pyqbot」，之后约 30 秒是「pyqbot2」（删掉 `/` 重新输入才刷新），结束后消失。
 - `test_live_upload.py::test_media_image_library`（`LIVE_MEDIA_IMAGES`）：收到「素材库」与蓝色图片，结束后图片从列表里删除。
 
 ### 需要测试群
