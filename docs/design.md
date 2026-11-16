@@ -38,7 +38,7 @@ bot.run()  # 同步入口，阻塞到退出
 - **`httpx2.AsyncClient` 的归属**（已落地）：不传 `http_client` 时由 `Client` 自建、`close()` 时关闭；传入的归调用方，SDK 只用不关。经 `client.http_client` 取回。
 - **生命周期**（已落地）：推荐 `async with`；也可直接构造，用完 `await client.close()`（可重复调用）。关闭后不可复用。
 - **access_token**（已落地）：`await client.get_access_token()` 返回当前有效的 token（不带 `QQBot ` 前缀），首次调用才取，之后按需刷新；关闭后调用抛 `RuntimeError`。请求层在 `Client` 内部，直接用 `_credentials.AccessTokenManager`。
-- **`Bot` 的运行入口**（规划）：`await bot.start()` 连接网关并分发事件，直到 `close()`（正常返回）或不可恢复的错误（抛 `GatewayError`）；`bot.run()` 是它的同步包装：`asyncio.run` 里 `async with self: await self.start()`，Ctrl+C 时干净退出、不打印 traceback。`async with bot` 只管资源，不连网关。细节见「网关连接」与「事件」。
+- **`Bot` 的运行入口**（已落地）：`await bot.start()` 连接网关并分发事件，直到 `close()`（正常返回）或不可恢复的错误（抛 `GatewayError`）；没有要订阅的事件、重复调用或已关闭时抛 `RuntimeError`。`bot.run()` 是它的同步包装：`asyncio.run` 里 `async with self: await self.start()`，Ctrl+C 时干净退出、不打印 traceback。`async with bot` 只管资源，不连网关。`close()` 的顺序是断开网关、取消处理函数、关 HTTP 连接。细节见「网关连接」与「事件」。
 - **接口挂在哪**（已落地）：一层命名空间，`client.groups.send_message(...)`，不扁平地挂在 `Client` 上，也不多层嵌套。按用户心目中的资源分组（如 `users`、`groups`），不按文档章节。最常用的操作另在模型对象上提供快捷方法（如 `message.reply()`）。属于客户端自身的方法（如 `get_access_token()`）仍直接挂在 `Client` 上。
 
 ## 包结构与依赖方向
@@ -125,7 +125,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 - **坏帧**：单帧解不开（`PayloadError`）、非文本帧或意料之外的 OpCode，记日志后跳过，不影响连接。
 - **日志**：用标准库 `logging.getLogger("pyqbot")`，内容先脱敏（约定 7）。
 
-## 事件（已落地，运行入口除外）
+## 事件（已落地）
 
 - **事件模型**（`_models/`）：每种事件一个 `Event` 的子类，收到的消息继承 `ReceivedMessage`（带 `id`）。首批是 `C2CMessage`、`GroupMessage`，都带 `reply()`。子类用 `ClassVar` 声明 `event_name`（Dispatch 的 `t`）与 `intent`。绑定的 `Client` 与回复计数存在实例的 `__dict__` 里（`dict=True`），`repr`、`to_dict()`、编码与相等性只看字段。
 - **模型上的行为**：分发器在调用处理函数前 `bind_client(event, client)`，`message.reply()` 这类快捷方法经 `self._bound_client()` 调用接口；没有绑定时抛 `RuntimeError`。同一事件的所有处理函数拿到同一个对象，所以 `msg_seq` 在它们之间也是递增的。
@@ -134,7 +134,6 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 - **Intents**：默认按已注册的处理函数推导（`Bot._resolve_intents()`），`Bot(..., intents=...)` 传入则以它为准。`Bot.start()` 用它 Identify，所以 `start()` 之后再注册的处理函数不会改变订阅。
 - **分发器**（`_events/dispatcher.py`）：`dispatch(payload, client)` 同步、立刻返回，`payload` 只需有 `t` 与 `decode_data()`（`GatewayPayload` 满足），所以不依赖网关。没有处理函数的事件与未知事件直接忽略、不解码，解码失败（`PayloadError`）记 WARNING 后丢弃；每个处理函数一个任务，异常记 ERROR（带事件名与处理函数名），不影响其它处理函数。`await aclose()` 之后不再分发，并取消、等待还在运行的处理函数（在处理函数里调用时不取消它自己）；`Bot.close()` 先调它再关连接。
 - **加一种事件**：在 `_models/` 按官方文档定义模型（声明 `event_name`、`intent`，只把 SDK 要用的字段写成必填，需要的话加 `reply()`），从顶层导出；在 `Bot` 上照 `on_c2c_message` 加一个装饰器。分发器与 Intents 推导不用改。
-- **待做**：`Bot.start()` / `run()` 把网关连接的 `on_dispatch` 接到 `lambda payload: self._dispatcher.dispatch(payload, self)`。
 
 ## 后续模块要遵守的约定
 
@@ -162,14 +161,15 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 - 不真实等待：token 过期、心跳间隔等用 monkeypatch 控制时间。等待并发结果的测试套一层 `asyncio.timeout`，回归时失败而不是挂起。
 - 测试优先只用 `pyqbot` 的公共接口；地基自身的测试可以直接导入内部模块（如 `pyqbot._model`）。
 
-## 首批小模块候选
+## 后续模块
 
-| # | 模块 | 职责边界 | 官方文档 | 依赖 | 为什么适合先做 |
-| --- | --- | --- | --- | --- | --- |
-| 1 | 凭证 `_credentials.py`（已落地） | 获取 access_token，缓存，临近过期时刷新，并发调用只发一次请求，失败映射成异常；并接到 `Client` 上。不管鉴权头怎么拼 | `dev-prepare/access-token.md` | `_config` `_errors` | 只有一个接口，状态机自成一体，其它所有模块都要用它 |
-| 2 | 网关协议数据 `_gateway/` 内（已落地） | OpCode、Intents、上下行 payload 的编解码、关闭码该恢复 / 重新鉴权 / 放弃的分类。纯数据，不建连接 | `dev-prepare/event-emit/payload.md`、`dev-prepare/event-emit/websocket.md`、`dev-prepare/error-trace/websocket.md` | `_model` | 无 IO，全是表格到代码的映射；与 1 不碰同一个文件 |
-| 3 | 错误映射（`_http.py` 的一部分，已落地） | 纯函数：状态码 + 响应头 + 响应体 → 异常或「成功」，含 `trace_id` 的提取与 `APIError` 的细分 | `dev-prepare/api-call-guide.md`、`dev-prepare/error-trace/index.md` | `_errors` | 无 IO，输入输出都能列成表；201/202 带 error body 的情况需要先想清楚 |
-| 4 | 事件分发器 `_events/` 内（已落地） | 处理函数的注册表与并发调用、处理函数出错不影响其它处理函数和连接。不含事件模型，不连网关 | `dev-prepare/event-emit/payload.md`、`autogen/index.md` 的「事件」 | 无 | 纯 asyncio，独立；但对外的注册方式是易用性的核心，设计空间比前三个大 |
-| 5 | 请求层 + 第一个接口（已落地，首个接口改为发文本消息） | `_http.py` 的发送与解码，加 `GET /users/@me` 打通接口分组的写法 | `dev-prepare/api-call-guide.md`、`autogen/api/users_me.get.md` | 1、3 | 不能最先做，列在这里表明顺序 |
+骨架已经打通：凭证、请求层、网关连接、事件分发、`Bot.start()` / `run()` 都已落地，单聊消息能收能回。剩下的主要是按现有写法铺开：
+
+- **其余事件**：`autogen/event/` 下还有二十种，照「加一种事件」的步骤做。
+- **其余接口**：`autogen/api/` 下的群管理、用户、面板等，以及 `server-inter/channel/` 下的频道接口，照约定 5 按资源分组。
+- **其它消息类型**：Markdown、富媒体、卡片、键盘，在 `send_message` 上用仅限关键字的参数追加。
+- **富媒体上传**：预上传、分片、完成三步，需要实测。
+- **Webhook**（未确认）：见上。
+- **待定的语义**：HTTP 202 加 304023 / 304024 表示「已受理、等待审核」，现在按失败抛出，做频道消息时要定下怎么表达（见 `errata.md`）。
 
 官方文档的出入（含当前实现的取舍与待实测项）集中记在 [`errata.md`](errata.md)。
