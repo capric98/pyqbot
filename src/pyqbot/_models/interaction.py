@@ -7,6 +7,7 @@ import msgspec
 from .._gateway.intents import Intents
 from .._model import Model, OpenIntEnum, OpenStrEnum
 from .event import C2CReplyTarget, ChannelReplyTarget, GroupReplyTarget
+from .guild_message import GuildMessage
 from .message import SentMessage
 from .send import Card, Keyboard, Markdown, Media
 
@@ -164,7 +165,7 @@ class Interaction(C2CReplyTarget, GroupReplyTarget, ChannelReplyTarget):
     """用户与机器人的互动，如点击回调按钮、快捷菜单、授权，对应事件 `INTERACTION_CREATE`。
 
     回调按钮与快捷菜单（`type` 为 `INLINE_KEYBOARD`、`CALLBACK_COMMAND`）需要在 3 秒内 `ack()`，
-    否则用户那边会一直转圈；SDK 不会替你回应。单聊和群聊的互动都可以用 `reply()` 被动回复。
+    否则用户那边会一直转圈；SDK 不会替你回应。单聊、群聊和频道的互动都可以用 `reply()` 被动回复。
 
     Attributes:
         id: 互动 ID，`ack()` 用它；与被动回复用的 `event_id`（payload 外层的 `id`）不是一个值。
@@ -238,17 +239,21 @@ class Interaction(C2CReplyTarget, GroupReplyTarget, ChannelReplyTarget):
         media: Media | None = None,
         card: Card | None = None,
         quote: str | SentMessage | None = None,
-    ) -> SentMessage:
-        """用事件 ID 被动回复：单聊发给操作者，群聊发到群里；`event_id` 与 `msg_seq` 由 SDK 填写。
+    ) -> SentMessage | GuildMessage:
+        """用事件 ID 被动回复：单聊发给操作者，群聊发到群里，频道发到互动所在的子频道。
 
-        参数同 `client.users.send_message()`，只是 `quote` 不接受收到的消息。
-        对应官方接口 `POST /v2/users/{user_openid}/messages` 或 `POST /v2/groups/{group_openid}/messages`。
+        `event_id` 与 `msg_seq`（频道不带）由 SDK 填写。参数同 `client.users.send_message()`，
+        只是 `quote` 不接受收到的消息；频道里 `quote` 是消息 ID，不支持 `media`、`card` 与 `SentMessage`。
+        返回值在频道里是 `GuildMessage`，否则是 `SentMessage`。
+        对应官方接口 `POST /v2/users/{user_openid}/messages`、`POST /v2/groups/{group_openid}/messages`
+        或 `POST /channels/{channel_id}/messages`。
 
         Raises:
+            AuditPendingError: 频道里的消息要等人工审核。
             APIError: 平台拒绝发送，例如事件 ID 已过期（`err_code` 为 40034026）。
             NetworkError: 没有拿到平台的响应。
-            NotImplementedError: 频道里的互动，暂不支持。
-            ValueError: 内容参数的组合不合法；事件没有事件 ID；认不出场景，或缺少该场景的 openid。
+            ValueError: 内容参数的组合不合法；事件没有事件 ID；认不出场景，或缺少该场景的 openid、
+                子频道 ID；频道里传了 `media`、`card` 或 `SentMessage`。
             RuntimeError: 事件不是 `Bot` 分发来的（没有绑定客户端），或客户端已关闭。
         """
         client = self._bound_client()
@@ -278,12 +283,21 @@ class Interaction(C2CReplyTarget, GroupReplyTarget, ChannelReplyTarget):
                     quote=quote,
                     reply_to=self,
                 )
-            case ChatType.GUILD:
-                raise NotImplementedError("频道里的互动暂不支持 reply()")
+            case ChatType.GUILD if self.channel_id is not None:
+                if media is not None or card is not None or isinstance(quote, SentMessage):
+                    raise ValueError("频道消息不支持 media、card，quote 要用消息 ID")
+                return await client.channels.send_message(
+                    self.channel_id,
+                    content,
+                    markdown=markdown,
+                    keyboard=keyboard,
+                    quote=quote,
+                    reply_to=self,
+                )
             case _:
                 # 不带 scene 原文：平台给的字符串进异常前要脱敏（约定 7），整数的 chat_type 不用。
                 chat_type_value = None if self.chat_type is None else int(self.chat_type)
                 raise ValueError(
                     f"无法回复这次互动（chat_type={chat_type_value}）：认不出场景，"
-                    "或缺少该场景的 user_openid / group_openid"
+                    "或缺少该场景的 user_openid / group_openid / channel_id"
                 )

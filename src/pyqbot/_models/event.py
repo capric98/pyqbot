@@ -82,8 +82,8 @@ class ReceivedMessage(ReplyTarget):
     id: str
 
 
-def reply_fields(target: ReplyTarget) -> dict[str, object]:
-    """被动回复 `target` 时请求体要加的字段：`msg_id` 或 `event_id`，以及 `msg_seq`。
+def reply_fields(target: ReplyTarget, *, seq: bool = True) -> dict[str, object]:
+    """被动回复 `target` 时请求体要加的字段：`msg_id` 或 `event_id`，以及 `msg_seq`（`seq=False` 时不加、不占用）。
 
     Raises:
         ValueError: `target` 不是消息，又没有事件 ID。
@@ -96,7 +96,8 @@ def reply_fields(target: ReplyTarget) -> dict[str, object]:
         raise ValueError(
             f"{type(target).__name__} 没有事件 ID，不能用来被动回复：只有 Bot 分发来的事件才带事件 ID"
         )
-    fields["msg_seq"] = next_msg_seq(target)
+    if seq:
+        fields["msg_seq"] = next_msg_seq(target)
     return fields
 
 

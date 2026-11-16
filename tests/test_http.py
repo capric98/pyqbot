@@ -428,6 +428,32 @@ async def test_requests_without_body_and_responses_without_content() -> None:
     assert "Content-Type" not in request.headers
 
 
+async def test_json_and_form_body_are_mutually_exclusive() -> None:
+    seen: list[httpx2.Request] = []
+
+    def handle(request: httpx2.Request) -> httpx2.Response:
+        seen.append(request)
+        return httpx2.Response(200, json={})
+
+    async def get_token() -> str:
+        return TOKEN
+
+    async with httpx2.AsyncClient(transport=httpx2.MockTransport(handle)) as http_client:
+        http = HTTP(pyqbot.Config(app_id="a", app_secret="s"), http_client, get_token, tuple)
+        with pytest.raises(ValueError, match="只能传一种请求体"):
+            await http.request("POST", "/x", type_=None, json={"a": 1}, data={"b": "2"})
+        with pytest.raises(ValueError, match="只能传一种请求体"):
+            await http.request_decoded(
+                "POST", "/x", type_=dict[str, object], json={"a": 1}, files={"f": ("f.png", b"x")}
+            )
+        # 空表单当作没有请求体，不报错。
+        await http.request("POST", "/x", type_=None, data={}, files={})
+
+    [request] = seen
+    assert request.content == b""
+    assert "Content-Type" not in request.headers
+
+
 @pytest.mark.parametrize(
     ("response", "failure"),
     [

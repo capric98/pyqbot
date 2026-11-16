@@ -101,6 +101,8 @@ class RequestModel(Model, omit_defaults=True):
 def decode[T](data: bytes | str, type_: type[T]) -> T:
     """把 JSON 解码成 `type_`；`Model` 里有默认值的字段类型不符时退回默认值，不让整条数据失败。
 
+    `type_` 也可以是 `tuple[模型, ...]`（顶层是数组的响应），元素按 `_clean()` 的规则逐个处理。
+
     Raises:
         msgspec.DecodeError: 不是合法的 JSON，或必填字段缺失、类型不符。
         RecursionError: 嵌套过深。
@@ -108,10 +110,12 @@ def decode[T](data: bytes | str, type_: type[T]) -> T:
     try:
         return msgspec.json.decode(data, type=type_)
     except msgspec.ValidationError:
-        if not issubclass(type_, Model):
+        target = cast(object, type_)  # 也可能是 tuple[模型, ...] 这样的泛型别名，issubclass 不收
+        is_model = isinstance(target, type) and issubclass(target, Model)
+        if not is_model and _model_tuple_item(type_) is None:
             raise
     # 只在严格解码失败时才走这条慢路径：先剔除类型不符的可选字段，再严格转换一次。
-    return msgspec.convert(_drop_invalid_optional(msgspec.json.decode(data), type_), type_)
+    return msgspec.convert(_clean(msgspec.json.decode(data), type_), type_)
 
 
 def _drop_invalid_optional(obj: object, model: type[Model]) -> object:

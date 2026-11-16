@@ -1,10 +1,12 @@
 """论坛：主题（帖子）、评论、回复的事件与富文本。
 
-官方文档：`server-inter/channel/content/forum/forum.md`、`model.md`、`open_forum.md`。论坛里的「帖子」
+官方文档：`server-inter/channel/content/forum/forum.md`、`model.md`、`open_forum.md`，接口的响应见
+`get_thread.md`、`get_threads_list.md`、`put_thread.md`。论坛里的「帖子」
 （thread）是主帖，「评论」（post）是对主帖的评论，「回复」（reply）是对评论的回复。
 富文本与 ID 类型的取舍见 `docs/design.md`「事件」。
 """
 
+import os
 from datetime import datetime
 from typing import TYPE_CHECKING, ClassVar
 
@@ -13,6 +15,10 @@ import msgspec
 from .._gateway.intents import Intents
 from .._model import Model, OpenIntEnum, decode
 from .event import ChannelReplyTarget, Event
+from .send import Ark, Embed, Keyboard, Markdown
+
+if TYPE_CHECKING:
+    from .guild_message import GuildMessage
 
 if TYPE_CHECKING:
     type _Id = str
@@ -307,6 +313,46 @@ class _ForumEvent(_IdNormalizer, ChannelReplyTarget):
     channel_id: _Id
     author_id: _Id | None = None
 
+    async def reply(
+        self,
+        content: str | None = None,
+        *,
+        markdown: str | Markdown | None = None,
+        keyboard: Keyboard | None = None,
+        embed: Embed | None = None,
+        ark: Ark | None = None,
+        image: str | None = None,
+        image_path: str | os.PathLike[str] | None = None,
+        image_data: bytes | None = None,
+        quote: str | GuildMessage | None = None,
+    ) -> GuildMessage:
+        """用事件 ID 被动回复，发到论坛子频道，`event_id` 由 SDK 填写；参数同 `client.channels.send_message()`。
+
+        对应官方接口 `POST /channels/{channel_id}/messages`。
+
+        Raises:
+            AuditPendingError: 消息要等人工审核，审核结果由事件推送。
+            APIError: 平台拒绝发送，例如事件 ID 已过期。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: 内容参数的组合不合法；事件没有事件 ID。
+            OSError: 读取 `image_path` 失败。
+            RuntimeError: 事件不是 `Bot` 分发来的（没有绑定客户端），或客户端已关闭。
+        """
+        client = self._bound_client()
+        return await client.channels.send_message(
+            self.channel_id,
+            content,
+            markdown=markdown,
+            keyboard=keyboard,
+            embed=embed,
+            ark=ark,
+            image=image,
+            image_path=image_path,
+            image_data=image_data,
+            quote=quote,
+            reply_to=self,
+        )
+
 
 class _ForumThreadEvent(_ForumEvent):
     thread_info: ForumThreadInfo
@@ -498,3 +544,76 @@ class OpenForumReplyDelete(_OpenForumEvent):
     """公域论坛：用户删除了回复，对应事件 `OPEN_FORUM_REPLY_DELETE`；字段同 `OpenForumThreadCreate`。"""
 
     event_name = "OPEN_FORUM_REPLY_DELETE"
+
+
+# ---- 帖子接口 ----
+
+
+class ForumThread(_IdNormalizer):
+    """论坛子频道里的一个主帖，由帖子列表与详情接口返回。
+
+    Attributes:
+        guild_id: 频道 ID。
+        channel_id: 论坛子频道的 ID。
+        author_id: 作者的用户 ID。
+        thread_info: 主帖的内容；接口返回的 `content` 是 JSON 形式的富文本字符串，
+            可用 `ForumRichText.from_json()` 解析。
+    """
+
+    _id_fields = ("guild_id", "channel_id", "author_id")
+
+    guild_id: _Id | None = None
+    channel_id: _Id | None = None
+    author_id: _Id | None = None
+    thread_info: ForumThreadInfo
+
+
+class ForumThreadList(Model):
+    """帖子列表（`client.channels.list_threads()`）。
+
+    Attributes:
+        threads: 主帖。
+        is_finish: 为 1 时已经全部取完，见 `finished`。
+    """
+
+    threads: tuple[ForumThread, ...] = ()
+    is_finish: int | None = None
+
+    @property
+    def finished(self) -> bool:
+        """是否已经全部取完（`is_finish` 为 1）。"""
+        return self.is_finish == 1
+
+
+class ThreadResponse(Model):
+    """帖子详情接口的响应外壳。"""
+
+    thread: ForumThread
+
+
+class ForumThreadFormat(OpenIntEnum):
+    """发帖时 `content` 的格式（`format`）。
+
+    Attributes:
+        TEXT: 普通文本。
+        HTML: HTML。
+        MARKDOWN: Markdown。
+        JSON: JSON 形式的富文本，结构同 `ForumRichText`。
+    """
+
+    TEXT = 1
+    HTML = 2
+    MARKDOWN = 3
+    JSON = 4
+
+
+class ForumPublishTask(Model):
+    """发帖任务：帖子要审核，结果由 `FORUM_PUBLISH_AUDIT_RESULT` 事件推送。
+
+    Attributes:
+        task_id: 任务 ID。
+        create_time: 发帖时间，Unix 秒的字符串。
+    """
+
+    task_id: str
+    create_time: str | None = None

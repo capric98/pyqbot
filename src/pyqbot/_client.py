@@ -6,6 +6,7 @@ from typing import Self
 import httpx2
 
 from ._api.channels import Channels
+from ._api.dms import DirectMessages
 from ._api.groups import Groups
 from ._api.guilds import Guilds
 from ._api.images import Images
@@ -42,8 +43,10 @@ class Client:
         join_strategies: 入群自动审批策略，如 `client.join_strategies.create(...)`。
         menu: 单聊的自定义菜单，如 `client.menu.set(...)`。
         panels: 指令面板，如 `client.panels.create(...)`。
-        guilds: 频道接口：频道、成员、身份组、禁言等，如 `client.guilds.iter_members(...)`。
-        channels: 子频道接口，如 `client.channels.update(...)`。
+        guilds: 频道接口：频道、成员、身份组、禁言、公告等，如 `client.guilds.iter_members(...)`。
+        channels: 子频道接口：子频道管理、消息、表态、精华、日程、论坛、音频，
+            如 `client.channels.send_message(...)`。
+        dms: 频道私信接口，如 `client.dms.send_message(...)`。
 
     Raises:
         ValueError: 凭证为空、`base_url` 不是完整的 http(s) 地址，或 `timeout` 不是正数。
@@ -89,6 +92,7 @@ class Client:
         self.panels = Panels(self._http)
         self.guilds = Guilds(self._http)
         self.channels = Channels(self._http)
+        self.dms = DirectMessages(self._http)
 
     @property
     def config(self) -> Config:

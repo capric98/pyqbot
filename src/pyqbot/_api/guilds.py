@@ -1,4 +1,4 @@
-"""频道级的管理接口：频道、子频道列表、成员、身份组、禁言、接口权限。分组边界见 `docs/design.md`。"""
+"""频道级的接口：频道、子频道列表、成员、身份组、禁言、接口权限与频道公告。分组边界见 `docs/design.md`。"""
 
 from collections.abc import AsyncIterator, Callable, Iterable
 from datetime import datetime, timedelta
@@ -18,6 +18,7 @@ from .._models.guild import (
     PrivateType,
     SpeakPermission,
 )
+from .._models.guild_content import Announcement, AnnouncementType, RecommendChannel
 from .._models.guild_manage import (
     APIPermission,
     APIPermissionDemand,
@@ -34,11 +35,90 @@ from .._models.guild_manage import (
     RoleMemberPage,
     RoleResponse,
 )
+from .._models.guild_message import GuildMessage
+from .guild_message import message_id_of, message_path
 from .paging import Page, paginate
 from .params import str_list, unix_seconds
 
 # 解除禁言：文档说两个字段任一传 "0" 即可，都传上，免得平台只认其中一个。
 _UNMUTE = {"mute_end_timestamp": "0", "mute_seconds": "0"}
+_ALL_ANNOUNCEMENTS = "all"  # 删除频道公告时不校验 message_id，推荐子频道类型的公告只能这样删
+
+
+def _list_items(response: DecodedResponse[object], key: str) -> object:
+    """列表接口的表格是 `{key: [...]}`、示例是裸数组（docs/errata.md），取出其中的条目。
+
+    `key` 的值类型不对时原样返回，由解码按字段级的宽容规则退回空列表。
+
+    Raises:
+        APIError: 响应既不是数组也不是对象。
+    """
+    data = response.data
+    if isinstance(data, list):
+        return cast(list[object], data)
+    if isinstance(data, dict):
+        return cast(dict[str, object], data).get(key, ())
+    raise response.failure(f"响应无法识别（HTTP {response.status_code}）")
+
+
+def _anchor[T](
+    response: DecodedResponse[object], items: object, type_: type[T], get_id: Callable[[T], str]
+) -> str | None:
+    """下一页的锚点：本页最后一条的 ID；本页为空时为 `None`（结束）。
+
+    最后一条解不出 ID 时抛 `APIError`：退回前一条会重复取，当作结束则漏掉后面的条目。
+    """
+    if not isinstance(items, list) or not items:
+        return None
+    last = cast(list[object], items)[-1]
+    try:
+        return get_id(decode(msgspec.json.encode(last), type_))
+    except msgspec.DecodeError:
+        raise response.failure("本页最后一条没有 ID，无法继续翻页") from None
+
+
+def _present(**fields: object) -> dict[str, object]:
+    """去掉值为 `None` 的字段：没传的可选参数不发出去。"""
+    return {name: value for name, value in fields.items() if value is not None}
+
+
+def _role_body(name: str | None, color: int | None, hoist: bool | None) -> dict[str, object]:
+    body = _present(name=name, color=color, hoist=None if hoist is None else int(hoist))
+    if not body:
+        raise ValueError("name、color、hoist 至少要传一个")
+    return body
+
+
+def _channel_body(channel_id: str | None) -> dict[str, object] | None:
+    return None if channel_id is None else {"channel": {"id": channel_id}}
+
+
+def _user_id(member: GuildMember) -> str | None:
+    return member.user.id if member.user else None
+
+
+def _guild_path(guild_id: str) -> str:
+    return f"/guilds/{path_segment(guild_id, 'guild_id')}"
+
+
+def _member_path(guild_id: str, user_id: str) -> str:
+    return f"{_guild_path(guild_id)}/members/{path_segment(user_id, 'user_id')}"
+
+
+def _role_path(guild_id: str, role_id: str) -> str:
+    return f"{_guild_path(guild_id)}/roles/{path_segment(role_id, 'role_id')}"
+
+
+def _member_role_path(guild_id: str, user_id: str, role_id: str) -> str:
+    return f"{_member_path(guild_id, user_id)}/roles/{path_segment(role_id, 'role_id')}"
+
+
+def _mute_path(guild_id: str) -> str:
+    return f"{_guild_path(guild_id)}/mute"
+
+
+def _announces_path(guild_id: str) -> str:
+    return f"{_guild_path(guild_id)}/announces"
 
 
 class Guilds:
@@ -624,74 +704,83 @@ class Guilds:
         path = f"{_guild_path(guild_id)}/message/setting"
         return await self._http.request("GET", path, type_=MessageSetting)
 
+    # ---- 频道公告 ----
 
-def _list_items(response: DecodedResponse[object], key: str) -> object:
-    """列表接口的表格是 `{key: [...]}`、示例是裸数组（docs/errata.md），取出其中的条目。
+    async def announce_message(
+        self, guild_id: str, channel_id: str, message: str | GuildMessage
+    ) -> Announcement:
+        """把一条消息设为频道的成员公告，顶替已有的公告（含推荐子频道）。
 
-    `key` 的值类型不对时原样返回，由解码按字段级的宽容规则退回空列表。
+        对应官方接口 `POST /guilds/{guild_id}/announces`。
 
-    Raises:
-        APIError: 响应既不是数组也不是对象。
-    """
-    data = response.data
-    if isinstance(data, list):
-        return cast(list[object], data)
-    if isinstance(data, dict):
-        return cast(dict[str, object], data).get(key, ())
-    raise response.failure(f"响应无法识别（HTTP {response.status_code}）")
+        Args:
+            guild_id: 频道 ID。
+            channel_id: 消息所在的子频道 ID。
+            message: 消息或它的 ID。
 
+        Raises:
+            APIError: 平台拒绝。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: `guild_id` 或消息 ID 为空。
+            RuntimeError: 客户端已关闭。
+        """
+        message_id = message_id_of(message)
+        if not message_id:
+            # 空的 message_id 会被当成推荐子频道类型的公告。
+            raise ValueError("消息 ID 不能为空")
+        body = {"channel_id": channel_id, "message_id": message_id}
+        return await self._http.request(
+            "POST", _announces_path(guild_id), type_=Announcement, json=body
+        )
 
-def _anchor[T](
-    response: DecodedResponse[object], items: object, type_: type[T], get_id: Callable[[T], str]
-) -> str | None:
-    """下一页的锚点：本页最后一条的 ID；本页为空时为 `None`（结束）。
+    async def announce_channels(
+        self,
+        guild_id: str,
+        channels: Iterable[RecommendChannel],
+        *,
+        announces_type: AnnouncementType = AnnouncementType.MEMBER,
+    ) -> Announcement:
+        """把频道公告设为一组推荐子频道（最多 3 个），整组替换，并顶替已有的消息公告。
 
-    最后一条解不出 ID 时抛 `APIError`：退回前一条会重复取，当作结束则漏掉后面的条目。
-    """
-    if not isinstance(items, list) or not items:
-        return None
-    last = cast(list[object], items)[-1]
-    try:
-        return get_id(decode(msgspec.json.encode(last), type_))
-    except msgspec.DecodeError:
-        raise response.failure("本页最后一条没有 ID，无法继续翻页") from None
+        对应官方接口 `POST /guilds/{guild_id}/announces`。
 
+        Args:
+            guild_id: 频道 ID。
+            channels: 推荐的子频道，须对全体成员可见。
+            announces_type: 公告类别。
 
-def _present(**fields: object) -> dict[str, object]:
-    """去掉值为 `None` 的字段：没传的可选参数不发出去。"""
-    return {name: value for name, value in fields.items() if value is not None}
+        Raises:
+            APIError: 平台拒绝。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: `guild_id` 为空。
+            RuntimeError: 客户端已关闭。
 
+        Example:
+            ```python
+            await client.guilds.announce_channels(
+                guild_id, [pyqbot.RecommendChannel(channel_id="123", introduce="新人必看")]
+            )
+            ```
+        """
+        body = {"announces_type": announces_type, "recommend_channels": tuple(channels)}
+        return await self._http.request(
+            "POST", _announces_path(guild_id), type_=Announcement, json=body
+        )
 
-def _role_body(name: str | None, color: int | None, hoist: bool | None) -> dict[str, object]:
-    body = _present(name=name, color=color, hoist=None if hoist is None else int(hoist))
-    if not body:
-        raise ValueError("name、color、hoist 至少要传一个")
-    return body
+    async def delete_announcement(
+        self, guild_id: str, *, message: str | GuildMessage | None = None
+    ) -> None:
+        """删除频道公告：传 `message` 时只在它是当前公告时删除，不传则删除当前的公告（含推荐子频道）。
 
+        对应官方接口 `DELETE /guilds/{guild_id}/announces/{message_id}`。
 
-def _channel_body(channel_id: str | None) -> dict[str, object] | None:
-    return None if channel_id is None else {"channel": {"id": channel_id}}
-
-
-def _user_id(member: GuildMember) -> str | None:
-    return member.user.id if member.user else None
-
-
-def _guild_path(guild_id: str) -> str:
-    return f"/guilds/{path_segment(guild_id, 'guild_id')}"
-
-
-def _member_path(guild_id: str, user_id: str) -> str:
-    return f"{_guild_path(guild_id)}/members/{path_segment(user_id, 'user_id')}"
-
-
-def _role_path(guild_id: str, role_id: str) -> str:
-    return f"{_guild_path(guild_id)}/roles/{path_segment(role_id, 'role_id')}"
-
-
-def _member_role_path(guild_id: str, user_id: str, role_id: str) -> str:
-    return f"{_member_path(guild_id, user_id)}/roles/{path_segment(role_id, 'role_id')}"
-
-
-def _mute_path(guild_id: str) -> str:
-    return f"{_guild_path(guild_id)}/mute"
+        Raises:
+            APIError: 平台拒绝，例如 `message` 不是当前的公告。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: `guild_id` 为空，或 `message` 的 ID 为空。
+            RuntimeError: 客户端已关闭。
+        """
+        target = _ALL_ANNOUNCEMENTS if message is None else message
+        await self._http.request(
+            "DELETE", message_path(_announces_path(guild_id), target), type_=None
+        )

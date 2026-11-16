@@ -73,6 +73,8 @@ class Platform:
             return httpx2.Response(200, json={"access_token": "t", "expires_in": "7200"})
         body = json.loads(request.content) if request.content else None
         self.requests.append((request.method, request.url.raw_path.decode(), body))
+        if request.method == "POST" and request.url.path.startswith("/channels/"):
+            return httpx2.Response(200, json={"id": "sent", "channel_id": "c", "guild_id": "g"})
         if request.method == "POST":
             return httpx2.Response(200, json={"id": "ROBOT1.0_sent"})
         return self.response
@@ -329,16 +331,52 @@ async def test_reply_goes_to_the_user_or_the_group_with_the_event_id() -> None:
     ]
 
 
-async def test_guild_interaction_reply_is_not_supported_yet() -> None:
+async def test_guild_interaction_reply_goes_to_its_channel_without_msg_seq() -> None:
     platform = Platform()
-    guild = interaction({"id": "i", "chat_type": 0, "guild_id": "g", "channel_id": "c"})
-    by_scene = interaction({"id": "i", "scene": "guild"})
+    guild = interaction({"id": "i", "chat_type": 0, "guild_id": "g", "channel_id": "c"}, "E1")
+    by_scene = interaction({"id": "i", "scene": "guild", "channel_id": "c"}, "E2")
 
     async with client_for(platform) as client:
-        for event in (guild, by_scene):
-            bind_client(event, client)
-            with pytest.raises(NotImplementedError, match="频道"):
-                await event.reply("收到")
+        bind_client(guild, client)
+        bind_client(by_scene, client)
+        sent = await guild.reply("收到", quote="m")
+        await by_scene.reply(markdown="**好**", keyboard=pyqbot.Keyboard(id="k"))
+
+    assert isinstance(sent, pyqbot.GuildMessage)
+    assert sent.channel_id == "c"
+    assert platform.requests == [
+        (
+            "POST",
+            "/channels/c/messages",
+            {"content": "收到", "message_reference": {"message_id": "m"}, "event_id": "E1"},
+        ),
+        (
+            "POST",
+            "/channels/c/messages",
+            {"markdown": {"content": "**好**"}, "keyboard": {"id": "k"}, "event_id": "E2"},
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {"media": pyqbot.Media(file_info="f")},
+        {"card": pyqbot.Card(title="t", description="d", url="https://a", pic_url="https://b")},
+        {"quote": pyqbot.SentMessage(id="s")},
+    ],
+    ids=["media", "card", "sent-message-quote"],
+)
+async def test_guild_interaction_reply_rejects_what_channels_cannot_send(
+    arguments: dict[str, object],
+) -> None:
+    platform = Platform()
+    event = interaction({"id": "i", "chat_type": 0, "channel_id": "c"})
+
+    async with client_for(platform) as client:
+        bind_client(event, client)
+        with pytest.raises(ValueError, match="频道消息不支持"):
+            await event.reply("x", **arguments)  # pyright: ignore[reportArgumentType]
 
     assert platform.requests == []
 
@@ -351,8 +389,16 @@ async def test_guild_interaction_reply_is_not_supported_yet() -> None:
         {"id": "i", "chat_type": 9, "user_openid": "u"},
         {"id": "i", "chat_type": 2, "group_openid": "g"},
         {"id": "i", "chat_type": 1, "user_openid": "u"},
+        {"id": "i", "chat_type": 0, "guild_id": "g"},
     ],
-    ids=["no-scene", "unknown-scene", "unknown-chat-type", "c2c-no-user", "group-no-group"],
+    ids=[
+        "no-scene",
+        "unknown-scene",
+        "unknown-chat-type",
+        "c2c-no-user",
+        "group-no-group",
+        "guild-no-channel",
+    ],
 )
 async def test_reply_without_a_usable_scene_raises_before_sending(data: object) -> None:
     platform = Platform()

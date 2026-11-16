@@ -11,11 +11,16 @@ import msgspec
 
 from ._config import Config
 from ._credentials import TRACE_ID_HEADER, find_error_code
-from ._errors import APIError, NetworkError, PartialFailureError
+from ._errors import APIError, AuditPendingError, NetworkError, PartialFailureError
 from ._model import Model, decode
 from ._redact import redact, redact_optional, safe_cause
 
 type QueryParams = Mapping[str, str | int]
+type FormFields = Mapping[str, str]
+type FormFiles = Mapping[str, tuple[str, bytes]]  # 字段名 → （文件名, 内容）
+
+# 「已受理、等待人工审核」（`dev-prepare/api-call-guide.md` 的公共错误码），见 docs/design.md。
+_AUDIT_PENDING_CODES = frozenset({304023, 304024})
 
 
 class HTTP:
@@ -46,6 +51,8 @@ class HTTP:
         type_: type[T],
         params: QueryParams | None = None,
         json: object = None,
+        data: FormFields | None = None,
+        files: FormFiles | None = None,
     ) -> T: ...
 
     @overload
@@ -57,6 +64,8 @@ class HTTP:
         type_: None,
         params: QueryParams | None = None,
         json: object = None,
+        data: FormFields | None = None,
+        files: FormFiles | None = None,
     ) -> None: ...
 
     async def request[T](
@@ -67,9 +76,14 @@ class HTTP:
         type_: type[T] | None,
         params: QueryParams | None = None,
         json: object = None,
+        data: FormFields | None = None,
+        files: FormFiles | None = None,
     ) -> T | None:
-        """发请求并把响应体解码成 `type_`（`None` 则不解码）；`path` 里的路径参数先经 `path_segment()`。"""
-        response, secrets = await self._send(method, path, params, json)
+        """发请求并把响应体解码成 `type_`（`None` 则不解码）；`path` 里的路径参数先经 `path_segment()`。
+
+        请求体是 `json`（经 msgspec 编码），或 `data` 与 `files` 组成的 `multipart/form-data`，不能同时给。
+        """
+        response, secrets = await self._send(method, path, params, json, data, files)
         action = f"{method} {path}"
         trace_id = _check_response(response, action, secrets)
         if type_ is None:
@@ -84,17 +98,27 @@ class HTTP:
         type_: type[T],
         params: QueryParams | None = None,
         json: object = None,
+        data: FormFields | None = None,
+        files: FormFiles | None = None,
     ) -> DecodedResponse[T]:
         """同 `request()`，另带上状态码与 trace_id，供接口方法从成功的响应里构造异常（如部分失败）。"""
-        response, secrets = await self._send(method, path, params, json)
+        response, secrets = await self._send(method, path, params, json, data, files)
         action = f"{method} {path}"
         trace_id = _check_response(response, action, secrets)
-        data = _decode_response(response, type_, action, secrets, trace_id)
-        return DecodedResponse(data, response.status_code, trace_id, action, secrets)
+        decoded = _decode_response(response, type_, action, secrets, trace_id)
+        return DecodedResponse(decoded, response.status_code, trace_id, action, secrets)
 
     async def _send(
-        self, method: str, path: str, params: QueryParams | None, json: object
+        self,
+        method: str,
+        path: str,
+        params: QueryParams | None,
+        json: object,
+        data: FormFields | None,
+        files: FormFiles | None,
     ) -> tuple[httpx2.Response, tuple[str | None, ...]]:
+        if json is not None and (data or files):
+            raise ValueError("json 与 data / files 只能传一种请求体")
         config = self._config
         token = await self._get_token()
         secrets = (*self._known_secrets(), token)
@@ -103,6 +127,12 @@ class HTTP:
         if json is not None:
             content = msgspec.json.encode(json)
             headers["Content-Type"] = "application/json"
+        elif data or files:  # 空表单当作没有请求体：httpx2 不会为它生成 Content-Type
+            # 先编码再显式设置 Content-Type（含 boundary）：httpx2 对内容头只 setdefault，
+            # 注入的客户端若带默认的 Content-Type，正文是 multipart、头却不是。
+            encoded = httpx2.Request(method, config.base_url + path, data=data, files=files)
+            content = encoded.read()
+            headers["Content-Type"] = encoded.headers["Content-Type"]
         try:
             response = await self._http_client.request(
                 method,
@@ -192,6 +222,14 @@ def _network_error(
     return NetworkError(f"{action} 失败：{reason}")
 
 
+class _MessageAudit(Model):
+    audit_id: str | None = None
+
+
+class _ErrorData(Model):
+    message_audit: _MessageAudit | None = None
+
+
 class _ErrorBody(Model):
     # 通用失败结构用 err_code；code 是获取 token 接口的写法，两个都认（docs/errata.md）。
     # 类型写成 object：写成 int | str 的话，类型不符的错误码会被宽容解码丢掉，失败就成了成功。
@@ -199,6 +237,28 @@ class _ErrorBody(Model):
     err_code: object = None
     message: str | None = None
     trace_id: str | None = None
+    data: _ErrorData | None = None
+
+
+def _raise_if_audit_pending(
+    response: httpx2.Response,
+    body: _ErrorBody,
+    err_code: int | None,
+    trace_id: str | None,
+    action: str,
+    secrets: tuple[str | None, ...],
+) -> None:
+    """2xx 且错误码是「已受理、等待人工审核」时抛 `AuditPendingError`，在判定失败之前调用。"""
+    if not response.is_success or err_code not in _AUDIT_PENDING_CODES:
+        return
+    audit = body.data.message_audit if body.data is not None else None
+    raise AuditPendingError(
+        f"{action} 已受理，等待审核：{redact(body.message or str(err_code), *secrets)}",
+        status_code=response.status_code,
+        err_code=err_code,
+        trace_id=redact_optional(trace_id, *secrets),
+        audit_id=redact_optional(audit and audit.audit_id, *secrets),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -262,6 +322,7 @@ def _check_response(
         trace_id = trace_id or body.trace_id
         # 201、202 也是 2xx，但文档说它们带失败结构，靠错误码识别。
         failed, err_code = find_error_code(body.err_code, body.code)
+        _raise_if_audit_pending(response, body, err_code, trace_id, action, secrets)
         if failed or not response.is_success:
             reason = body.message or f"HTTP {status_code}"
             raise _api_error(action, status_code, trace_id, secrets, reason, err_code)

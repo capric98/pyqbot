@@ -74,6 +74,29 @@ class PartialFailureError(APIError):
         return self._failed_ids
 
 
+class AuditPendingError(APIError):
+    """消息已被平台受理，但要等人工审核后才会发出，所以这次调用拿不到发出的消息。
+
+    频道的主动消息、被动回复都可能这样（`err_code` 为 304023、304024，HTTP 状态码多为 202）。
+    审核结果由 `MESSAGE_AUDIT_PASS` / `MESSAGE_AUDIT_REJECT` 事件推送，用 `audit_id` 对应。
+
+    Attributes:
+        audit_id: 审核 ID；平台没有给出时为 `None`。
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int,
+        err_code: int | None = None,
+        trace_id: str | None = None,
+        audit_id: str | None = None,
+    ) -> None:
+        super().__init__(message, status_code=status_code, err_code=err_code, trace_id=trace_id)
+        self.audit_id = audit_id
+
+
 class NetworkError(QQBotError):
     """没有拿到平台的响应：连接失败、超时、连接中途断开等。
 

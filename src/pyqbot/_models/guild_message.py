@@ -2,9 +2,10 @@
 
 官方文档：`server-inter/message/template/model.md`（Message、MessageDelete、MessageAudited）、
 `server-inter/channel/message/event.md`、`server-inter/message/trans/emoji.md`、`openapi/reaction/model.md`、
-`openapi/emoji/model.md`。
+`openapi/emoji/model.md`、`server-inter/channel/message/dms.md`。
 """
 
+import os
 from datetime import datetime
 
 import msgspec
@@ -14,6 +15,7 @@ from .._model import Model, OpenIntEnum
 from .event import ChannelReplyTarget, DirectMessageReplyTarget, Event, ReceivedMessage
 from .guild import GuildMember, GuildUser
 from .message import MessageAttachment
+from .send import Ark, Embed, Keyboard, Markdown
 
 
 class MessageEmbedThumbnail(Model):
@@ -124,6 +126,46 @@ class ChannelAnyMessage(GuildMessage, ChannelReplyTarget):
     event_name = "MESSAGE_CREATE"
     intent = Intents.GUILD_MESSAGES
 
+    async def reply(
+        self,
+        content: str | None = None,
+        *,
+        markdown: str | Markdown | None = None,
+        keyboard: Keyboard | None = None,
+        embed: Embed | None = None,
+        ark: Ark | None = None,
+        image: str | None = None,
+        image_path: str | os.PathLike[str] | None = None,
+        image_data: bytes | None = None,
+        quote: str | GuildMessage | None = None,
+    ) -> GuildMessage:
+        """被动回复这条消息，发到它所在的子频道，`msg_id` 由 SDK 填写；参数同 `client.channels.send_message()`。
+
+        对应官方接口 `POST /channels/{channel_id}/messages`。
+
+        Raises:
+            AuditPendingError: 消息要等人工审核，审核结果由事件推送。
+            APIError: 平台拒绝发送，例如回复已过期。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: 内容参数的组合不合法。
+            OSError: 读取 `image_path` 失败。
+            RuntimeError: 消息不是 `Bot` 分发来的（没有绑定客户端），或客户端已关闭。
+        """
+        client = self._bound_client()
+        return await client.channels.send_message(
+            self.channel_id,
+            content,
+            markdown=markdown,
+            keyboard=keyboard,
+            embed=embed,
+            ark=ark,
+            image=image,
+            image_path=image_path,
+            image_data=image_data,
+            quote=quote,
+            reply_to=self,
+        )
+
 
 class ChannelMessage(ChannelAnyMessage):
     """子频道里 @机器人 或回复机器人的消息，对应事件 `AT_MESSAGE_CREATE`。字段同 `GuildMessage`。
@@ -150,6 +192,46 @@ class DirectMessage(GuildMessage, DirectMessageReplyTarget):
 
     event_name = "DIRECT_MESSAGE_CREATE"
     intent = Intents.DIRECT_MESSAGE
+
+    async def reply(
+        self,
+        content: str | None = None,
+        *,
+        markdown: str | Markdown | None = None,
+        keyboard: Keyboard | None = None,
+        embed: Embed | None = None,
+        ark: Ark | None = None,
+        image: str | None = None,
+        image_path: str | os.PathLike[str] | None = None,
+        image_data: bytes | None = None,
+        quote: str | GuildMessage | None = None,
+    ) -> GuildMessage:
+        """被动回复这条私信，`msg_id` 由 SDK 填写；参数同 `client.dms.send_message()`。
+
+        对应官方接口 `POST /dms/{guild_id}/messages`。
+
+        Raises:
+            AuditPendingError: 消息要等人工审核，审核结果由事件推送。
+            APIError: 平台拒绝发送，例如回复已过期。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: 内容参数的组合不合法。
+            OSError: 读取 `image_path` 失败。
+            RuntimeError: 消息不是 `Bot` 分发来的（没有绑定客户端），或客户端已关闭。
+        """
+        client = self._bound_client()
+        return await client.dms.send_message(
+            self.guild_id,
+            content,
+            markdown=markdown,
+            keyboard=keyboard,
+            embed=embed,
+            ark=ark,
+            image=image,
+            image_path=image_path,
+            image_data=image_data,
+            quote=quote,
+            reply_to=self,
+        )
 
 
 # ---- 消息删除 ----
@@ -280,6 +362,46 @@ class _MessageReactionEvent(ChannelReplyTarget):
     target: ReactionTarget
     emoji: Emoji
 
+    async def reply(
+        self,
+        content: str | None = None,
+        *,
+        markdown: str | Markdown | None = None,
+        keyboard: Keyboard | None = None,
+        embed: Embed | None = None,
+        ark: Ark | None = None,
+        image: str | None = None,
+        image_path: str | os.PathLike[str] | None = None,
+        image_data: bytes | None = None,
+        quote: str | GuildMessage | None = None,
+    ) -> GuildMessage:
+        """用事件 ID 被动回复，发到表态所在的子频道，`event_id` 由 SDK 填写；参数同 `client.channels.send_message()`。
+
+        对应官方接口 `POST /channels/{channel_id}/messages`。
+
+        Raises:
+            AuditPendingError: 消息要等人工审核，审核结果由事件推送。
+            APIError: 平台拒绝发送，例如回复已过期。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: 内容参数的组合不合法；事件没有事件 ID。
+            OSError: 读取 `image_path` 失败。
+            RuntimeError: 事件不是 `Bot` 分发来的（没有绑定客户端），或客户端已关闭。
+        """
+        client = self._bound_client()
+        return await client.channels.send_message(
+            self.channel_id,
+            content,
+            markdown=markdown,
+            keyboard=keyboard,
+            embed=embed,
+            ark=ark,
+            image=image,
+            image_path=image_path,
+            image_data=image_data,
+            quote=quote,
+            reply_to=self,
+        )
+
 
 class MessageReactionAdd(_MessageReactionEvent):
     """用户对频道里的消息等添加了表情表态，对应事件 `MESSAGE_REACTION_ADD`。可以用事件 ID 被动回复到子频道。
@@ -301,3 +423,28 @@ class MessageReactionRemove(_MessageReactionEvent):
 
     event_name = "MESSAGE_REACTION_REMOVE"
     intent = Intents.GUILD_MESSAGE_REACTIONS
+
+
+# ---- 接口的响应 ----
+
+
+class ReactionUserPage(Model):
+    """表态用户列表的一页（`GET /channels/{channel_id}/messages/{message_id}/reactions/{type}/{id}`）。"""
+
+    users: tuple[GuildUser, ...] = ()
+    cookie: str | None = None
+    is_end: bool = False
+
+
+class DirectMessageSession(Model):
+    """私信会话，由 `client.dms.create_session()` 返回。
+
+    Attributes:
+        guild_id: 私信会话的 ID，发私信、撤回私信都用它；不是用户所在频道的 ID。
+        channel_id: 私信会话关联的子频道 ID。
+        create_time: 创建时间，Unix 秒的字符串。
+    """
+
+    guild_id: str
+    channel_id: str | None = None
+    create_time: str | None = None

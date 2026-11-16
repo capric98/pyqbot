@@ -1,7 +1,7 @@
-"""发消息时由调用方构造的内容：Markdown、键盘、图文卡片与富媒体。
+"""发消息时由调用方构造的内容：Markdown、键盘、图文卡片与富媒体，以及频道的 Embed 与 Ark。
 
-字段与 `autogen/api/v2_users_user_openid_messages.post.md` 的请求体一一对应（群聊相同）；
-各页之间的出入见 `docs/errata.md`。
+字段与 `autogen/api/v2_users_user_openid_messages.post.md` 的请求体一一对应（群聊相同），
+Embed 与 Ark 见 `server-inter/message/template/model.md`；各页之间的出入见 `docs/errata.md`。
 """
 
 from collections.abc import Iterable, Mapping
@@ -406,3 +406,124 @@ class Media(Model):
     ttl: int | None = None
     id: str | None = None
     raw_url: str | None = None
+
+
+# ---- 频道消息的内容（`server-inter/channel/message/send.md`）----
+
+
+class EmbedThumbnail(RequestModel):
+    """Embed 的缩略图。"""
+
+    url: str
+
+
+class EmbedField(RequestModel):
+    """Embed 的一行文字。"""
+
+    name: str
+
+
+class Embed(RequestModel):
+    """Embed 消息，只能发到子频道与频道私信；一般用 `Embed.from_lines()` 构造。
+
+    Attributes:
+        title: 标题。
+        prompt: 消息弹窗（通知栏）里显示的内容。
+        thumbnail: 缩略图。
+        fields: 正文，每项一行。
+
+    Example:
+        ```python
+        embed = pyqbot.Embed.from_lines("标题", "当前等级：黄金", "之前等级：白银", prompt="消息通知")
+        await client.channels.send_message(channel_id, embed=embed)
+        ```
+    """
+
+    title: str
+    prompt: str | None = None
+    thumbnail: EmbedThumbnail | None = None
+    fields: tuple[EmbedField, ...] = ()
+
+    @classmethod
+    def from_lines(
+        cls,
+        title: str,
+        *lines: str,
+        prompt: str | None = None,
+        thumbnail_url: str | None = None,
+    ) -> Embed:
+        """用标题与若干行文字构造。"""
+        thumbnail = None if thumbnail_url is None else EmbedThumbnail(url=thumbnail_url)
+        fields = tuple(EmbedField(name=line) for line in lines)
+        return cls(title=title, prompt=prompt, thumbnail=thumbnail, fields=fields)
+
+
+class ArkObjKv(RequestModel):
+    """Ark 数组变量里一个元素的一项。"""
+
+    key: str
+    value: str
+
+
+class ArkObj(RequestModel):
+    """Ark 数组变量的一个元素。"""
+
+    obj_kv: tuple[ArkObjKv, ...] = ()
+
+
+class ArkKv(RequestModel):
+    """Ark 模板的一个变量：字符串变量填 `value`，数组变量填 `obj`。"""
+
+    key: str
+    value: str | None = None
+    obj: tuple[ArkObj, ...] = ()
+
+
+class Ark(RequestModel):
+    """Ark（结构化卡片）消息，需要向平台申请权限；一般用 `Ark.from_template()` 构造。
+
+    模板与各自的变量见官方文档 `server-inter/message/type/ark.md`。
+
+    Attributes:
+        template_id: 模板 ID，如 23、24、37。
+        kv: 模板变量。
+    """
+
+    template_id: int
+    kv: tuple[ArkKv, ...] = ()
+
+    @classmethod
+    def from_template(
+        cls,
+        template_id: int,
+        kv: Mapping[str, str | Iterable[Mapping[str, str]]],
+    ) -> Ark:
+        """用模板 ID 与变量构造：字符串是普通变量，字典序列是数组变量（每个字典是一个元素）。
+
+        Example:
+            ```python
+            ark = pyqbot.Ark.from_template(
+                23,
+                {
+                    "#DESC#": "描述",
+                    "#PROMPT#": "提示",
+                    "#LIST#": [{"desc": "已评审", "link": "https://qun.qq.com"}, {"desc": "请关注"}],
+                },
+            )
+            ```
+        """
+        return cls(
+            template_id=template_id,
+            kv=tuple(
+                ArkKv(key=key, value=value)
+                if isinstance(value, str)
+                else ArkKv(
+                    key=key,
+                    obj=tuple(
+                        ArkObj(obj_kv=tuple(ArkObjKv(key=k, value=v) for k, v in item.items()))
+                        for item in value
+                    ),
+                )
+                for key, value in kv.items()
+            ),
+        )

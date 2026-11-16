@@ -3,14 +3,17 @@
 from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+_MILLISECOND = timedelta(milliseconds=1)
+
 
 def utc_now() -> datetime:
     """当前时刻（UTC）；测试里替换它来固定时钟。"""
     return datetime.now(UTC)
 
 
-def deadline(value: datetime | timedelta, name: str) -> datetime:
-    """把时刻或从现在起算的时长换成 UTC 时刻，不足一秒的部分向上取整。
+def _moment(value: datetime | timedelta, name: str) -> datetime:
+    """把时刻或从现在起算的时长换成 UTC 时刻，不取整。
 
     Raises:
         ValueError: `datetime` 没有时区，或 `timedelta` 不是正数。
@@ -23,7 +26,16 @@ def deadline(value: datetime | timedelta, name: str) -> datetime:
         # 没有时区的时刻没法知道调用方指的是哪个时区，平台会按自己的理解解读。
         raise ValueError(f"{name} 必须带时区，例如 datetime.now(UTC) + timedelta(hours=1)")
     # 转成 UTC：带秒级偏移的时区（如 +00:00:30）直接输出不是合法的 RFC3339。
-    value = value.astimezone(UTC)
+    return value.astimezone(UTC)
+
+
+def deadline(value: datetime | timedelta, name: str) -> datetime:
+    """把时刻或从现在起算的时长换成 UTC 时刻，不足一秒的部分向上取整。
+
+    Raises:
+        ValueError: `datetime` 没有时区，或 `timedelta` 不是正数。
+    """
+    value = _moment(value, name)
     if value.microsecond:
         # 截止时刻晚不到一秒无害，截掉小数则可能早于现在。
         value = value.replace(microsecond=0) + timedelta(seconds=1)
@@ -38,6 +50,11 @@ def rfc3339(value: datetime | timedelta, name: str) -> str:
 def unix_seconds(value: datetime | timedelta, name: str) -> str:
     """编码成 Unix 秒的十进制字符串，规则同 `deadline()`。"""
     return str(int(deadline(value, name).timestamp()))
+
+
+def unix_millis(value: datetime | timedelta, name: str) -> str:
+    """编码成 Unix 毫秒的十进制字符串；校验同 `deadline()`，不足一毫秒的部分向上取整。"""
+    return str(-((_EPOCH - _moment(value, name)) // _MILLISECOND))
 
 
 def str_list(value: str | Iterable[str]) -> list[str]:
