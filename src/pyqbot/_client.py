@@ -6,6 +6,7 @@ from typing import Self
 import httpx2
 
 from ._api.groups import Groups
+from ._api.images import Images
 from ._api.interactions import Interactions
 from ._api.users import Users
 from ._config import DEFAULT_BASE_URL, DEFAULT_TIMEOUT, Config
@@ -30,6 +31,7 @@ class Client:
     Attributes:
         users: 单聊接口，如 `client.users.send_message(...)`。
         groups: 群聊接口，如 `client.groups.send_message(...)`。
+        images: 素材库（Markdown 里引用的图片），如 `client.images.upload(path=...)`。
         interactions: 互动事件接口，如 `client.interactions.ack(...)`。
 
     Raises:
@@ -69,6 +71,7 @@ class Client:
         )
         self.users = Users(self._http)
         self.groups = Groups(self._http)
+        self.images = Images(self._http)
         self.interactions = Interactions(self._http)
 
     @property
