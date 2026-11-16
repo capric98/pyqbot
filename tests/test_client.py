@@ -73,5 +73,5 @@ async def test_closed_client_cannot_be_entered_again() -> None:
     client = pyqbot.Client("app-id", "app-secret")
     await client.close()
 
-    with pytest.raises(RuntimeError, match="客户端已关闭"):
+    with pytest.raises(RuntimeError, match="Client 已关闭"):
         await client.__aenter__()
