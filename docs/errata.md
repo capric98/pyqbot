@@ -15,7 +15,8 @@
 - **位置**：`autogen/api/v2_users_user_openid_messages.post.md` 的页首说明与请求体 `msg_id` 一行；`server-inter/message/overview.md`「被动消息」表格。
 - **矛盾**：接口页的 `msg_id` 写「5 分钟内有效」，同一页的页首和 `overview.md` 的表格都写单聊 60 分钟。群聊三处都是 5 分钟，没有矛盾。
 - **当前做法**：SDK 不在本地判断是否过期，照常发送，由平台拒绝（如 `40034005`、`304103`）后抛 `APIError`。
-- **怎么测**：收到单聊消息后分别隔约 10 分钟、约 55 分钟被动回复，看是否成功。
+- **已知**：隔约 10 分钟被动回复成功（2026-11-16，`test_c2c_reply_after_10_and_55_minutes`），所以不是 5 分钟。
+- **怎么测**：同一用例隔约 55 分钟的那次。
 
 ### HTTP 201、202：「成功」但带失败结构
 
@@ -41,13 +42,6 @@
 - **已知**：客户端以 1000 正常关闭后重连并 Resume 可以恢复会话（已确认，见下）。
 - **当前做法**：其它 4000~4999 按「其他错误，请重新发起 identify」Identify；其余尝试 Resume，会话已失效时网关会再以 4006 或 OpCode 9 告知。
 
-### 网关心跳：从什么时候开始
-
-- **位置**：`dev-prepare/event-emit/websocket.md`「发送心跳 Ack」「恢复登录态 Session」。
-- **含糊**：「鉴权成功之后」按周期发心跳，但 Resume 成功的信号 `RESUMED` 要等遗漏事件补发完才到；第一次心跳是立刻发还是隔一个周期也没说。
-- **当前做法**：本连接收到第一条 Dispatch（READY、补发的事件或 RESUMED）就算认证成功，立刻发一次心跳，之后按周期发。
-- **怎么测**：断开后积压几条事件再 Resume，看 `RESUMED` 之前的事件与心跳应答的先后。
-
 ### OpCode 7、OpCode 9：之后该怎么做
 
 - **位置**：`dev-prepare/event-emit/payload.md`「OpCode 含义」。
@@ -61,7 +55,8 @@
 - **含糊**：没说网关是否回应 WebSocket 层的 Ping、单帧最大多大、会不会发二进制帧。
 - **当前做法**：关掉 httpx2 默认每 20 秒一次的 Ping，存活只看 OpCode 1 心跳；单帧上限放宽到 1 MiB（httpx2 默认 64 KiB）；二进制帧记日志后跳过。
 - **已知**：网关会回应 WebSocket 层的 Ping。2026-11-16 实测时用 httpx2 默认的 20 秒 Ping（超时 20 秒）连了约 78 秒，连接没有因为 Ping 超时而断开。
-- **怎么测**：长时间挂着连接，并发送带多张图片的消息，看帧大小与类型。
+- **已知**：一次选多张图发出时，QQ 拆成每张一条消息推送，每帧约 1.2 KB；文字约 0.8 KB；没有见到二进制帧（2026-11-16，`test_resume_replays_backlog`）。
+- **怎么测**：长时间挂着连接，看 WebSocket 层的 Ping 与断线。
 
 ### Intents：尚未确认的两处
 
@@ -90,53 +85,19 @@
 - **已知**：自定义 `content` 可用，标题、粗体、斜体、链接都正常显示（2026-11-16，`test_markdown`）。
 - **不测**：模板没有可用的模板 ID。
 
-### 键盘：示例与字段说明互相矛盾
-
-- **位置**：接口页的 `Keyboard` 等结构；`server-inter/message/trans/msg-btn.md`；`server-inter/message/trans/overview.md` 的示例；群聊发消息页的 Markdown + 键盘示例。
-- **矛盾**：
-  - 接口页说 `id` 与 `content` 互斥，`trans/overview.md` 的示例两个都带。
-  - `action.enter` 说「仅单聊可用」，群聊页的示例却用了。
-  - `render_data.style` 在 `msg-btn.md` 只有 0、1，接口页有 0、1、3、4；`permission.type` 在 `msg-btn.md` 多一个 3（指定身份组，仅频道）。
-  - `msg-btn.md` 把 `visited_label`、`style`、`permission`、`unsupport_tips` 标为必填，接口页都是选填，且说 `visited_label`「不传则保持不变」。
-  - `msg-btn.md` 说按钮挂在 Markdown 消息上，接口页没说 `keyboard` 能否随文本等其它类型发送。
-- **当前做法**：`Keyboard` 的 `id` 与 `content` 二选一，否则抛 `ValueError`；`keyboard` 只能随 `markdown` 发送。`enter` 不按场景拦截。枚举收录 style 0/1/3/4、permission.type 0~3。`Button` 的工厂方法总是填上 `visited_label`（默认同 `label`）、`style`（默认灰色线框）与 `permission`（默认所有人：不填时按整数默认值是 0「指定用户」，可能谁都点不了），`unsupport_tips` 不填。
-- **已知**（2026-11-16，`test_markdown_with_buttons`）：单聊里 Markdown + 键盘发送成功；不填 `unsupport_tips` 被接受；style 1（蓝色线框）与 4（蓝底白字）都按预期显示。
-- **怎么测**：在群里发带 `enter` 的指令按钮，看是否生效。
-
-### 引用：`message_reference.message_id` 的格式
-
-- **位置**：接口页的 `MessageReference`；群聊发消息页的富媒体、卡片示例。
-- **矛盾**：字段说明要 `REFIDX_` 开头的引用索引（自己发的取响应的 `ext_info.ref_idx`，收到的取 `message_scene.ext` 的 `msg_idx`），群聊页的示例填的却是 `ROBOT1.0_` 开头的消息 ID。
-- **当前做法**：`quote=` 传 `SentMessage` 或收到的消息时填引用索引；传字符串则原样填入，所以消息 ID 也能试。
-- **已知**：引用索引可用：用上一条的 `ext_info.ref_idx` 引用，客户端以引用样式显示（2026-11-16，`test_quote_previous_message`）。
-- **怎么测**：用 `SentMessage.id` 作为字符串引用一次，看是否被接受。
-
-### `content` 能否随富媒体、卡片一起发
-
-- **位置**：接口页的 `content` 一行只说「msg_type=0 时为全文」；`server-inter/message/rich-media.md` 的示例只有 `media`。
-- **含糊**：`msg_type` 为 7、8 时带上 `content` 是显示、忽略还是报错，没有说明。
-- **当前做法**：不拦截，`content` 原样发出（`message.reply("图来了", media=media)` 这样的写法可用）。
-- **怎么测**：富媒体上传落地后，发一条带 `content` 的图片消息与一条带 `content` 的卡片，看客户端的展示。
-
-### 正在输入（`msg_type=6`）：是否必须是被动回复
-
-- **位置**：单聊发消息页的 `InputNotify` 与「输入状态通知」示例。
-- **含糊**：示例带 `msg_id` + `msg_seq`，但没说主动发送是否可行、是否占用被动回复次数（单聊每条消息 4 次），响应体也没有给出。
-- **当前做法**：`send_typing()` 的 `reply_to` 可选；传了就像被动回复一样占用 `msg_seq`；响应体不解码。
-- **已知**：可以主动发送（不带 `msg_id`），客户端显示「正在输入」，`seconds=30` 时持续约 30 秒（2026-11-16，`test_typing`）。
-- **怎么测**：收到一条消息后先 `send_typing` 再回复 4 次，看第 4 次回复是否因次数超限失败，并记下响应体。
-
 ### 互动召回 `is_wakeup` 与 `msg_id` / `event_id`
 
 - **位置**：单聊发消息页的 `is_wakeup` 一行；`autogen/api/v2_users_user_openid_stream_messages.post.md` 的 `is_wakeup` 一行。
 - **矛盾**：发消息页说与 `msg_id`、`event_id`「互斥使用」，流式消息页说「true 时不校验 msg_id/event_id 有效期」，即可以同时出现。
 - **当前做法**：按发消息页，`wakeup=True` 与 `reply_to` 同传时在本地抛 `ValueError`。流式消息暂不提供 `is_wakeup`。
-- **不主动实测**：召回消息每个周期只能发一条，测一次就占掉一个周期。
+- **已知**：不带 `msg_id` 的召回消息（`wakeup=True`）被接受，测试用户收到了（2026-11-16，`test_wakeup`）。
+- **不主动实测**：与 `msg_id` / `event_id` 同传的情况；召回消息每个周期只能发一条，测一次就占掉一个周期。
 
 ### 撤回：能撤回哪些消息
 
 - **位置**：`server-inter/message/overview.md`「撤回消息」；`autogen/api/v2_groups_group_openid_messages_message_id.delete.md`。
 - **矛盾**：概述只说「机器人可撤回自己发送的消息」，群聊撤回页说机器人是群管理员时还能撤回普通成员的消息（`d.id`）。两处都说超过 2 分钟不可撤回。
+- **已知**：机器人在群里撤回自己 10 秒前发的消息成功（2026-11-16，`test_group_message_features`）。
 - **当前做法**：`client.groups.recall_message()` 也接受收到的 `GroupMessage`（含 `GroupAtMessage`）；时限不在本地判断，由平台拒绝（40064004）。
 
 ### 入群申请 `GROUP_JOIN_REQUEST` 的字段
@@ -145,13 +106,6 @@
 - **矛盾**：`VerifyInfo` 的字段叫 `method`，`verify_message`、`review_qa_list` 的说明却写「仅 `auth_type=...` 时」；`auto_approved` 的结构名拼成 `AutoAppproved`；申请时间是 RFC3339 字符串 `apply_at`，其它群事件都是整数秒的 `timestamp`。
 - **当前做法**：按字段表与示例：`verify_info.method`（`JoinRequestVerifyMethod`），`auto_approved.strategy_id`，`apply_at` 解成 `datetime`（不是 RFC3339 时退回 `None`，不让整条事件丢掉）。`group_openid`、`join_request_id` 与 `member_openid` 必填：后者是审批接口 `POST /v2/groups/{group_openid}/approval_join_request/{member_openid}` 的路径参数，三个示例都有。
 - **怎么测**：要一个机器人是管理员的测试群，再请人申请加群，会影响其他用户，须单独征得同意；记下 `verify_info` 的键名与 `apply_at` 的格式。
-
-### 回应互动的期限
-
-- **位置**：`server-inter/message/trans/overview.md`「响应互动」；`autogen/api/interactions_interaction_id.put.md`；`autogen/event/interaction_create.md`。
-- **含糊**：只有 `trans/overview.md` 写了「指令回调类场景为 3 秒」，接口页与事件页只说「超时后失效」。
-- **当前做法**：在 `Interaction.ack()` 与 `client.interactions.ack()` 的 docstring 里写 3 秒；SDK 不自动回应，不计时，也不在本地拦截重复回应，超时与重复都由平台拒绝。
-- **怎么测**：点回调按钮后分别隔 1 秒、5 秒回应，看后者是否报错与错误码；对同一互动回应两次，记下错误码。
 
 ### 全量群消息与 @ 消息会不会重复推送
 
@@ -166,29 +120,8 @@
 - **位置**：`server-inter/message/rich-media.md` 的「支持的消息类型」与同页「文件类型与限制」表格；单聊、群聊上传页的 `file_type` 一行。
 - **矛盾**：正文说图片 jpg/png/gif/webp/bmp、语音 silk/mp3/wav/ogg；同页表格与单聊上传页说图片 png/jpg、语音 silk；群聊上传页说语音 silk/mp3/wav。
 - **当前做法**：不传 `file_type` 时按最宽的列表推断（png/jpg/jpeg/gif/webp/bmp 为图片，mp4 为视频，silk/slk/mp3/wav/ogg 为语音），平台不支持时由它拒绝（850019），调用方可改传 `FileType.FILE`。
-- **怎么测**：单聊、群聊分别上传 gif、webp、bmp 图片与 mp3、wav、ogg 语音，看是否成功、展示成什么。
-
-### 富媒体：`file_data` 的编码与 5M 的口径
-
-- **位置**：单聊、群聊上传页的 `file_data` 一行与「直接上传二进制数据」，示例只写了 `"xxxx图片的二进制数据"`。
-- **含糊**：字段是字符串，却没说二进制怎么编码；5M 是编码前还是编码后、按 10^6 还是 2^20 也没说。
-- **当前做法**：标准 base64（带填充）；原始数据不超过 3 MiB 才内联（base64 后约 4 MiB），更大的分片上传。
-- **已知**：编码是标准 base64，内联的图片正常显示（2026-11-16，`test_inline_data_is_base64`）。
-- **怎么测**：上限：内联一个 4～5 MB 的文件。
-
-### 分片上传：`block_size` 默认 5MB 与示例的 10485760
-
-- **位置**：`rich-media.md`「注意事项」与预上传页 `block_size` 一行都说默认 5MB，预上传页的响应示例是 `"10485760"`（10 MiB）。
-- **当前做法**：不假设大小，一律按响应顶层的 `block_size` 切片；它是字符串还是数字都接受。
-- **已知**：约 3.6 MB 的图片只给一片，顶层与这一片的 `block_size` 都等于文件大小，见「已确认」的「分片上传：序号从 1 开始，图片只有一片」。
-- **怎么测**：约 12 MB 的图片也只给一片（2026-11-16，`test_file_over_10m_is_uploaded`）；图片上限 20 MB，要看到多片得用更大的视频或文件。
-
-### 分片上传：分片完成接口的 `block_size`
-
-- **位置**：单聊分片完成页写「分块大小（字节）」，群聊页写「该分块的实际大小」。
-- **含糊**：最后一片不足 `block_size` 时填哪个。
-- **当前做法**：填这一片的实际字节数，字符串。
-- **怎么测**：要能分成多片的文件；约 3.6 MB 与约 12 MB 的图片都只有一片，没有测到。
+- **已知**：单聊里 gif、webp、bmp、jpg 图片与 wav 语音都上传、发送成功，客户端正常显示（2026-11-16，`test_image_and_voice_formats`）。
+- **怎么测**：mp3、ogg 语音（本机生成不了，没测）；群聊里的这些格式。
 
 ### 分片上传：`upload_config.retry_timeout` 的含义
 
@@ -196,28 +129,6 @@
 - **含糊**：「重试超时时间（秒），默认 300」没说是从什么时候算、限制的是单次请求还是整个重试过程。
 - **当前做法**：PUT 与分片完成各自重试；从这一步首次尝试算起，等完 `retry_delay` 会超过 `retry_timeout` 就不再重试。规则见 `design.md`。
 - **不主动实测**：要人为制造对象存储或平台的临时故障，实际遇到时记到这里。
-
-### 素材库：`.jpg` 是否算与 `image/jpeg` 一致
-
-- **位置**：`material-management.md`「限制说明」要求扩展名与 Content-Type 一致；错误码 40035001 写「扩展名与 Content-Type 需为 png/jpeg/gif/webp 且一致」。
-- **含糊**：`.jpg` 扩展名配 `image/jpeg` 算不算一致。
-- **当前做法**：`.jpg`、`.jpeg` 都发 `image/jpeg`；其它扩展名在本地抛 `ValueError`。
-- **怎么测**：在素材库上传一张文件名为 `.jpg` 的图片，看 prepare 是否返回 40035001。
-
-### 流式消息：`content_raw` 说是 Markdown，`content_type` 却可以是 text
-
-- **位置**：同上，请求体的 `content_type` 与 `content_raw` 两行。
-- **矛盾**：`content_type` 可选 `text` / `markdown`，`content_raw` 的描述却是「Markdown 格式的文本内容」。
-- **当前做法**：`markdown=True`（默认）发 `content_type=markdown`，`markdown=False` 发 `text`，`content_raw` 原样填调用方的文字。
-- **怎么测**：用 `reply_stream(markdown=False)` 发一段带 `**` 的文字，看是否按原文显示。
-
-### 自定义菜单：怎么清空，哪些字段必填
-
-- **位置**：`autogen/api/v2_menu.put.md`。
-- **含糊**：`menu`、`items` 以及菜单项的所有字段都标为选填，错误码表却有「必填字段缺失」（40030016）；也没说怎么清空菜单。
-- **当前做法**：工厂方法总是填 `name`、`type` 与对应类型的字段；`client.menu.set([])` 发 `{"menu": {"items": []}}`。
-- **已知**：没有设置过菜单时 `set([])` 被接受，返回版本号 1，之后 `GET` 的 `version` 为 1、菜单项为空（2026-11-16，`test_set_menu_to_itself`）。
-- **怎么测**：先设一个非空菜单再 `set([])`，看菜单是否消失（会影响所有用户，须单独同意）。
 
 ### 频道：测试条件
 
@@ -615,7 +526,7 @@
 
 - **位置**：发消息接口页的 `event_id` 一行（「从事件最外层的 id 获取」）；`autogen/event/interaction_create.md` 说 `d.id`「用于被动消息发送和互动回调」。
 - **结论**：外层 `id` 形如 `INTERACTION_CREATE:<uuid>`、`FRIEND_ADD:<uuid>`、`FRIEND_DEL:<uuid>`；互动的 `d.id` 是不带前缀的 `<uuid>`，好友事件的 `d` 里没有 `id`。用外层 `id` 作 `event_id`、带 `msg_seq` 1 被动回复，按钮互动、授权互动与 `FRIEND_ADD` 都被接受（`tests/live/test_live_events.py`）。
-- **没有测**：用 `d.id` 作 `event_id`；同一个 `event_id` 带递增的 `msg_seq` 连发两条。
+- **补测**（`test_interaction_ack_timing_and_event_ids`）：用不带前缀的 `d.id` 作 `event_id` 被拒，HTTP 400，`err_code` 40034025「请求参数event_id无效」；用外层 `id` 带 `msg_seq` 1、2 连发两条都被接受。
 - **实现**：不变，`event.event_id` 取外层 `id`。fixture：`gateway_friend_add.json`、`gateway_interaction_authorize.json`。
 
 ### 好友事件：都带 `author`，经分享链接添加时 `scene` 是 1000
@@ -640,10 +551,9 @@
 - **位置**：`autogen/event/c2c_msg_reject.md`、`c2c_msg_receive.md`：用户在资料卡关闭 / 打开主动消息时触发。
 - **结论**（`test_c2c_msg_reject_then_receive`，订阅了 `GROUP_AND_C2C_EVENT` 与互动）：
   - 切换资料卡的开关时，两个事件都没有推送，推的是 `type` 18 的 `INTERACTION_CREATE`（见上一条）。
-  - 授权互动里没有开关状态，分不出是关还是开。
-  - 推送的条数也不固定：连续切换 4 次收到 4 条；先关、约 20 秒后再开，只收到 1 条。
+  - 开关状态在 `authorize_data.switch`（文档没有）：打开时为 `true`，关闭时不带这个字段。每切换一次推一条；第一次只收到 1 条，是因为用例在第一条之后 15 秒就断开了。
   - 用这条授权互动的外层 `id` 被动回复被接受，测试用户收到了。
-- **实现**：`on_c2c_msg_reject`、`on_c2c_msg_receive` 保留（文档仍有），docstring 写明实测没有推送、改看授权互动。
+- **实现**：`on_c2c_msg_reject`、`on_c2c_msg_receive` 保留（文档仍有），docstring 写明实测没有推送、改看授权互动；`InteractionAuthorizeData.switch` 缺省为 `False`。fixture：`gateway_interaction_authorize.json`（关）、`gateway_interaction_authorize_on.json`（开）。
 
 ### 流式消息：路径用 `user_openid`，空的结束分片可用
 
@@ -682,7 +592,7 @@
 - **位置**：`autogen/event/group_add_robot.md`、`group_at_message_create.md` 及其 `User` 结构。
 - **结论**（`test_group_add_robot`、`test_group_at_message`，用户提供的测试群）：
   - `GROUP_ADD_ROBOT` 的 `d` 只有 `group_openid`、`op_member_openid`、`timestamp`，外层 `id` 形如 `GROUP_ADD_ROBOT:<uuid>`；用它作 `event_id` 在群里被动回复被接受。
-  - @ 消息的 `content` 只在开头留一个空格：`@机器人 /ping` 得到 `" /ping"`，结尾没有空格（官方示例首尾都有）。
+  - @ 消息的 `content` 只在开头留一个空格：手打的 `@机器人 /ping` 得到 `" /ping"`；由指令按钮填进输入框再发出的得到 `" /pyqbot-enter "`，首尾都有。
   - `author` 有 `avatar`、`bot`、`id`（与 `member_openid` 相同）、`member_openid`、`member_role`、`union_openid`（空串）、`username`（QQ 昵称），另有文档没有的 `member_nickname`（群名片）；没有 `union_user_account`。群主之外的管理员发消息时 `member_role` 是 `admin`。
   - `d` 里另有文档没有的 `group_id`，与 `group_openid` 相同。
   - `message_scene.ext` 有 `msg_idx=REFIDX_...` 与 `auth_token=...` 两项。
@@ -699,3 +609,89 @@
   - 禁言设置与入群申请列表报 40011030「机器人不是群管理员」。
   - `bot_state` 的响应是合法的 JSON（文档示例少了引号），字段与字段表一致：`allow_proactive_msg` 为 false，`recv_msg_setting` 是空串（不在文档列的三个取值里），`member_role` 是 `member`，`joined_at` 是 RFC3339。
 - **实现**：错误码写进各接口的 docstring；`recv_msg_setting` 的空串由 `RecvMsgSetting` 原样保留。
+
+### 网关：Resume 时积压的事件先于 `RESUMED` 补发
+
+- **位置**：`dev-prepare/event-emit/websocket.md`「发送心跳 Ack」「恢复登录态 Session」。
+- **结论**（`test_resume_replays_backlog`，断开约 30 秒期间测试用户发了几条单聊）：
+  - Resume 后，积压的 5 条 `C2C_MESSAGE_CREATE`（序号 3～7）先补发，然后才是 `RESUMED`（序号 8）。
+  - 收到第一条补发事件就发心跳被接受；心跳应答排在 `RESUMED` 之后。
+- **实现**：不变，SDK 正是收到第一条 Dispatch 就发心跳。
+
+### 键盘：单聊发送成功，`enter` 在群里只填进输入框
+
+- **位置**：接口页的 `Keyboard` 等结构；`server-inter/message/trans/msg-btn.md`；群聊发消息页的示例。
+- **结论**：
+  - 单聊里 Markdown 加键盘发送成功，不填 `unsupport_tips` 被接受，style 1（蓝色线框）与 4（蓝底白字）按预期显示（`test_markdown_with_buttons`）。
+  - 群里也能发 Markdown 加键盘。`enter=True` 的指令按钮在群里不会直接发出，只把「@机器人 指令」填进输入框，印证「仅单聊可用」（`test_group_message_features`）。
+- **没有测**：`id` 与 `content` 同传、不填 `visited_label` 时的效果。
+- **实现**：不变。
+
+### 引用、带文字的富媒体与卡片
+
+- **位置**：接口页的 `MessageReference` 与 `content` 一行；`server-inter/message/rich-media.md`。
+- **结论**：
+  - 引用索引（`ext_info.ref_idx`）与 `ROBOT1.0_` 开头的消息 ID 都能作 `message_reference.message_id`，客户端都以引用样式显示（`test_quote_previous_message`、`test_quote_by_message_id`）。
+  - `msg_type` 为 7（富媒体）、8（卡片）时带 `content` 被接受，文字随消息显示（`test_text_with_media_and_card`）。
+- **实现**：不变。
+
+### 正在输入与被动回复的次数
+
+- **位置**：单聊发消息页的 `InputNotify`、「输入状态通知」示例与被动回复次数的说明（每条消息 4 次）。
+- **结论**：
+  - 不带 `msg_id` 的主动发送被接受，客户端显示「正在输入」，`seconds=30` 时持续约 30 秒（`test_typing`）。
+  - 用同一条消息先发「正在输入」（`msg_seq` 1），再被动回复 4 条（`msg_seq` 2～5），全部被接受，测试用户都收到了（`test_c2c_reply_limit_and_plain_stream`）。所以「正在输入」不占次数，或者上限不止 4 次。
+- **实现**：不变。
+
+### 回应互动：客户端只等约 1 秒，接口从不报错
+
+- **位置**：`server-inter/message/trans/overview.md`「响应互动」写 3 秒；接口页与事件页只说「超时后失效」。
+- **结论**（单聊里的回调按钮）：
+  - 从收到事件到回应完成，0.72 秒、0.92 秒的按钮正常变成 `visited_label`；1.39 秒、1.43 秒的显示「请求第三方失败」；隔 5 秒回应的也是失败（`test_interaction_ack_threshold`、`test_interaction_ack_timing_and_event_ids`）。
+  - 超时、重复回应时 `PUT /interactions/{id}` 都返回成功，不报错。
+  - 回应若是这次会话里第一个 HTTP 请求，单是建立连接就可能超时：「0 秒后回应」的按钮实际用了 1.39 秒。
+  - 群里点回调按钮时，机器人正在分片上传大图，回应虽成功，按钮也没变成「已回调」。
+- **实现**：docstring 改为约 1 秒；SDK 仍不自动回应。
+
+### 富媒体：内联上传与分片
+
+- **位置**：单聊、群聊上传页的 `file_data`（5M）；`rich-media.md`「注意事项」（分片默认 5MB）；预上传页的示例（`"10485760"`）；分片完成页的 `block_size`。
+- **结论**：
+  - 内联上传：原始 5.5 MB（base64 后 7.3 MB）的图片也被接受，「5M」在这几个大小上没有生效（`test_inline_size_limit`）。
+  - 约 25 MB 的文件（`FileType.FILE`）：预上传给的 `block_size` 是 `"10485760"`，共 3 片（10、10、5 MiB），每片另带自己的 `block_size`。最后一片填实际大小被接受，文件消息发送成功（`test_large_file_type_upload`）。
+  - 约 3.6 MB 与约 12 MB 的图片都只给一片（见「分片上传：序号从 1 开始，图片只有一片」）。
+  - 群聊的分片上传（约 3.6 MB 的图片）同样成功。
+- **实现**：不变；`INLINE_LIMIT` 仍是 3 MiB，偏保守但不出错。
+
+### 素材库：`.jpg` 被接受
+
+- **位置**：`material-management.md`「限制说明」与错误码 40035001。
+- **结论**：文件名 `.jpg`、Content-Type `image/jpeg` 的图片申请上传成功（`test_media_image_library_jpg`）。
+- **实现**：不变。
+
+### 流式消息：`content_type=text` 时按原文显示
+
+- **位置**：流式消息接口页的 `content_type` 与 `content_raw`。
+- **结论**：`reply_stream(markdown=False)` 发的 `**这几个字不应加粗**` 被接受，客户端按原文显示星号（`test_c2c_reply_limit_and_plain_stream`）。
+- **实现**：不变。
+
+### 自定义菜单：`set([])` 能清空
+
+- **位置**：`autogen/api/v2_menu.put.md`。
+- **结论**（`test_set_menu_to_itself`、`test_menu_set_then_clear`）：
+  - 没有设置过时设空菜单，返回版本 1。
+  - 再设一个只有一个按钮的菜单（版本 2），测试账号单聊窗口底部出现它；随后 `set([])` 返回版本 3，菜单消失，`GET` 的菜单项为空。
+- **实现**：不变。
+
+### 群：消息功能、通知事件与主动消息
+
+- **位置**：群聊发消息、上传、撤回各页；`autogen/event/group_member_add.md`、`group_member_remove.md`、`group_del_robot.md`。
+- **结论**（用户提供的测试群，机器人不是管理员）：
+  - 被动回复 Markdown 加键盘、`message.upload(url=...)` 的图片、分片上传的大图都成功；撤回自己的消息成功。
+  - 群里点回调按钮：`type` 11、`chat_type` 1、`scene` 为 `"group"`，用外层 `id` 被动回复成功。
+  - 不带 `msg_id` 的群主动消息被拒：`err_code` 40034105「主动消息失败, 无权限」（`bot_state` 的 `allow_proactive_msg` 为 false）。
+  - 查单个成员与成员列表一样报 40012010。
+  - `GROUP_MEMBER_ADD`、`GROUP_MEMBER_REMOVE` 有 `group_openid`、`member_openid`、`timestamp` 和文档没有的 `union_openid`（空串）；退群事件没有文档说的 `user_openid`。
+  - `GROUP_DEL_ROBOT` 有 `group_openid`、`op_member_openid`、`timestamp`；拉回后的 `GROUP_ADD_ROBOT` 同前，用它回复成功。
+- **没有测**：群级的主动消息开关（`GROUP_MSG_REJECT` / `RECEIVE`，或 `type` 19 的授权互动），以及各种需要管理员的接口。
+- **实现**：`GroupMemberAdd`、`GroupMemberRemove` 补上 `union_openid`。fixture：`gateway_group_member_add.json`、`gateway_group_member_remove.json`。

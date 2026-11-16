@@ -77,6 +77,7 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 - `test_live_events.py::test_c2c_reply_limit_and_plain_stream`：先后发两条单聊；第一条收到「正在输入」与最多 4 条回复，第二条收到纯文本流式回复（`**` 不加粗）。
 - `test_live_events.py::test_c2c_reply_after_10_and_55_minutes`：发一条单聊后约 10、55 分钟各收到一条被动回复（被拒的收不到）；约 56 分钟，在后台跑。
 - `test_live_events.py::test_interaction_ack_timing_and_event_ids`：先点「晚回应」再点「快回应」，收到最多三条回复。
+- `test_live_events.py::test_interaction_ack_threshold`：四个按钮分别在 0、0.3、0.6、1 秒后回应，看哪些变成「已点」（实测约 1 秒为界）。
 - `test_live.py::test_resume_replays_backlog`：先发一条多图单聊，断开后 30 秒内再发两条文字，看 Resume 补发与心跳的先后。
 - `test_live_events.py::test_c2c_msg_reject_then_receive`：资料卡里关闭再打开主动消息；平台实际推的是授权互动，停手 15 秒后收到「pyqbot：授权已变更」。
 - `test_live_events.py::test_callback_button_interaction`：点「点我」，按钮不再转圈、文字变「已点」，再收到回复。
