@@ -88,8 +88,6 @@ class MediaImage(Model):
         file_name: 上传时的文件名；只有列出图片时返回。
         preview_url: 临时预览链接，时效很短，不要保存；带签名，所以 `repr()` 里显示为 `***`。
         ttl: 有效期窗口，单位秒；只有上传时返回。
-        created_at: 上传时间（Unix 秒）；只有列出图片时返回。
-        expires_at: 过期时间（Unix 秒），每次被消息引用后顺延；只有列出图片时返回。
     """
 
     _secret_fields = frozenset({"preview_url"})  # 也是带签名的预签名地址
@@ -99,8 +97,28 @@ class MediaImage(Model):
     file_name: str | None = None
     preview_url: str | None = None
     ttl: int | None = None
-    created_at: int | None = None
-    expires_at: int | None = None
+    # 文档写 int64，实测列出时是数字字符串（`docs/errata.md`）；两种都收，由同名属性换成整数。
+    _created_at: int | str | None = msgspec.field(default=None, name="created_at")
+    _expires_at: int | str | None = msgspec.field(default=None, name="expires_at")
+
+    @property
+    def created_at(self) -> int | None:
+        """上传时间（Unix 秒）；只有列出图片时返回。"""
+        return _unix_seconds(self._created_at)
+
+    @property
+    def expires_at(self) -> int | None:
+        """过期时间（Unix 秒），每次被消息引用后顺延到 90 天后；只有列出图片时返回。"""
+        return _unix_seconds(self._expires_at)
+
+
+def _unix_seconds(value: int | str | None) -> int | None:
+    if not isinstance(value, str):
+        return value
+    try:
+        return int(value)
+    except ValueError:
+        return None
 
 
 class ImagePage(Model):

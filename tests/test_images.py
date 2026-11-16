@@ -276,20 +276,31 @@ async def test_iter_images_follows_next_cursor() -> None:
     async with client_for(platform) as client:
         images = [image async for image in client.images.iter_images()]
 
-    assert images == [
-        pyqbot.MediaImage(image_id="1", url="u1"),
-        pyqbot.MediaImage(
-            image_id="2",
-            url="u2",
-            file_name="b.png",
-            created_at=1792051409,
-            expires_at=1792656210,
-        ),
+    assert [(i.image_id, i.url, i.file_name, i.created_at, i.expires_at) for i in images] == [
+        ("1", "u1", None, None, None),
+        ("2", "u2", "b.png", 1792051409, 1792656210),
     ]
     assert [(r.method, r.url.path, dict(r.url.params)) for r in platform.calls] == [
         ("GET", "/v2/media-images", {}),
         ("GET", "/v2/media-images", {"cursor": "c1"}),
     ]
+
+
+@pytest.mark.parametrize(
+    ("created_at", "expected"),
+    [("1794861718", 1794861718), (1794861718, 1794861718), ("soon", None), ("9" * 5000, None)],
+)
+async def test_list_times_may_be_digit_strings(created_at: object, expected: int | None) -> None:
+    # 文档写 int64，实测是数字字符串；认不出时为 None，不让整张图丢掉。
+    image = {"image_id": "1", "url": "u", "created_at": created_at, "expires_at": "1802637718"}
+    platform = Platform()
+    platform.respond = lambda request: httpx2.Response(200, json={"images": [image]})
+
+    async with client_for(platform) as client:
+        [listed] = [image async for image in client.images.iter_images()]
+
+    assert (listed.created_at, listed.expires_at) == (expected, 1802637718)
+    assert listed.to_dict()["created_at"] == created_at  # 原值保留
 
 
 async def test_delete_accepts_an_id_or_an_image() -> None:
