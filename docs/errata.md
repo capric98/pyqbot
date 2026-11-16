@@ -697,5 +697,5 @@
 ### 单聊被动回复的有效期：至少 55 分钟
 
 - **位置**：`autogen/api/v2_users_user_openid_messages.post.md` 的 `msg_id` 一行写「5 分钟内有效」，同页页首与 `server-inter/message/overview.md` 的表格写单聊 60 分钟。
-- **结论**（`test_c2c_reply_after_10_and_55_minutes`）：收到单聊消息后断开网关，隔约 10 分钟、约 55 分钟各用它被动回复一次，都被接受。「5 分钟」不对，与 60 分钟的说法一致。
+- **结论**（`test_c2c_reply_after_10_and_55_minutes`）：收到单聊消息后断开网关，隔约 10 分钟、约 55 分钟各用它被动回复一次，都被接受，测试用户也都收到了。「5 分钟」不对，与 60 分钟的说法一致。
 - **实现**：不变，SDK 不在本地判断是否过期。
