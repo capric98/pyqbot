@@ -260,7 +260,8 @@ async def test_decline_a_join_request(client: pyqbot.Client, write_allowed: str)
 
 
 async def test_join_strategy_lifecycle(client: pyqbot.Client, write_allowed: str) -> None:
-    """须用户单独同意：会在机器人上建一个停用的策略（每个机器人最多 20 个），用例结束（含中途失败）时删除。
+    """须用户单独同意：会在机器人上建一个策略（默认停用，`LIVE_STRATEGY_ENABLED=1` 时启用；每个机器人最多 20 个），
+    用例结束（含中途失败）时删除。
 
     应看到：策略列表里出现备注为「pyqbot 实测」的停用策略，修改与白名单操作生效，最后被删除。
     确认 `group_ids` 在响应里是整数还是字符串、`expire_at` 的秒精度与时区是否原样保存。
@@ -268,12 +269,15 @@ async def test_join_strategy_lifecycle(client: pyqbot.Client, write_allowed: str
     group = write_allowed
     expire_at = datetime.now(UTC).replace(microsecond=0) + timedelta(days=1)
 
+    enabled = (
+        os.environ.get("LIVE_STRATEGY_ENABLED") == "1"
+    )  # 启用后「执行」才有意义；白名单只有虚拟号
     strategy = await client.join_strategies.create(
-        group_openids=group, enabled=False, expire_at=expire_at, remark="pyqbot 实测"
+        group_openids=group, enabled=enabled, expire_at=expire_at, remark="pyqbot 实测"
     )
     async with undo_on_failure(lambda: client.join_strategies.delete(strategy)):
         note("创建的响应", strategy)
-        assert strategy.enabled is False
+        assert strategy.enabled is enabled
         await client.join_strategies.update(strategy, remark="pyqbot 实测（已修改）")
         whitelist = await client.join_strategies.add_whitelist_users(strategy, [10001, "10002"])
         assert whitelist.whitelist_user_count is not None
@@ -284,6 +288,7 @@ async def test_join_strategy_lifecycle(client: pyqbot.Client, write_allowed: str
         assert listed[strategy.strategy_id].expire_at == expire_at
         try:  # 2026-11-16 停用的策略、机器人不是管理员时报 50105002，只记下
             await client.join_strategies.execute(strategy)
+            note("execute", f"被接受（策略{'启用' if enabled else '停用'}）")
         except pyqbot.APIError as error:
             note("execute 失败", (error.err_code, error.message))
         await client.join_strategies.delete(strategy)

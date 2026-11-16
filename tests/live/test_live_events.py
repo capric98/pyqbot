@@ -829,3 +829,65 @@ async def test_group_notices(
     await run_until_closed(bot, wait_seconds, outcome)
 
     note("group_notices", outcome)
+
+
+async def test_group_admin_session(
+    app_id: str, app_secret: str, wait_seconds: float, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """机器人是测试群管理员时，等满 `LIVE_WAIT_SECONDS`，期间由人操作（都可选）：
+
+    - 成员 @机器人：记下 openid、昵称与身份（追加进 `.cache/live/test_group.env`，供禁言、移出用例挑选），
+      回复「pyqbot：记下了 …」；`LIVE_GROUP_RECALL=1` 时再以管理员身份撤回普通成员的这条消息。
+    - 有人申请加群：记下 `GROUP_JOIN_REQUEST` 的字段（原始事件见 `.cache/live/raw/`），然后拒绝，
+      理由「pyqbot 实测」，不拉黑。
+    """
+    group = group_or_skip()
+    recall = os.environ.get("LIVE_GROUP_RECALL") == "1"
+    bot = pyqbot.Bot(app_id, app_secret)
+    record_event_ids(bot, monkeypatch)
+    members: list[object] = []
+    requests: list[object] = []
+    outcome: dict[str, object] = {"members": members, "join_requests": requests}
+
+    @bot.on_group_at_message
+    async def mentioned(message: pyqbot.GroupAtMessage) -> None:
+        if message.group_openid != group:
+            return
+        author = message.author
+        name = author.member_nickname or author.username or "（无昵称）"
+        role = author.member_role
+        with GROUP_FILE.open("a", encoding="utf-8") as file:
+            file.write(f"# @ 机器人的成员：{author.member_openid} {name} {role}\n")
+        seen: dict[str, object] = {"name": name, "role": role}
+        members.append(seen)
+        try:
+            await message.reply(f"pyqbot：记下了 {name}（{role}）")
+        except pyqbot.APIError as error:
+            seen["reply"] = api_outcome(error)
+        if recall and role == pyqbot.GroupMemberRole.MEMBER:
+            try:
+                await bot.groups.recall_message(group, message)
+                seen["recall"] = "被接受"
+            except pyqbot.APIError as error:
+                seen["recall"] = api_outcome(error)
+
+    @bot.on_group_join_request
+    async def applied(event: pyqbot.GroupJoinRequest) -> None:
+        if event.group_openid != group:
+            return
+        seen: dict[str, object] = {
+            "event_id": event.event_id,
+            "apply_at": event.apply_at.isoformat() if event.apply_at else None,
+            "apply_source": event.apply_source,
+            "verify_method": event.verify_info.method if event.verify_info else None,
+        }
+        requests.append(seen)
+        try:
+            await event.decline(reason="pyqbot 实测")
+            seen["decline"] = "被接受"
+        except pyqbot.APIError as error:
+            seen["decline"] = api_outcome(error)
+
+    await run_until_closed(bot, wait_seconds, outcome)
+
+    note("group_admin_session", outcome)
