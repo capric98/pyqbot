@@ -1,14 +1,38 @@
 """群聊接口。"""
 
 import os
+from collections.abc import AsyncIterator, Iterable
+from datetime import datetime, timedelta
 
 from .._http import HTTP, path_segment
 from .._models.event import GroupReplyTarget
+from .._models.group import (
+    AddDel,
+    BlacklistedUser,
+    BlacklistPage,
+    BlacklistResult,
+    GroupBotState,
+    GroupInfo,
+    GroupMemberInfo,
+    GroupMuteSettings,
+    JoinRequest,
+    JoinRequestOp,
+    JoinRequestPage,
+    MemberPage,
+    MuteOp,
+    RemoveMembersResult,
+)
 from .._models.message import GroupAnyMessage, SentMessage
 from .._models.send import Card, Keyboard, Markdown, Media
 from .._models.upload import FileType
 from .message import message_body, message_path, send_message
+from .paging import Page, paginate
+from .params import rfc3339, str_list
 from .upload import upload_media
+
+# 文档给出的单页上限；取最大值，少发请求。
+_BLACKLIST_PAGE_LIMIT = 100
+_JOIN_REQUEST_PAGE_LIMIT = 50
 
 
 class Groups:
@@ -140,3 +164,394 @@ class Groups:
             file_type=file_type,
             send=send,
         )
+
+    # ---- 群管理 ----
+
+    async def get_info(self, openid: str) -> GroupInfo:
+        """获取群的基本信息：名称、简介、分类、标签、人数。
+
+        仅白名单机器人可用，否则平台以 `err_code` 11253 拒绝。
+
+        对应官方接口 `GET /v2/groups/{group_openid}/info`。
+
+        Raises:
+            APIError: 平台拒绝，例如没有接口权限（11253）。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: `openid` 为空。
+            RuntimeError: 客户端已关闭。
+        """
+        return await self._http.request("GET", f"{_group_path(openid)}/info", type_=GroupInfo)
+
+    async def get_bot_state(self, openid: str) -> GroupBotState:
+        """获取机器人在群里的状态：群内角色、入群时间、接收哪些消息等。
+
+        仅白名单机器人可用，否则平台以 `err_code` 11253 拒绝。
+
+        对应官方接口 `GET /v2/groups/{group_openid}/bot_state`。
+
+        Raises:
+            APIError: 平台拒绝，例如没有接口权限（11253）。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: `openid` 为空。
+            RuntimeError: 客户端已关闭。
+        """
+        path = f"{_group_path(openid)}/bot_state"
+        return await self._http.request("GET", path, type_=GroupBotState)
+
+    def iter_members(self, openid: str) -> AsyncIterator[GroupMemberInfo]:
+        """依次列出群成员。
+
+        内邀能力，且仅白名单机器人可用，否则平台以 `err_code` 11253 拒绝。
+
+        对应官方接口 `GET /v2/groups/{group_openid}/members`。
+
+        Raises:
+            APIError: 平台拒绝，例如没有接口权限（11253）。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: `openid` 为空。
+            RuntimeError: 客户端已关闭。
+
+        Example:
+            ```python
+            async for member in client.groups.iter_members(group_openid):
+                print(member.member_openid, member.username, member.member_role)
+            ```
+        """
+        path = f"{_group_path(openid)}/members"
+
+        async def fetch(cursor: str | None) -> Page[GroupMemberInfo, str]:
+            params = {"cursor": cursor} if cursor else None
+            page = await self._http.request("GET", path, type_=MemberPage, params=params)
+            return Page(page.members, page.next_cursor)
+
+        return paginate(fetch)
+
+    async def get_member(self, openid: str, member_openid: str) -> GroupMemberInfo:
+        """获取一个群成员的信息。
+
+        内邀能力，且仅白名单机器人可用，否则平台以 `err_code` 11253 拒绝。
+
+        对应官方接口 `GET /v2/groups/{group_openid}/members/{member_openid}`。
+
+        Raises:
+            APIError: 平台拒绝，例如没有接口权限（11253）。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: `openid` 或 `member_openid` 为空。
+            RuntimeError: 客户端已关闭。
+        """
+        path = f"{_group_path(openid)}/members/{path_segment(member_openid, 'member_openid')}"
+        return await self._http.request("GET", path, type_=GroupMemberInfo)
+
+    async def remove_members(
+        self, openid: str, member_openids: str | Iterable[str], *, add_to_blacklist: bool = False
+    ) -> None:
+        """把成员移出群，可以同时拉进群黑名单。
+
+        内邀能力，且仅白名单机器人可用，否则平台以 `err_code` 11253 拒绝。
+
+        对应官方接口 `POST /v2/groups/{group_openid}/batch_remove_members`。
+
+        Args:
+            openid: 群的 `group_openid`。
+            member_openids: 一个或多个成员的 openid，单次最多 20 个（超出由平台拒绝）。
+            add_to_blacklist: 同时加入群黑名单。
+
+        Raises:
+            PartialFailureError: 成员已移出，但有的没能加入黑名单（`failed_ids`）。
+            APIError: 平台拒绝，例如没有接口权限（11253），或 `remove_members_result` 不是 `success`。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: `openid` 为空。
+            RuntimeError: 客户端已关闭。
+        """
+        response = await self._http.request_decoded(
+            "POST",
+            f"{_group_path(openid)}/batch_remove_members",
+            type_=RemoveMembersResult,
+            json={
+                "member_openids": str_list(member_openids),
+                "add_to_member_blacklist": add_to_blacklist,
+            },
+        )
+        result = response.data
+        # 文档只说成功时是 success；不是它就不能当作已移出（docs/errata.md）。
+        if result.removal_failed:
+            raise response.failure(f"remove_members_result 为 {result.remove_members_result!r}")
+        if failed := result.blacklist_failed:
+            reason = f"成员已移出，但 {len(failed)} 个未能加入黑名单：{'、'.join(failed)}"
+            raise response.partial_failure(reason, failed)
+
+    def iter_blacklist(self, openid: str) -> AsyncIterator[BlacklistedUser]:
+        """依次列出群黑名单里的用户。
+
+        内邀能力，且仅白名单机器人可用，否则平台以 `err_code` 11253 拒绝。
+
+        对应官方接口 `GET /v2/groups/{group_openid}/member_blacklist`。
+
+        Raises:
+            APIError: 平台拒绝，例如没有接口权限（11253）。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: `openid` 为空。
+            RuntimeError: 客户端已关闭。
+        """
+        path = f"{_group_path(openid)}/member_blacklist"
+
+        async def fetch(cursor: str | None) -> Page[BlacklistedUser, str]:
+            params = {"limit": _BLACKLIST_PAGE_LIMIT} | ({"cursor": cursor} if cursor else {})
+            page = await self._http.request("GET", path, type_=BlacklistPage, params=params)
+            return Page(page.users, page.next_cursor)
+
+        return paginate(fetch)
+
+    async def add_to_blacklist(self, openid: str, member_openids: str | Iterable[str]) -> None:
+        """把用户加入群黑名单。只对已不在群里的用户有效，在群里的先用 `remove_members()`。
+
+        内邀能力，且仅白名单机器人可用，否则平台以 `err_code` 11253 拒绝。
+
+        对应官方接口 `POST /v2/groups/{group_openid}/member_blacklist`（`op` 为 `add`）。
+
+        Args:
+            openid: 群的 `group_openid`。
+            member_openids: 一个或多个用户的 openid，单次最多 20 个（超出由平台拒绝）。
+
+        Raises:
+            PartialFailureError: 有的用户没能加入（`failed_ids`），例如他还在群里；其余已加入。
+            APIError: 平台拒绝，例如没有接口权限（11253）。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: `openid` 为空。
+            RuntimeError: 客户端已关闭。
+        """
+        await self._edit_blacklist(openid, AddDel.ADD, member_openids)
+
+    async def remove_from_blacklist(self, openid: str, member_openids: str | Iterable[str]) -> None:
+        """把用户移出群黑名单。
+
+        内邀能力，且仅白名单机器人可用，否则平台以 `err_code` 11253 拒绝。
+
+        对应官方接口 `POST /v2/groups/{group_openid}/member_blacklist`（`op` 为 `del`）。
+
+        Args:
+            openid: 群的 `group_openid`。
+            member_openids: 一个或多个用户的 openid，单次最多 20 个（超出由平台拒绝）。
+
+        Raises:
+            PartialFailureError: 有的用户没能移出（`failed_ids`），其余已移出。
+            APIError: 平台拒绝，例如没有接口权限（11253）。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: `openid` 为空。
+            RuntimeError: 客户端已关闭。
+        """
+        await self._edit_blacklist(openid, AddDel.DEL, member_openids)
+
+    async def _edit_blacklist(
+        self, openid: str, op: AddDel, member_openids: str | Iterable[str]
+    ) -> None:
+        response = await self._http.request_decoded(
+            "POST",
+            f"{_group_path(openid)}/member_blacklist",
+            type_=BlacklistResult,
+            json={"op": op, "member_openids": str_list(member_openids)},
+        )
+        if failed := response.data.failed:
+            step = "加入" if op == AddDel.ADD else "移出"
+            reason = f"{len(failed)} 个未能{step}黑名单：{'、'.join(failed)}"
+            raise response.partial_failure(reason, failed)
+
+    async def get_mute_settings(self, openid: str) -> GroupMuteSettings:
+        """查询群的禁言状态：全员禁言的设置，以及正在禁言中的成员。
+
+        机器人须是群管理员。全员禁言只能查询，没有设置它的接口。
+
+        对应官方接口 `GET /v2/groups/{group_openid}/restrict_chat_setting`。
+
+        Raises:
+            APIError: 平台拒绝，例如机器人不是管理员。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: `openid` 为空。
+            RuntimeError: 客户端已关闭。
+        """
+        path = f"{_group_path(openid)}/restrict_chat_setting"
+        return await self._http.request("GET", path, type_=GroupMuteSettings)
+
+    async def mute(
+        self, openid: str, member_openids: str | Iterable[str], until: datetime | timedelta
+    ) -> None:
+        """禁言群成员，最长 30 天（超出由平台拒绝）。已在禁言中的成员要改到期时间用 `update_mute()`。
+
+        机器人须是群管理员；只能禁言普通成员，不能禁言群主、管理员和机器人。
+        对已在禁言中的成员再调用 `mute()`（即再发一次 `add`）是否等同于 `update_mute()`，尚待实测。
+
+        对应官方接口 `POST /v2/groups/{group_openid}/restrict_chat_setting`（`op` 为 `add`）。
+
+        Args:
+            openid: 群的 `group_openid`。
+            member_openids: 一个或多个成员的 openid，单次最多 20 个（超出由平台拒绝）。
+            until: 禁言到什么时候：带时区的 `datetime`，或从现在起算的 `timedelta`。
+
+        Raises:
+            APIError: 平台拒绝，例如机器人不是管理员，或对方是管理员。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: `openid` 为空，`until` 是没有时区的 `datetime` 或不是正数的 `timedelta`。
+            RuntimeError: 客户端已关闭。
+
+        Example:
+            ```python
+            await client.groups.mute(group_openid, member_openid, timedelta(minutes=10))
+            ```
+        """
+        expire_at = rfc3339(until, "until")
+        await self._set_mute(openid, MuteOp.ADD, member_openids, expire_at)
+
+    async def update_mute(
+        self, openid: str, member_openids: str | Iterable[str], until: datetime | timedelta
+    ) -> None:
+        """修改正在禁言中的成员的到期时间，可以延长也可以缩短；没在禁言中的成员用 `mute()`。
+
+        机器人须是群管理员；只能操作普通成员。
+
+        对应官方接口 `POST /v2/groups/{group_openid}/restrict_chat_setting`（`op` 为 `update`）。
+
+        Args:
+            openid: 群的 `group_openid`。
+            member_openids: 一个或多个成员的 openid，单次最多 20 个（超出由平台拒绝）。
+            until: 新的到期时间，写法同 `mute()`。
+
+        Raises:
+            APIError: 平台拒绝，例如机器人不是管理员，或成员没在禁言中（是否如此尚待实测）。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: 同 `mute()`。
+            RuntimeError: 客户端已关闭。
+        """
+        expire_at = rfc3339(until, "until")
+        await self._set_mute(openid, MuteOp.UPDATE, member_openids, expire_at)
+
+    async def unmute(self, openid: str, member_openids: str | Iterable[str]) -> None:
+        """立即解除群成员的禁言。
+
+        机器人须是群管理员。
+
+        对应官方接口 `POST /v2/groups/{group_openid}/restrict_chat_setting`（`op` 为 `del`）。
+
+        Args:
+            openid: 群的 `group_openid`。
+            member_openids: 一个或多个成员的 openid，单次最多 20 个（超出由平台拒绝）。
+
+        Raises:
+            APIError: 平台拒绝，例如机器人不是管理员。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: `openid` 为空。
+            RuntimeError: 客户端已关闭。
+        """
+        # 文档：op=del 时 mute_expire_at 传空串表示立即解除。
+        await self._set_mute(openid, MuteOp.DEL, member_openids, "")
+
+    async def _set_mute(
+        self, openid: str, op: MuteOp, member_openids: str | Iterable[str], expire_at: str
+    ) -> None:
+        members = [
+            {"op": op, "member_openid": member_openid, "mute_expire_at": expire_at}
+            for member_openid in str_list(member_openids)
+        ]
+        path = f"{_group_path(openid)}/restrict_chat_setting"
+        await self._http.request("POST", path, type_=None, json={"members": members})
+
+    def iter_join_requests(self, openid: str) -> AsyncIterator[JoinRequest]:
+        """依次列出待审批的入群申请。
+
+        机器人须是群管理员。
+
+        对应官方接口 `GET /v2/groups/{group_openid}/join_request_list`。
+
+        Raises:
+            APIError: 平台拒绝，例如机器人不是管理员。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: `openid` 为空。
+            RuntimeError: 客户端已关闭。
+
+        Example:
+            ```python
+            async for request in client.groups.iter_join_requests(group_openid):
+                await client.groups.approve_join_request(
+                    group_openid, request.member_openid, join_request_id=request.join_request_id
+                )
+            ```
+        """
+        path = f"{_group_path(openid)}/join_request_list"
+
+        async def fetch(cursor: str | None) -> Page[JoinRequest, str]:
+            params = {"limit": _JOIN_REQUEST_PAGE_LIMIT} | ({"cursor": cursor} if cursor else {})
+            page = await self._http.request("GET", path, type_=JoinRequestPage, params=params)
+            return Page(page.requests, page.next_cursor)
+
+        return paginate(fetch)
+
+    async def approve_join_request(
+        self, openid: str, member_openid: str, *, join_request_id: str | None = None
+    ) -> None:
+        """通过入群申请。收到事件时可以直接用 `GroupJoinRequest.approve()`。
+
+        机器人须是群管理员。
+
+        对应官方接口 `POST /v2/groups/{group_openid}/approval_join_request/{member_openid}`。
+
+        Args:
+            openid: 群的 `group_openid`。
+            member_openid: 申请人的 openid。
+            join_request_id: 申请 ID（事件或 `iter_join_requests()` 里有），文档标为可选。
+
+        Raises:
+            APIError: 平台拒绝，例如机器人不是管理员，或申请已处理。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: `openid` 或 `member_openid` 为空。
+            RuntimeError: 客户端已关闭。
+        """
+        body: dict[str, object] = {"op": JoinRequestOp.APPROVE}
+        if join_request_id is not None:
+            body["join_request_id"] = join_request_id
+        await self._review_join_request(openid, member_openid, body)
+
+    async def decline_join_request(
+        self,
+        openid: str,
+        member_openid: str,
+        *,
+        join_request_id: str | None = None,
+        reason: str | None = None,
+        add_to_blacklist: bool = False,
+    ) -> None:
+        """拒绝入群申请，可以附上理由、同时拉进群黑名单。收到事件时可以直接用 `GroupJoinRequest.decline()`。
+
+        机器人须是群管理员。
+
+        对应官方接口 `POST /v2/groups/{group_openid}/approval_join_request/{member_openid}`。
+
+        Args:
+            openid: 群的 `group_openid`。
+            member_openid: 申请人的 openid。
+            join_request_id: 申请 ID（事件或 `iter_join_requests()` 里有），文档标为可选。
+            reason: 拒绝理由。
+            add_to_blacklist: 同时加入群黑名单。
+
+        Raises:
+            APIError: 平台拒绝，例如机器人不是管理员，或申请已处理。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: `openid` 或 `member_openid` 为空。
+            RuntimeError: 客户端已关闭。
+        """
+        body: dict[str, object] = {"op": JoinRequestOp.DECLINE}
+        if join_request_id is not None:
+            body["join_request_id"] = join_request_id
+        if reason is not None:
+            body["reject_reason"] = reason
+        body["add_to_member_blacklist"] = add_to_blacklist
+        await self._review_join_request(openid, member_openid, body)
+
+    async def _review_join_request(
+        self, openid: str, member_openid: str, body: dict[str, object]
+    ) -> None:
+        member = path_segment(member_openid, "member_openid")
+        path = f"{_group_path(openid)}/approval_join_request/{member}"
+        await self._http.request("POST", path, type_=None, json=body)
+
+
+def _group_path(openid: str) -> str:
+    return f"/v2/groups/{path_segment(openid, 'openid')}"

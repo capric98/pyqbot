@@ -2,6 +2,7 @@
 
 import re
 from collections.abc import Awaitable, Callable, Iterable, Mapping
+from dataclasses import dataclass, field
 from typing import overload
 from urllib.parse import parse_qsl, quote, urlsplit
 
@@ -10,7 +11,7 @@ import msgspec
 
 from ._config import Config
 from ._credentials import TRACE_ID_HEADER, find_error_code
-from ._errors import APIError, NetworkError
+from ._errors import APIError, NetworkError, PartialFailureError
 from ._model import Model, decode
 from ._redact import redact, redact_optional, safe_cause
 
@@ -68,6 +69,32 @@ class HTTP:
         json: object = None,
     ) -> T | None:
         """发请求并把响应体解码成 `type_`（`None` 则不解码）；`path` 里的路径参数先经 `path_segment()`。"""
+        response, secrets = await self._send(method, path, params, json)
+        action = f"{method} {path}"
+        trace_id = _check_response(response, action, secrets)
+        if type_ is None:
+            return None
+        return _decode_response(response, type_, action, secrets, trace_id)
+
+    async def request_decoded[T](
+        self,
+        method: str,
+        path: str,
+        *,
+        type_: type[T],
+        params: QueryParams | None = None,
+        json: object = None,
+    ) -> DecodedResponse[T]:
+        """同 `request()`，另带上状态码与 trace_id，供接口方法从成功的响应里构造异常（如部分失败）。"""
+        response, secrets = await self._send(method, path, params, json)
+        action = f"{method} {path}"
+        trace_id = _check_response(response, action, secrets)
+        data = _decode_response(response, type_, action, secrets, trace_id)
+        return DecodedResponse(data, response.status_code, trace_id, action, secrets)
+
+    async def _send(
+        self, method: str, path: str, params: QueryParams | None, json: object
+    ) -> tuple[httpx2.Response, tuple[str | None, ...]]:
         config = self._config
         token = await self._get_token()
         secrets = (*self._known_secrets(), token)
@@ -88,8 +115,7 @@ class HTTP:
             )
         except httpx2.RequestError as exc:
             raise _network_error(f"{method} {path}", exc, secrets) from safe_cause(exc, *secrets)
-
-        return _parse_response(response, type_, f"{method} {path}", secrets)
+        return response, secrets
 
     async def put_presigned(
         self, url: str, content: bytes, *, content_type: str | None = None
@@ -175,23 +201,53 @@ class _ErrorBody(Model):
     trace_id: str | None = None
 
 
-def _parse_response[T](
-    response: httpx2.Response,
-    type_: type[T] | None,
+@dataclass(frozen=True, slots=True)
+class DecodedResponse[T]:
+    """`HTTP.request_decoded()` 的结果：已判定为成功的响应。"""
+
+    data: T
+    status_code: int
+    trace_id: str | None = field(repr=False)  # 未脱敏，构造异常时才脱敏
+    action: str
+    secrets: tuple[str | None, ...] = field(repr=False)
+
+    def partial_failure(self, reason: str, failed_ids: tuple[str, ...]) -> PartialFailureError:
+        """平台报告部分对象失败时抛出的异常，文案为 `{action} 部分失败：{reason}`。"""
+        return PartialFailureError(
+            f"{self.action} 部分失败：{redact(reason, *self.secrets)}",
+            failed_ids=failed_ids,
+            status_code=self.status_code,
+            trace_id=redact_optional(self.trace_id, *self.secrets),
+        )
+
+    def failure(self, reason: str) -> APIError:
+        """响应没有错误码、内容却表明失败时抛出的异常，文案同其它失败。"""
+        return _api_error(self.action, self.status_code, self.trace_id, self.secrets, reason)
+
+
+def _api_error(
     action: str,
+    status_code: int,
+    trace_id: str | None,
     secrets: tuple[str | None, ...],
-) -> T | None:
+    reason: str,
+    err_code: int | None = None,
+) -> APIError:
+    return APIError(
+        f"{action} 失败：{redact(reason, *secrets)}",
+        status_code=status_code,
+        err_code=err_code,
+        trace_id=redact_optional(trace_id, *secrets),
+    )
+
+
+def _check_response(
+    response: httpx2.Response, action: str, secrets: tuple[str | None, ...]
+) -> str | None:
+    """响应表示失败时抛 `APIError`；成功时返回 trace_id（未脱敏）。"""
     status_code = response.status_code
     trace_id = response.headers.get(TRACE_ID_HEADER)
     content = response.content
-
-    def fail(reason: str, err_code: int | None = None) -> APIError:
-        return APIError(
-            f"{action} 失败：{redact(reason, *secrets)}",
-            status_code=status_code,
-            err_code=err_code,
-            trace_id=redact_optional(trace_id, *secrets),
-        )
 
     if content.strip():
         try:
@@ -199,18 +255,32 @@ def _parse_response[T](
         except msgspec.ValidationError:
             body = _ErrorBody()  # 合法的 JSON 但不是对象（如数组），不可能是失败结构
         except (msgspec.DecodeError, RecursionError) as exc:
-            raise fail(f"无法解析响应（HTTP {status_code}）") from safe_cause(exc, *secrets)
+            reason = f"无法解析响应（HTTP {status_code}）"
+            raise _api_error(action, status_code, trace_id, secrets, reason) from safe_cause(
+                exc, *secrets
+            )
         trace_id = trace_id or body.trace_id
         # 201、202 也是 2xx，但文档说它们带失败结构，靠错误码识别。
         failed, err_code = find_error_code(body.err_code, body.code)
         if failed or not response.is_success:
-            raise fail(body.message or f"HTTP {status_code}", err_code)
+            reason = body.message or f"HTTP {status_code}"
+            raise _api_error(action, status_code, trace_id, secrets, reason, err_code)
     elif not response.is_success:
-        raise fail(f"HTTP {status_code}")
+        raise _api_error(action, status_code, trace_id, secrets, f"HTTP {status_code}")
+    return trace_id
 
-    if type_ is None:
-        return None
+
+def _decode_response[T](
+    response: httpx2.Response,
+    type_: type[T],
+    action: str,
+    secrets: tuple[str | None, ...],
+    trace_id: str | None,
+) -> T:
     try:
-        return decode(content, type_)
+        return decode(response.content, type_)
     except (msgspec.DecodeError, RecursionError) as exc:
-        raise fail(f"响应无法识别（HTTP {status_code}）") from safe_cause(exc, *secrets)
+        reason = f"响应无法识别（HTTP {response.status_code}）"
+        raise _api_error(action, response.status_code, trace_id, secrets, reason) from safe_cause(
+            exc, *secrets
+        )

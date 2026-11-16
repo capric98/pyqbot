@@ -342,6 +342,8 @@ class JoinRequestAutoApproved(Model):
 class GroupJoinRequest(Event):
     """有人申请加群，对应事件 `GROUP_JOIN_REQUEST`。只有机器人是群管理员时才会收到。
 
+    可以用 `approve()` / `decline()` 直接审批。
+
     Attributes:
         group_openid: 群的 openid。
         join_request_id: 申请 ID，审批时要用。
@@ -355,6 +357,14 @@ class GroupJoinRequest(Event):
         risk_tips: 安全提示语。
         verify_info: 验证方式与申请人填写的内容。
         auto_approved: 已被自动通过时才有，含策略 ID。
+
+    Example:
+        ```python
+        @bot.on_group_join_request
+        async def review(event: pyqbot.GroupJoinRequest) -> None:
+            if event.auto_approved is None:
+                await event.approve()
+        ```
     """
 
     event_name = "GROUP_JOIN_REQUEST"
@@ -372,6 +382,40 @@ class GroupJoinRequest(Event):
     risk_tips: str | None = None
     verify_info: JoinRequestVerifyInfo | None = None
     auto_approved: JoinRequestAutoApproved | None = None
+
+    async def approve(self) -> None:
+        """通过这条申请；同 `client.groups.approve_join_request()`。
+
+        对应官方接口 `POST /v2/groups/{group_openid}/approval_join_request/{member_openid}`。
+
+        Raises:
+            APIError: 平台拒绝，例如机器人不是管理员，或申请已处理。
+            NetworkError: 没有拿到平台的响应。
+            RuntimeError: 事件不是 `Bot` 分发来的（没有绑定客户端），或客户端已关闭。
+        """
+        client = self._bound_client()
+        await client.groups.approve_join_request(
+            self.group_openid, self.member_openid, join_request_id=self.join_request_id
+        )
+
+    async def decline(self, *, reason: str | None = None, add_to_blacklist: bool = False) -> None:
+        """拒绝这条申请；参数同 `client.groups.decline_join_request()`。
+
+        对应官方接口 `POST /v2/groups/{group_openid}/approval_join_request/{member_openid}`。
+
+        Raises:
+            APIError: 平台拒绝，例如机器人不是管理员，或申请已处理。
+            NetworkError: 没有拿到平台的响应。
+            RuntimeError: 事件不是 `Bot` 分发来的（没有绑定客户端），或客户端已关闭。
+        """
+        client = self._bound_client()
+        await client.groups.decline_join_request(
+            self.group_openid,
+            self.member_openid,
+            join_request_id=self.join_request_id,
+            reason=reason,
+            add_to_blacklist=add_to_blacklist,
+        )
 
 
 # ---- 订阅消息 ----

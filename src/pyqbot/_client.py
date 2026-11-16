@@ -8,6 +8,7 @@ import httpx2
 from ._api.groups import Groups
 from ._api.images import Images
 from ._api.interactions import Interactions
+from ._api.join_strategies import JoinStrategies
 from ._api.menu import CustomMenu
 from ._api.panels import Panels
 from ._api.users import Users
@@ -36,6 +37,7 @@ class Client:
         groups: 群聊接口，如 `client.groups.send_message(...)`。
         images: 素材库（Markdown 里引用的图片），如 `client.images.upload(path=...)`。
         interactions: 互动事件接口，如 `client.interactions.ack(...)`。
+        join_strategies: 入群自动审批策略，如 `client.join_strategies.create(...)`。
         menu: 单聊的自定义菜单，如 `client.menu.set(...)`。
         panels: 指令面板，如 `client.panels.create(...)`。
 
@@ -78,6 +80,7 @@ class Client:
         self.groups = Groups(self._http)
         self.images = Images(self._http)
         self.interactions = Interactions(self._http)
+        self.join_strategies = JoinStrategies(self._http)
         self.menu = CustomMenu(self._http)
         self.panels = Panels(self._http)
 

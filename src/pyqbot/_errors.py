@@ -50,6 +50,30 @@ class APIError(QQBotError):
         self.status_code = status_code
 
 
+class PartialFailureError(APIError):
+    """批量操作里有一部分对象失败了，其余已经生效；文案说明是哪一步失败。
+
+    Attributes:
+        failed_ids: 失败的对象（如 `member_openid`），顺序同平台给出的。
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        failed_ids: tuple[str, ...],
+        status_code: int,
+        err_code: int | None = None,
+        trace_id: str | None = None,
+    ) -> None:
+        super().__init__(message, status_code=status_code, err_code=err_code, trace_id=trace_id)
+        self._failed_ids = failed_ids
+
+    @property
+    def failed_ids(self) -> tuple[str, ...]:
+        return self._failed_ids
+
+
 class NetworkError(QQBotError):
     """没有拿到平台的响应：连接失败、超时、连接中途断开等。
 
