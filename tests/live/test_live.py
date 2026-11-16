@@ -24,6 +24,7 @@ import pyqbot
 from pyqbot._gateway.close_codes import classify_close_code
 from pyqbot._gateway.payload import (
     READY_EVENT,
+    RESUMED_EVENT,
     GatewayPayload,
     Hello,
     OpCode,
@@ -330,6 +331,75 @@ async def test_gateway_identify_wait_for_message_then_resume(app_id: str, app_se
                 await _next(ws, "resume.reply", secrets)
             except ConnectionClosedError:
                 pass
+
+
+async def test_resume_replays_backlog(app_id: str, app_secret: str) -> None:
+    """测试用户配合：连上后先发一条带多张图片的单聊；连接随即以 1000 断开，30 秒内再连发两条文字；之后用
+    Resume 恢复。
+
+    记下每帧的长度与类型（看多图消息有多大）、补发的事件、`RESUMED` 与心跳应答的先后。按 SDK 的做法，收到
+    第一条 Dispatch 就立刻发一次心跳。结果在 `report.txt`。
+    """
+    require_flag("LIVE_GATEWAY")
+    wait_seconds = float(os.environ.get("LIVE_WAIT_SECONDS", "180"))
+
+    async with pyqbot.Client(app_id, app_secret) as client:
+        token = await client.get_access_token()
+        secrets = (app_secret, token)
+        url = await _gateway_url(client, token)
+        frames: list[object] = []
+
+        async with client.http_client.websocket(url) as ws:
+            session = await _identify(
+                ws, token, pyqbot.Intents.GROUP_AND_C2C_EVENT, "backlog", secrets
+            )
+            assert session is not None, "没有收到 READY，见 report.txt"
+            session_id, seq, interval = session
+            deadline, next_beat = monotonic() + wait_seconds, monotonic()
+            while monotonic() < deadline:
+                if monotonic() >= next_beat:
+                    await ws.send_text(encode_heartbeat(seq))
+                    next_beat = monotonic() + interval
+                try:
+                    raw = await ws.receive_text(
+                        timeout=max(0.1, min(next_beat, deadline) - monotonic())
+                    )
+                except TimeoutError:
+                    continue
+                payload = decode_payload(raw)
+                seq = payload.s or seq
+                frames.append((payload.op.name, payload.t, len(raw.encode())))
+                if payload.t == C2C_MESSAGE_EVENT:
+                    save_raw("backlog_first_message", json.loads(payload.data))
+                    break
+        note("backlog.identify_frames", frames)
+
+        await asyncio.sleep(30)  # 测试用户在这期间连发两条文字
+
+        order: list[object] = []
+        async with client.http_client.websocket(url) as ws:
+            await _next(ws, "backlog.resume_hello", secrets)
+            await ws.send_text(encode_resume(token, session_id, seq))
+            beat_sent = resumed = acked = False
+            deadline = monotonic() + REPLY_TIMEOUT
+            while monotonic() < deadline and not (resumed and acked):
+                try:
+                    raw = await ws.receive_text(timeout=max(0.1, deadline - monotonic()))
+                except TimeoutError:
+                    break
+                except WebSocketDisconnect as closed:
+                    order.append(("closed", closed.code))
+                    break
+                payload = decode_payload(raw)
+                order.append((payload.op.name, payload.t, payload.s, len(raw.encode())))
+                resumed = resumed or payload.t == RESUMED_EVENT
+                acked = acked or payload.op == OpCode.HEARTBEAT_ACK
+                if payload.op == OpCode.DISPATCH and not beat_sent:
+                    await ws.send_text(encode_heartbeat(payload.s or seq))
+                    order.append("发出心跳")
+                    beat_sent = True
+        note("backlog.resume_order", order)
+        assert resumed, order
 
 
 async def test_gateway_accepts_group_member_intent(app_id: str, app_secret: str) -> None:

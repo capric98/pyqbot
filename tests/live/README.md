@@ -54,11 +54,17 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 - `test_live_messages.py::test_quote_previous_message`：第二条以引用形式展示第一条。
 - `test_live_messages.py::test_typing`：「正在输入」约 10 秒后消失；被拒就把错误码记进 errata。
 - `test_live_messages.py::test_send_then_recall`：消息出现后很快变成撤回提示。
+- `test_live_messages.py::test_quote_by_message_id`：用消息 ID（不是引用索引）引用上一条；被拒的错误码记进日志。
+- `test_live_messages.py::test_text_with_media_and_card`：图片、卡片各带一行文字，看文字是否显示。
+- `test_live_messages.py::test_wakeup`：互动召回「pyqbot：互动召回实测」；每个周期只能发一条，会占掉当前周期。
 - `test_live_upload.py::test_url_upload`：官方示意图。
 - `test_live_upload.py::test_inline_data_is_base64`：红色小方块与「内联上传」。
 - `test_live_upload.py::test_large_file_is_uploaded_in_parts`：约 1200×1000 的噪点图与「分片上传」。
 - `test_live_upload.py::test_file_over_10m_is_uploaded`：约 2000×2000 的噪点图与「多片上传」；分片情况记进日志。
 - `test_live_upload.py::test_upload_and_send_directly`：同 `test_url_upload` 的图，由上传接口直接发出。
+- `test_live_upload.py::test_image_and_voice_formats`：gif、webp、bmp、jpg 四张绿色小图与一条 wav 语音；被拒的格式记进日志。
+- `test_live_upload.py::test_inline_size_limit`：不发消息，内联约 3.6、4.5、5.5 MB 的图片，看「5M」限制的是编码前还是编码后。
+- `test_live_upload.py::test_large_file_type_upload`：约 25 MB 的文件（`FileType.FILE`），看是否支持、分几片。
 
 ### 需要测试用户动手配合
 
@@ -68,6 +74,10 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 - `test_live.py::test_gateway_identify_wait_for_message_then_resume`：等待期间可发一条单聊；看 `report.txt` 里 Resume 是否成功。
 - `test_live_bot.py::test_stream_reply`：测试用户发一条单聊，回复分段出现，最后不再显示「生成中」。
 - `test_live_events.py::test_friend_del_then_add`：删好友再加回（在 QQ 里打开 `test_generate_share_link` 生成的链接），收到「pyqbot：欢迎回来」。
+- `test_live_events.py::test_c2c_reply_limit_and_plain_stream`：先后发两条单聊；第一条收到「正在输入」与最多 4 条回复，第二条收到纯文本流式回复（`**` 不加粗）。
+- `test_live_events.py::test_c2c_reply_after_10_and_55_minutes`：发一条单聊后约 10、55 分钟各收到一条被动回复（被拒的收不到）；约 56 分钟，在后台跑。
+- `test_live_events.py::test_interaction_ack_timing_and_event_ids`：先点「晚回应」再点「快回应」，收到最多三条回复。
+- `test_live.py::test_resume_replays_backlog`：先发一条多图单聊，断开后 30 秒内再发两条文字，看 Resume 补发与心跳的先后。
 - `test_live_events.py::test_c2c_msg_reject_then_receive`：资料卡里关闭再打开主动消息；平台实际推的是授权互动，停手 15 秒后收到「pyqbot：授权已变更」。
 - `test_live_events.py::test_callback_button_interaction`：点「点我」，按钮不再转圈、文字变「已点」，再收到回复。
 - `test_live_misc.py::test_message_upload_shortcut`：测试用户发一条单聊，收到带图的「pyqbot：upload 快捷方法」。
@@ -75,8 +85,10 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 ### 影响机器人全局配置，须单独同意
 
 - `test_live_bot.py::test_set_menu_to_itself`（`LIVE_GLOBAL_CONFIG`）：菜单原样设回，版本号变大、菜单看起来不变。
+- `test_live_bot.py::test_menu_set_then_clear`（`LIVE_GLOBAL_CONFIG`）：单聊窗口底部出现「pyqbot」菜单约 30 秒后消失；只在菜单原本为空时运行。
 - `test_live_bot.py::test_panel_lifecycle`（`LIVE_GLOBAL_CONFIG`）：在单聊输入框输入 `/` 唤出面板，约 30 秒内是「pyqbot」，之后约 30 秒是「pyqbot2」（删掉 `/` 重新输入才刷新），结束后消失。
 - `test_live_upload.py::test_media_image_library`（`LIVE_MEDIA_IMAGES`）：收到「素材库」与蓝色图片，结束后图片从列表里删除。
+- `test_live_upload.py::test_media_image_library_jpg`（`LIVE_MEDIA_IMAGES`）：不发消息，看 `.jpg` 文件名是否被接受，成功就删除。
 
 ### 需要测试群
 
@@ -84,6 +96,10 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 
 - `test_live_events.py::test_group_add_robot`（`LIVE_GATEWAY`）：拉机器人进群，群里收到「pyqbot：已加入，用于 SDK 实测」。
 - `test_live_events.py::test_group_at_message`（`LIVE_GATEWAY`）：群里 @机器人 发「/ping」，收到「pyqbot：pong」；日志里看 `content` 是否带空格、有没有另推全量消息。
+- `test_live_events.py::test_group_message_features`（`LIVE_GATEWAY`）：@机器人后收到按钮、图片、分片上传的大图（10 秒后撤回）；点「回调」收到回复，点「指令」看是否直接发出。
+- `test_live_events.py::test_group_notices`（`LIVE_GATEWAY`）：等满等待时间，记下进群、退群、群主动消息开关、移出与拉回机器人等事件。
+- `test_live_groups.py::test_get_member_seen_in_a_message`：用 @ 过机器人的成员查单个成员。
+- `test_live_groups.py::test_proactive_group_message`：往测试群发一条主动消息，预计被拒。
 
 只读的只要 `TEST_GROUP_OPENID`，成员与黑名单要白名单（否则 `err_code` 40012010），禁言设置与入群申请要机器人是管理员（否则 40011030）：
 

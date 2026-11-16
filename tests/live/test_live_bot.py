@@ -157,6 +157,27 @@ async def test_set_menu_to_itself(client: pyqbot.Client) -> None:
 
 
 @pytest.mark.live
+async def test_menu_set_then_clear(client: pyqbot.Client) -> None:
+    """**会改动对所有用户生效的菜单，须单独征得同意。** 只在菜单原本为空时运行，结束时恢复为空。
+
+    设一个只有「pyqbot」（点击填入「/pyqbot」）的菜单，停 30 秒让测试账号在单聊窗口底部看到它，
+    再 `set([])` 清空，看菜单是否消失、版本号怎么变（记在 `bot.txt`）。
+    """
+    require_flag("LIVE_GLOBAL_CONFIG")
+    before = await client.menu.get()
+    if before.items:
+        pytest.skip("菜单不是空的：这个用例只在空菜单上试，免得清掉真实的菜单")
+
+    version = await client.menu.set([pyqbot.MenuItem.message_button("pyqbot", "/pyqbot")])
+    note(client, f"设了一个按钮的菜单，版本 {version}；去测试账号的单聊窗口底部看")
+    await asyncio.sleep(30)
+    cleared = await client.menu.set([])
+    after = await client.menu.get()
+    note(client, f"清空后版本 {cleared}，再读为 {after.version}，菜单项 {after.items}")
+    assert after.items == ()
+
+
+@pytest.mark.live
 async def test_panel_lifecycle(client: pyqbot.Client, openid: str) -> None:
     """**会创建对外生效的面板，须单独征得同意。** 面板只关联测试用户，用完即删。
 

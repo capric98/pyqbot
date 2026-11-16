@@ -15,6 +15,7 @@ import os
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -90,6 +91,20 @@ async def test_iter_members_and_get_member(client: pyqbot.Client, group: str) ->
     assert members
     assert len({m.member_openid for m in members}) == len(members)  # 翻页没有重复
     assert await client.groups.get_member(group, members[0].member_openid) == members[0]
+
+
+async def test_get_member_seen_in_a_message(client: pyqbot.Client, group: str) -> None:
+    """只读。成员列表没有权限时，用 @ 过机器人的成员（记在 `.cache/live/test_group.env`）查单个成员。"""
+    seen = Path(__file__).parents[2] / ".cache" / "live" / "test_group.env"
+    prefix = "# @ 机器人的成员："
+    lines = seen.read_text(encoding="utf-8").splitlines() if seen.exists() else []
+    members = [line.removeprefix(prefix) for line in lines if line.startswith(prefix)]
+    if not members:
+        pytest.skip("还没有 @ 过机器人的成员：先跑 test_live_events.py::test_group_at_message")
+    try:
+        note("单个成员", await client.groups.get_member(group, members[-1]))
+    except pyqbot.APIError as error:
+        note("单个成员：被拒", (error.err_code, error.message))
 
 
 async def test_iter_blacklist(client: pyqbot.Client, group: str) -> None:
@@ -272,3 +287,15 @@ async def test_join_strategy_lifecycle(client: pyqbot.Client, write_allowed: str
         except pyqbot.APIError as error:
             note("execute 失败", (error.err_code, error.message))
         await client.join_strategies.delete(strategy)
+
+
+async def test_proactive_group_message(client: pyqbot.Client, group: str) -> None:
+    """不带 `msg_id` 往测试群发一条主动消息「pyqbot：群主动消息实测」。
+
+    机器人状态里 `allow_proactive_msg` 是 false，预计被拒；结果与错误码记进日志。
+    """
+    try:
+        sent = await client.groups.send_message(group, "pyqbot：群主动消息实测")
+        note("群主动消息：被接受", sent.id)
+    except pyqbot.APIError as error:
+        note("群主动消息：被拒", (error.err_code, error.message))

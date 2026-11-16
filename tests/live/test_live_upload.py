@@ -8,10 +8,14 @@
 另设 `LIVE_MEDIA_IMAGES=1` 才运行；用例结束时删除自己上传的图片。
 """
 
+import base64
+import io
 import json
 import logging
+import math
 import os
 import struct
+import wave
 import zlib
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -26,9 +30,42 @@ from pyqbot._api.upload import INLINE_LIMIT
 pytestmark = pytest.mark.live
 _logger = logging.getLogger("pyqbot.live")
 TIME_KEYS = frozenset({"ttl", "created_at", "expires_at"})
+# 64×64 纯绿的 gif 与 jpg（macOS 的 sips 从 PNG 转出），以及一个 1×1 的无损 webp。
+GIF_64 = base64.b64decode(
+    "R0lGODdhQABAAJEAAAAAAADAAP///wAAACH5BAQAAAAALAAAAABAAEAAAAJFjI+py+0Po5y02ouz3rz7D4biSJbmiabqyrbuC8fyTNf2jef6zvf+DwwKh8Si8YhMKpfMpvMJjUqn1Kr1is1qt9yuN1AAADs="
+)
+JPEG_64 = base64.b64decode(
+    "/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAQKADAAQAAAABAAAAQAAAAAD/7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgAQABAAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/bAEMAAgICAgICAwICAwUDAwMFBgUFBQUGCAYGBgYGCAoICAgICAgKCgoKCgoKCgwMDAwMDA4ODg4ODw8PDw8PDw8PD//bAEMBAgICBAQEBwQEBxALCQsQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEP/dAAQABP/aAAwDAQACEQMRAD8A4Oiiiv8AP8/y/CiiigAooooAKKKKAP/Q4Oiiiv8AP8/y/CiiigAooooAKKKKAP/R4Oiiiv8AP8/y/CiiigAooooAKKKKAP/S4Oiiiv8AP8/y/CiiigAooooAKKKKAP/Z"
+)
+WEBP_1 = base64.b64decode("UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==")
 
 # 官方文档快照里引用的图片（server-inter/message/rich-media.md），公网可访问。
 IMAGE_URL = "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/image-send.35813305.jpg"
+
+
+def bmp(width: int, height: int, bgr: bytes) -> bytes:
+    """24 位 BMP：自下而上逐行，每行补齐到 4 字节。"""
+    row = bgr * width
+    row += b"\x00" * (-len(row) % 4)
+    pixels = row * height
+    header = struct.pack("<2sIHHI", b"BM", 54 + len(pixels), 0, 0, 54)
+    info = struct.pack("<IiiHHIIiiII", 40, width, height, 1, 24, 0, len(pixels), 2835, 2835, 0, 0)
+    return header + info + pixels
+
+
+def wav(seconds: float = 2.0, rate: int = 16000) -> bytes:
+    """单声道 16 位的 440Hz 正弦波。"""
+    frames = b"".join(
+        struct.pack("<h", int(8000 * math.sin(2 * math.pi * 440 * i / rate)))
+        for i in range(int(seconds * rate))
+    )
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(2)
+        out.setframerate(rate)
+        out.writeframes(frames)
+    return buffer.getvalue()
 
 
 @pytest.fixture
@@ -187,3 +224,119 @@ async def test_media_image_library(client: pyqbot.Client, openid: str) -> None:
 
     remaining = [item.image_id async for item in client.images.iter_images()]
     assert image.image_id not in remaining
+
+
+async def test_image_and_voice_formats(client: pyqbot.Client, openid: str) -> None:
+    """应看到：四张绿色小图，文字分别是 gif、webp、bmp、jpg（webp 只有 1×1）；再一条约 2 秒的 wav 语音。
+
+    文档各页列的格式不一致；被拒的格式与错误码记进日志。mp3、ogg 本机生成不了，没有测。
+    """
+    samples = [
+        ("gif", GIF_64),
+        ("webp", WEBP_1),
+        ("bmp", bmp(64, 64, b"\x00\xc0\x00")),
+        ("jpg", JPEG_64),
+        ("wav", wav()),
+    ]
+    results: dict[str, object] = {}
+    for ext, data in samples:
+        try:
+            media = await client.users.upload(openid, data=data, file_name=f"pyqbot.{ext}")
+            content = None if ext == "wav" else f"pyqbot：{ext}"
+            sent = await client.users.send_message(openid, content, media=media)
+            results[ext] = f"被接受 {sent.id[:24]}"
+        except pyqbot.APIError as error:
+            results[ext] = ("被拒", error.err_code, error.message)
+    _logger.warning("格式：%s", results)
+
+
+async def test_inline_size_limit(client: pyqbot.Client, openid: str) -> None:
+    """不发消息。直接调上传接口，把约 3.6、4.5、5.5 MB 的 PNG 用 base64 内联（绕过 SDK 的 3 MiB 分流）。
+
+    看哪些被接受，判断文档的「5M」限制的是编码前还是编码后的大小。结果记进日志。
+    """
+    token = await client.get_access_token()
+    results: dict[str, object] = {}
+    for width, height in ((1200, 1000), (1500, 1000), (1500, 1222)):
+        data = png(width, height)
+        encoded = base64.b64encode(data).decode()
+        response = await client.http_client.post(
+            f"{client.config.base_url}/v2/users/{openid}/files",
+            headers={"Authorization": f"QQBot {token}"},
+            json={"file_type": 1, "file_data": encoded, "srv_send_msg": False},
+            timeout=120,
+        )
+        body = cast(dict[str, object], response.json())
+        code = body.get("err_code") or body.get("code")
+        results[f"原始 {len(data)} 字节，base64 {len(encoded)} 字节"] = (
+            response.status_code,
+            code,
+            body.get("message") if code else "被接受",
+        )
+    _logger.warning("内联上限：%s", results)
+
+
+async def test_large_file_type_upload(
+    app_id: str, app_secret: str, openid: str, tmp_path: Path
+) -> None:
+    """应看到：一个名为 pyqbot-25m.bin 的文件消息；被拒就记下错误码。
+
+    约 25 MB 的随机数据按 `FileType.FILE` 上传：12 MB 的图片也只给一片，这里看文件类型是否支持、平台分几片、
+    最后一片不足 `block_size` 时填实际大小是否被接受。分片情况记进日志。
+    """
+    finished: list[dict[str, object]] = []
+    prepared: list[object] = []
+
+    async def record_request(request: httpx2.Request) -> None:
+        if request.url.path.endswith("/upload_part_finish"):
+            finished.append(json.loads(request.content))
+
+    async def record_response(response: httpx2.Response) -> None:
+        if response.request.url.path.endswith("/upload_prepare"):
+            await response.aread()
+            body = cast(dict[str, object], response.json())
+            parts = cast(list[dict[str, object]], body.get("parts") or [])
+            prepared.append(
+                {
+                    "block_size": body.get("block_size"),
+                    "parts": [(part.get("index"), part.get("block_size")) for part in parts],
+                    "err_code": body.get("err_code") or body.get("code"),
+                }
+            )
+
+    file = tmp_path / "pyqbot-25m.bin"
+    file.write_bytes(os.urandom(25 * 1024 * 1024))
+    async with (
+        httpx2.AsyncClient(
+            event_hooks={"request": [record_request], "response": [record_response]}
+        ) as http_client,
+        pyqbot.Client(app_id, app_secret, http_client=http_client) as client,
+    ):
+        try:
+            media = await client.users.upload(openid, path=file, file_type=pyqbot.FileType.FILE)
+            sent = await client.users.send_message(openid, media=media)
+            result: object = f"被接受 {sent.id[:24]}"
+        except pyqbot.APIError as error:
+            result = ("被拒", error.err_code, error.message)
+
+    finishes = [(body["part_index"], body["block_size"]) for body in finished]
+    _logger.warning("文件分片：预上传 %s；分片完成 %s；结果 %s", prepared, finishes, result)
+
+
+async def test_media_image_library_jpg(client: pyqbot.Client) -> None:
+    """素材库是机器人全局的，须单独同意后设 `LIVE_MEDIA_IMAGES=1`。不发消息。
+
+    上传文件名为 `.jpg` 的图片（Content-Type 发 `image/jpeg`），看申请上传是否报 40035001
+    （扩展名与 Content-Type 不一致）。成功就立刻删除。
+    """
+    if os.environ.get("LIVE_MEDIA_IMAGES") != "1":
+        pytest.skip("素材库是机器人全局的，须单独同意后设 LIVE_MEDIA_IMAGES=1")
+    try:
+        image = await client.images.upload(data=JPEG_64, file_name="pyqbot.jpg")
+    except pyqbot.APIError as error:
+        _logger.warning("素材库 .jpg：被拒 %s", (error.err_code, error.message))
+        return
+    try:
+        _logger.warning("素材库 .jpg：被接受 %s", image.image_id)
+    finally:
+        await client.images.delete(image)

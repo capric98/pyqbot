@@ -5,6 +5,7 @@
 每个用例都是一条主动消息（撤回用例两条），占用当天对该用户的主动消息额度。
 """
 
+import logging
 import os
 from collections.abc import AsyncGenerator
 
@@ -13,6 +14,8 @@ import pytest
 import pyqbot
 
 pytestmark = pytest.mark.live
+_logger = logging.getLogger("pyqbot.live")
+IMAGE_URL = "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/image-send.35813305.jpg"
 
 
 @pytest.fixture
@@ -74,7 +77,7 @@ async def test_card(client: pyqbot.Client, openid: str) -> None:
         title="pyqbot 卡片",
         description="这是一张由实测发出的图文卡片",
         url="https://www.qq.com",
-        pic_url="https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/image-send.35813305.jpg",
+        pic_url=IMAGE_URL,
     )
 
     sent = await client.users.send_message(openid, card=card)
@@ -106,3 +109,52 @@ async def test_send_then_recall(client: pyqbot.Client, openid: str) -> None:
     sent = await client.users.send_message(openid, "这条马上会被撤回")
 
     await client.users.recall_message(openid, sent)
+
+
+def outcome(error: pyqbot.APIError) -> tuple[int | None, str]:
+    return error.err_code, error.message
+
+
+async def test_quote_by_message_id(client: pyqbot.Client, openid: str) -> None:
+    """应看到：「pyqbot：被按消息 ID 引用」，然后一条引用它的消息；被拒就只有第一条，错误码记进日志。
+
+    字段说明要 `REFIDX_` 引用索引，群聊示例填的却是消息 ID；这里把 `SentMessage.id` 当字符串传。
+    """
+    first = await client.users.send_message(openid, "pyqbot：被按消息 ID 引用")
+    try:
+        sent = await client.users.send_message(
+            openid, "pyqbot：这条按消息 ID 引用了上一条", quote=first.id
+        )
+        _logger.warning("按消息 ID 引用：被接受 %s", sent.id)
+    except pyqbot.APIError as error:
+        _logger.warning("按消息 ID 引用：被拒 %s", outcome(error))
+
+
+async def test_text_with_media_and_card(client: pyqbot.Client, openid: str) -> None:
+    """应看到：一张图片与一张卡片，各带一行文字「pyqbot：图片 / 卡片附带的文字」；看文字是否显示。"""
+    media = await client.users.upload(openid, url=IMAGE_URL)
+    card = pyqbot.Card(
+        title="pyqbot 卡片", description="带文字的卡片", url="https://www.qq.com", pic_url=IMAGE_URL
+    )
+    try:
+        sent = await client.users.send_message(openid, "pyqbot：图片附带的文字", media=media)
+        _logger.warning("图片带文字：被接受 %s", sent.id)
+    except pyqbot.APIError as error:
+        _logger.warning("图片带文字：被拒 %s", outcome(error))
+    try:
+        sent = await client.users.send_message(openid, "pyqbot：卡片附带的文字", card=card)
+        _logger.warning("卡片带文字：被接受 %s", sent.id)
+    except pyqbot.APIError as error:
+        _logger.warning("卡片带文字：被拒 %s", outcome(error))
+
+
+async def test_wakeup(client: pyqbot.Client, openid: str) -> None:
+    """互动召回（`is_wakeup`）：每个周期只能发一条，测一次就占掉当前周期。
+
+    应看到「pyqbot：互动召回实测」；被拒就把错误码记进日志。
+    """
+    try:
+        sent = await client.users.send_message(openid, "pyqbot：互动召回实测", wakeup=True)
+        _logger.warning("互动召回：被接受 %s", sent.id)
+    except pyqbot.APIError as error:
+        _logger.warning("互动召回：被拒 %s", outcome(error))
