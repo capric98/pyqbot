@@ -5,8 +5,12 @@ from typing import Self
 
 import httpx2
 
+from ._api.groups import Groups
+from ._api.users import Users
 from ._config import DEFAULT_BASE_URL, DEFAULT_TIMEOUT, Config
 from ._credentials import AccessTokenManager
+from ._http import HTTP
+from ._models.gateway import Gateway
 
 
 class Client:
@@ -21,13 +25,17 @@ class Client:
         http_client: 自备的 `httpx2.AsyncClient`，用于配置代理、证书、连接池等，由调用方负责关闭；
             它自身的 `base_url` 和 `timeout` 不会被使用。不传则由客户端自建并负责关闭。
 
+    Attributes:
+        users: 单聊接口，如 `client.users.send_message(...)`。
+        groups: 群聊接口，如 `client.groups.send_message(...)`。
+
     Raises:
         ValueError: 凭证为空、`base_url` 不是完整的 http(s) 地址，或 `timeout` 不是正数。
 
     Example:
         ```python
         async with pyqbot.Client("APP_ID", "APP_SECRET") as client:
-            ...
+            await client.users.send_message(openid, "你好")
         ```
     """
 
@@ -50,6 +58,9 @@ class Client:
         self._http_client = httpx2.AsyncClient() if http_client is None else http_client
         self._access_token = AccessTokenManager(self._config, self._http_client)
         self._closed = False
+        self._http = HTTP(self._config, self._http_client, self.get_access_token)
+        self.users = Users(self._http)
+        self.groups = Groups(self._http)
 
     @property
     def config(self) -> Config:
@@ -89,8 +100,13 @@ class Client:
             ```
         """
         if self._closed:
-            raise RuntimeError(f"{type(self).__name__} 已关闭，不能再获取 access_token")
+            raise RuntimeError(f"{type(self).__name__} 已关闭，不能再发请求")
         return await self._access_token.get()
+
+    async def _get_gateway_url(self) -> str:
+        """返回网关的 WebSocket 地址，对应 `GET /gateway`；与 API 不是同一个域名。"""
+        gateway = await self._http.request("GET", "/gateway", type_=Gateway)
+        return gateway.url
 
     async def close(self) -> None:
         """关闭并释放连接，可以重复调用。构造时传入的 `http_client` 不会被关闭。"""

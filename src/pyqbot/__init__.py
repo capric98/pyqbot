@@ -7,6 +7,7 @@ from ._client import Client
 from ._config import Config
 from ._errors import APIError, NetworkError, PayloadError, QQBotError
 from ._gateway.intents import Intents
+from ._models.message import SentMessage
 
 __version__ = version("pyqbot")
 
@@ -19,5 +20,6 @@ __all__ = [
     "NetworkError",
     "PayloadError",
     "QQBotError",
+    "SentMessage",
     "__version__",
 ]

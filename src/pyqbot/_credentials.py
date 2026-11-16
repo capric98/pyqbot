@@ -164,10 +164,9 @@ def _parse_response(response: httpx2.Response, secrets: Iterable[str | None]) ->
         ) from exc
 
     trace_id = trace_id or body.trace_id
-    # 文档要求优先依据 code 判断：业务失败时 HTTP 状态码仍是 200。认不出的错误码也算失败。
-    codes = [code for code in (body.code, body.err_code) if code not in _SUCCESS_CODES]
-    err_code = next((parsed for code in codes if (parsed := _as_int(code)) is not None), None)
-    if codes or not response.is_success:
+    # 文档要求优先依据 code 判断：业务失败时 HTTP 状态码仍是 200。
+    failed, err_code = find_error_code(body.code, body.err_code)
+    if failed or not response.is_success:
         reason = body.message or f"HTTP {status_code}"
         raise APIError(
             f"获取 access_token 失败：{redact(reason, *secrets, body.access_token)}",
@@ -184,6 +183,14 @@ def _parse_response(response: httpx2.Response, secrets: Iterable[str | None]) ->
             trace_id=trace_id,
         )
     return body.access_token, expires_in
+
+
+def find_error_code(*fields: int | str | None) -> tuple[bool, int | None]:
+    """检查响应体里的错误码字段，返回（是否失败，第一个能转成整数的错误码）。认不出的错误码也算失败。"""
+    codes = [code for code in fields if code not in _SUCCESS_CODES]
+    return bool(codes), next(
+        (parsed for code in codes if (parsed := _as_int(code)) is not None), None
+    )
 
 
 _SUCCESS_CODES = (None, 0, "0", "")
