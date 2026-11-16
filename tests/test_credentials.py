@@ -570,3 +570,13 @@ async def test_closed_client_refuses_to_fetch() -> None:
     with pytest.raises(RuntimeError, match="Client 已关闭"):
         await client.get_access_token()
     assert server.requests == []
+
+
+async def test_bot_reaches_the_token_through_its_client() -> None:
+    server = TokenServer()
+
+    async with (
+        httpx2.AsyncClient(transport=httpx2.MockTransport(server.handle)) as http_client,
+        pyqbot.Bot(APP_ID, APP_SECRET, http_client=http_client) as bot,
+    ):
+        assert await bot.get_access_token() == "token-1"
