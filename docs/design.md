@@ -72,6 +72,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
   ```text
   QQBotError        基类：message、err_code、trace_id（后两者可为 None）
   ├── APIError      平台返回了失败：另带 status_code；可按需再细分
+  │   └── PartialFailureError  批量操作部分失败（其余已生效）：另带 failed_ids
   ├── NetworkError  没拿到响应：连接失败、超时
   └── GatewayError  网关被关闭且不可恢复：err_code 为关闭码（有的话）
   ```
@@ -100,13 +101,13 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
   - 模型上的快捷方法（如 `message.reply()`）参数与 `send_message` 相同，只是固定了 `reply_to`。
 - **被动回复**：`reply_to` 的类型是场景标记类（`users` 收 `C2CReplyTarget`，`groups` 收 `GroupReplyTarget`，见「事件」），所以把群聊的回复对象传给单聊接口时 pyright 报错。收到的消息填 `msg_id`（取 `id`），其余事件填 `event_id`（取 `event.event_id`，为 `None` 时抛 `ValueError`）。两种都由 `next_msg_seq()` 在这个对象上从 1 递增 `msg_seq`，发送失败也不回退，请求在本地被拒（`ValueError`）时不占用；调用方不用管。
 - **其它消息操作**：撤回是 `recall_message(openid, message)`，`message` 可以是消息 ID、`SentMessage`，群聊还可以是收到的 `GroupMessage`（机器人是管理员时）。「正在输入」是 `client.users.send_typing(openid, *, seconds=60, reply_to=None)`（`msg_type=6`，只有单聊），也是被动回复、占用 `msg_seq`；文档没有它的响应体，所以不解码、返回 `None`。
-- **分页接口**：方法名为 `iter_<资源>`，返回 `AsyncIterator`，调用方写 `async for x in client.groups.iter_members(...)`。方法内只写「怎么取一页」的 `fetch(cursor)`，返回 `_api.paging.Page(items, next)`，再 `return paginate(fetch)`：
+- **分页接口**：方法名为 `iter_<资源>`，返回 `AsyncIterator`，调用方写 `async for x in client.groups.iter_blacklist(...)`。方法内只写「怎么取一页」的 `fetch(cursor)`，返回 `_api.paging.Page(items, next)`，再 `return paginate(fetch)`：
   ```python
-  def iter_members(self, group_openid: str, *, limit: int = 50) -> AsyncIterator[GroupMember]:
-      async def fetch(cursor: str | None) -> Page[GroupMember, str]:
-          params = {"limit": limit} | ({"cursor": cursor} if cursor else {})
-          page = await self._http.request("GET", path, type_=MemberPage, params=params)
-          return Page(page.members, page.next_cursor)
+  def iter_blacklist(self, openid: str) -> AsyncIterator[BlacklistedUser]:
+      async def fetch(cursor: str | None) -> Page[BlacklistedUser, str]:
+          params = {"limit": 100} | ({"cursor": cursor} if cursor else {})
+          page = await self._http.request("GET", path, type_=BlacklistPage, params=params)
+          return Page(page.users, page.next_cursor)
 
       return paginate(fetch)
   ```
@@ -127,6 +128,12 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
   - `async with` 体里抛 `Exception` 时仍发结束分片（免得用户那边一直显示生成中），结束分片失败只记 WARNING，原异常照常抛出；被取消等 `BaseException` 不发，不拖住取消。
   - 分片发送失败（含请求在途时被取消）后平台状态未知，这条流式消息就此终止：之后 `append()` / `replace()` 抛 `RuntimeError`，退出时不再发结束分片。还在等锁时被取消的调用什么也没发，不占 `index`，也不影响这条流。结束后再 `append()` 也抛 `RuntimeError`；`finish()` 可重复调用。
   - 每个分片的响应是 `SentStreamChunk`（`SentMessage` 的子类，多一个 `remain_msg_len`），经 `stream.last_sent` 取最近一个；SDK 不按 `remain_msg_len` 做任何判断。`is_wakeup` 暂不提供（与发消息页的说法冲突，见 `errata.md`）。
+- **群管理**（`_api/groups.py`，挂在 `client.groups` 上）：`get_info`、`get_bot_state`、`iter_members`、`get_member`、`remove_members`、`iter_blacklist`、`add_to_blacklist` / `remove_from_blacklist`、`get_mute_settings`、`mute` / `unmute`、`iter_join_requests`、`approve_join_request` / `decline_join_request`。白名单、内邀、管理员等前提写在各方法的 docstring 里，本地不检查，由平台拒绝。GET 的 `cursor`、`limit` 一律放查询串、不发请求体（文档的出入见 `errata.md`），翻页时 `limit` 取文档给的最大值、不对调用方暴露。批量接口全部成功时返回 `None`；平台报告部分失败时抛 `PartialFailureError`（继承 `APIError`），`failed_ids` 是平台给的失败 openid，文案写明是哪一步失败（如「成员已移出，但 N 个未能加入黑名单」）。它要用成功响应的状态码与 trace_id，所以这类接口经 `HTTP.request_decoded()` 发请求，结果的 `partial_failure()` / `failure()` 构造已脱敏的异常。失败清单（以及 `remove_members_result` 这类表示成败的字段）在模型里写成 `object` 并在 `__post_init__` 里校验：缺失或 `null` 算没有失败，类型不符就让整条响应「无法识别」，不能像普通可选字段那样退回默认值，否则已知的失败会变成全部成功。禁言分 `mute()`（`add`）与 `update_mute()`（`update`，改正在禁言中的到期时间）；全员禁言只能查。入群申请事件上有 `GroupJoinRequest.approve()` / `decline()`。
+- **入群自动审批策略**（`_api/join_strategies.py`，挂成 `client.join_strategies`，属于机器人本身）：`iter_strategies()`、`create()`、`update()`、`add_groups()` / `remove_groups()`、`delete()`、`execute()`、`add_whitelist_users()` / `remove_whitelist_users()`；`strategy` 参数接受 `strategy_id` 或 `JoinStrategy`。`group_openids` 与 `group_ids` 恰好传一个，否则 `ValueError`。修改接口的响应只有启用状态与过期时间，所以 `update()` 等返回 `None`。
+- **时间与批量参数**（`_api/params.py`，以后频道的禁言、日程等沿用）：
+  - 调用方传入的时刻是带时区的 `datetime`，没有时区抛 `ValueError`（无法知道指哪个时区）；时长用 `timedelta`，须为正数。一个参数两种都收时（如 `mute(..., until)`、`create(expire_at=...)`），`timedelta` 表示从现在起算。都由 `rfc3339()` 先转成 UTC（带秒级偏移的时区直接输出不是合法的 RFC3339），再把不足一秒的部分向上取整（截止时刻晚不到一秒无害，截掉则可能早于现在），编码成 `2026-08-05T03:23:05+00:00` 这样的字符串。当前时间取自 `params.utc_now()`，测试替换它来固定时钟。响应里的时间照「事件」的时间戳规则解码。
+  - 接受多个 ID 的参数写成 `str | Iterable[str]`，单个字符串当作一个元素（`str_list()`），免得被拆成字符；QQ 号、群号这类整数同理写 `int | Iterable[int]`。单次数量上限写在 docstring 里，本地不检查，也不自动拆成多次请求（部分失败难以表达）。
+  - 接口里的 `on|off`、`add|del` 之类，公共签名用 `bool`（如 `enabled=`）或分开的方法（如 `add_to_blacklist` / `remove_from_blacklist`）表达，请求体里用 `OpenStrEnum`；响应模型保留接口原样的字段，字段类型是从顶层导出的枚举（如 `JoinStrategyStatus`，否则调用方无法标注或构造），另给便捷属性（如 `JoinStrategy.enabled`）。
 
 ## 网关连接（已落地）
 
@@ -193,7 +200,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 
 1. **命名与可见性**：内部模块里要给别的模块用的名字不加下划线，`_` 前缀的名字只在本模块、本类及其子类内使用（pyright strict 会拒绝越界访问）。是否公共只看有没有从包顶层导出；新增导出同时更新 `__all__`。
 2. **地址与超时只认 `Config`**：请求一律用 `config.base_url + "/path"` 的绝对地址，并显式传 `timeout=config.timeout`；不依赖 `httpx2.AsyncClient` 自身的 `base_url` / `timeout`，这样自建与注入的客户端行为一致。所有网络 IO（含 WebSocket）都走 `client.http_client`，任何模块不得另建 `httpx2` 客户端。
-3. **异常**：运行期失败只抛 `QQBotError` 的子类，新增的类都放 `_errors.py` 并导出。只有基类带 `QQBot`，子类不加前缀、以 `Error` 结尾，且不与内置异常重名。`httpx2`、`msgspec` 的异常（含超深嵌套 JSON 引起的 `RecursionError`）不得漏给用户，包装后用 `raise ... from` 保留原因。响应体里 `err_code` 与 `code` 任一个非零就算失败（获取 token 的接口只有 `code`，且业务失败时 HTTP 仍是 200）；两个都有时异常的 `err_code` 取响应体的 `err_code`，`code` 是旧式错误码（见 `errata.md`）；`trace_id` 优先取响应头 `X-Tps-trace-ID`，其次响应体。用法错误（参数不合法、关闭后再用）抛内置的 `ValueError` / `RuntimeError`。
+3. **异常**：运行期失败只抛 `QQBotError` 的子类，新增的类都放 `_errors.py` 并导出。只有基类带 `QQBot`，子类不加前缀、以 `Error` 结尾，且不与内置异常重名。`httpx2`、`msgspec` 的异常（含超深嵌套 JSON 引起的 `RecursionError`）不得漏给用户，包装后用 `raise ... from` 保留原因。响应体里 `err_code` 与 `code` 任一个非零就算失败（获取 token 的接口只有 `code`，且业务失败时 HTTP 仍是 200）；两个都有时异常的 `err_code` 取响应体的 `err_code`，`code` 是旧式错误码（见 `errata.md`）；`trace_id` 优先取响应头 `X-Tps-trace-ID`，其次响应体。批量操作只有部分对象失败时抛 `PartialFailureError`，不用返回值表达失败。用法错误（参数不合法、关闭后再用）抛内置的 `ValueError` / `RuntimeError`。
 4. **模型**：继承 `Model`。可选字段写 `X | None = None`，不向外暴露 `msgspec.UNSET`；集合字段用 `tuple[X, ...]`、默认 `()`（写 `= []` 会触发 ruff RUF012）；接口字段名不是 snake_case 时用 `msgspec.field(name=...)`。内部可以随意用 msgspec，但公共签名里不出现它的类型。
    - **宽容解码落到字段级**：只有 SDK 自己要用的字段，以及调用方拿不到就没法继续的字段（如 `SentMessage.id`）才写成必填；其余字段都给默认值。解码一律经 `_model.decode()`：有默认值的字段类型不符时退回默认值（嵌套模型逐层处理；`tuple[模型, ...]` 逐个元素处理，清理后仍不合法的元素只丢掉它自己），只有必填字段缺失或类型不符才让整条数据失败。
    - **枚举容忍未知取值**：取值互斥的枚举继承 `OpenIntEnum`（整数）或 `OpenStrEnum`（字符串，如 `scope: c2c|group`），字段直接写枚举类型。未知的取值得到伪成员：是该枚举的实例，`name` 为 `"UNKNOWN"`，`value`、比较与 `to_dict()` 都是原值；每次得到的是不同对象，只用 `==` / `match` 的值模式比较，不用 `is`。msgspec 解码按 JSON 类型严格校验（`true`、`1.0` 不算整数，数字不算字符串）；直接调用 `MyEnum(True)` 则按标准库语义命中值相等的成员。
@@ -222,7 +229,8 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 骨架已经打通：凭证、请求层、网关连接、事件分发、`Bot.start()` / `run()` 都已落地，单聊消息能收能回。剩下的主要是按现有写法铺开：
 
 - **其余事件**：单聊、群聊、频道的事件和 `INTERACTION_CREATE` 都已落地，见「事件」。频道的发送接口、各事件的 `reply()` 与 `Interaction.reply()` 的频道分支随频道消息接口补上，要接的点见「事件」的「留给频道消息接口的」。
-- **其余接口**：`autogen/api/` 下的群管理、用户等，以及 `server-inter/channel/` 下的频道接口，照约定 5 按资源分组。机器人自身、分享链接、自定义菜单、指令面板已落地。
+- **群管理与入群自动审批策略**（已落地）：见「请求层与接口分组」，文档出入与待实测项见 `errata.md`，实测用例在 `tests/live/test_live_groups.py`（须用户提供测试群并单独同意）。
+- **其余接口**：`server-inter/channel/` 下的频道接口，照约定 5 按资源分组。机器人自身、分享链接、自定义菜单、指令面板已落地。
 - **其它消息类型**（已落地）：Markdown、键盘、富媒体、卡片、引用、正在输入、互动召回、撤回、流式消息，见「请求层与接口分组」。剩下：文本里的 `<qqbot-at-user>` 等交互标签（`trans/text-chain.md`）现在由调用方自己拼。
 - **富媒体上传与素材库**（已落地）：见「请求层与接口分组」，文档出入与待实测项见 `errata.md`，实测用例在 `tests/live/test_live_upload.py`。
 - **Webhook**（未确认）：见上。

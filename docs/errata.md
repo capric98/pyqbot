@@ -405,6 +405,48 @@
 - **当前做法**：`Interaction` 同时继承 `ChannelReplyTarget`，在频道里用 `event_id` 回复到 `channel_id`；平台不接受时由它拒绝。
 - **怎么测**：在测试频道发一条带回调按钮的消息，点击后用互动事件的 `event_id` 被动回复，记下是否成功与错误码；不接受就去掉 `Interaction` 的频道标记。
 
+### 群管理：GET 的分页参数写在「请求体」，GET、DELETE 的示例带 `{}`
+
+- **位置**：`autogen/api/` 下 `v2_groups_group_openid_members.get.md`、`..._member_blacklist.get.md`、`..._join_request_list.get.md`、`v2_groups_join_approval_strategy.get.md` 的「请求体」表格；`..._restrict_chat_setting.get.md`、`v2_groups_join_approval_strategy.get.md`、`v2_groups_join_approval_strategy_strategy_id.delete.md` 的请求示例。
+- **矛盾**：`cursor`、`limit` 列在 GET 的「请求体」里，成员列表的示例却写成查询串 `?cursor=`；禁言查询、策略列表的 GET 与策略删除的 DELETE 示例各带了一个 `{}` 请求体。
+- **当前做法**：`cursor`、`limit` 一律作为查询参数，GET 与 DELETE 不发请求体。翻页时 `limit` 取文档给的最大值（黑名单 100，入群申请与策略 50；成员列表没有 `limit`）。
+- **怎么测**：实测用例 `test_iter_members_and_get_member` 在超过 30 人的群里翻页，成员不重复、总数与群人数一致即确认 `cursor` 在查询串里生效；`test_get_mute_settings` 成功即确认 GET 不需要请求体。
+
+### 机器人群内状态：示例 JSON 不完整
+
+- **位置**：`autogen/api/v2_groups_group_openid_bot_state.get.md` 的响应示例。
+- **含糊**：最后一行是 `"member_role": "member`，少了右引号，不是合法的 JSON；其余字段与字段表一致。
+- **当前做法**：按字段表解码，所有字段都可缺省，`recv_msg_setting`、`member_role` 是可容忍未知取值的枚举。
+- **怎么测**：实测用例 `test_get_bot_state` 记下真实响应。
+
+### 禁言：`add` 对已禁言的成员，`del` 的 `mute_expire_at`
+
+- **位置**：`autogen/api/v2_groups_group_openid_restrict_chat_setting.post.md` 的 `SetMemberMuteState`。
+- **含糊**：`op` 分 `add`（增加）与 `update`（更新到期时间），没说对已在禁言中的成员 `add` 会怎样；`mute_expire_at` 说「`op=del` 时可传空串表示立即解除」，没说不传或传一个时刻会怎样。
+- **当前做法**：`client.groups.mute()` 发 `add`，`update_mute()` 发 `update`，两者的 docstring 都写明「再次 `add` 是否等于 `update`」尚待实测；`unmute()` 发 `del` 并带 `mute_expire_at: ""`。
+- **怎么测**：实测用例 `test_mute_twice_with_add` 对同一成员连续 `add` 两次，看第二次是报错还是改写到期时间；`test_mute_update_then_unmute` 确认 `update` 与带空串的 `del`。
+
+### 群黑名单：在群里的用户怎么拉黑失败
+
+- **位置**：`autogen/api/v2_groups_group_openid_member_blacklist.post.md`。
+- **含糊**：只有不在群里的用户才能加入黑名单，但没说对在群里的用户 `add` 时，是放进响应的 `fail_openids` 还是整个请求报错；`op=del` 时 `fail_openids`「同义」也没说清。批量移出成员的响应同理：`add_to_member_blacklist_fail_openids` 是拉黑失败的成员，`remove_members_result` 只说「成功时返回 success」，没有逐个的移出结果，也没说失败时是什么。
+- **当前做法**：`fail_openids` 非空时 `add_to_blacklist()`、`remove_from_blacklist()` 抛 `PartialFailureError`（`failed_ids` 即它）；`remove_members()` 在拉黑失败清单非空时同样抛它，`remove_members_result` 是字符串但不是 `success` 时抛 `APIError`，缺失或 `null` 算没有报告。失败清单缺失或为 `null` 算没有失败，不是字符串列表时按「响应无法识别」抛 `APIError`，不退回空清单；`remove_members_result` 不是字符串也不是 `null` 时同样按「响应无法识别」处理。
+- **怎么测**：实测用例 `test_blacklist_add_only_works_for_users_outside_the_group`。
+
+### 入群申请审批：`join_request_id` 标为可选
+
+- **位置**：`autogen/api/v2_groups_group_openid_approval_join_request_member_openid.post.md`。
+- **含糊**：`join_request_id` 标为非必填，没说不传时审批的是哪条申请；`add_to_member_blacklist` 的说明写「`action=decline` 时可填」，字段名其实是 `op`。
+- **当前做法**：`join_request_id` 是可选的关键字参数，不传就不发；事件上的 `approve()` / `decline()` 总是带上事件里的申请 ID。`decline_join_request()` 总是发出 `add_to_member_blacklist`（默认 `false`），`approve` 不发。
+- **怎么测**：实测用例 `test_decline_a_join_request`；要验证不传 ID 的效果须再有一条申请。
+
+### 入群自动审批策略：`group_ids` 的类型与创建示例
+
+- **位置**：`autogen/api/v2_groups_join_approval_strategy.post.md`、`..._strategy_id.patch.md` 的 `group_ids`；`v2_groups_join_approval_strategy.get.md` 的响应示例；`..._strategy_id_execute.post.md` 的请求示例。
+- **矛盾**：创建与修改都说 `group_ids` 是「QQ 群号列表（uint64）」，列表的响应示例却是打了码的字符串（`"10****499"`）；白名单号码明确要求字符串「避免 JS 精度问题」，群号没有。创建示例带了 `"expire_at": ""`，字段说明是「不传默认一年过期」。执行接口说请求为空，示例是 `{}`。
+- **当前做法**：请求里 `group_ids` 发整数；响应里的 `JoinStrategy.group_ids` 是 `tuple[int | str, ...]`，原样保留。不传 `expire_at` 时不发这个键。执行接口发 `{}`。
+- **怎么测**：实测用例 `test_join_strategy_lifecycle` 用 `group_openids` 创建；要确认 `group_ids` 须用户另给一个测试群的群号，看创建能否成功、列表里返回什么类型、是否打码。
+
 ## 已确认
 
 以下都是 2026-11-16 用真实机器人实测的结果。
