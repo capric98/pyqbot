@@ -10,7 +10,8 @@ import msgspec
 
 from .._gateway.intents import Intents
 from .._model import Model, OpenIntEnum
-from .event import ReceivedMessage
+from .event import C2CReplyTarget, GroupReplyTarget, ReceivedMessage
+from .send import Card, Keyboard, Markdown, Media
 
 
 class MessageType(OpenIntEnum):
@@ -171,8 +172,18 @@ class _ChatMessage(ReceivedMessage):
     ark_data: ArkData | None = None
     msg_elements: tuple[MessageElement, ...] = ()
 
+    @property
+    def msg_idx(self) -> str | None:
+        """这条消息的引用索引（`message_scene.ext` 里的 `msg_idx`），引用它时要用；没有时为 `None`。"""
+        if self.message_scene is not None:
+            for item in self.message_scene.ext:
+                key, sep, value = item.partition("=")
+                if sep and key == "msg_idx":
+                    return value
+        return None
 
-class C2CMessage(_ChatMessage):
+
+class C2CMessage(_ChatMessage, C2CReplyTarget):
     """用户发给机器人的单聊消息，对应事件 `C2C_MESSAGE_CREATE`。
 
     平台可能重复推送同一条消息（`id` 相同），需要时自行去重。
@@ -206,21 +217,52 @@ class C2CMessage(_ChatMessage):
         """发送者的 openid，即 `author.user_openid`。"""
         return self.author.user_openid
 
-    async def reply(self, content: str) -> SentMessage:
-        """被动回复这条消息，`msg_id` 与 `msg_seq` 由 SDK 填写。
+    async def reply(
+        self,
+        content: str | None = None,
+        *,
+        markdown: str | Markdown | None = None,
+        keyboard: Keyboard | None = None,
+        media: Media | None = None,
+        card: Card | None = None,
+        quote: str | SentMessage | C2CMessage | None = None,
+    ) -> SentMessage:
+        """被动回复这条消息，`msg_id` 与 `msg_seq` 由 SDK 填写；参数同 `client.users.send_message()`。
 
         对应官方接口 `POST /v2/users/{user_openid}/messages`。
 
         Raises:
             APIError: 平台拒绝发送，例如回复已过期。
             NetworkError: 没有拿到平台的响应。
+            ValueError: 内容参数的组合不合法。
             RuntimeError: 消息不是 `Bot` 分发来的（没有绑定客户端），或客户端已关闭。
         """
         client = self._bound_client()
-        return await client.users.send_message(self.user_openid, content, reply_to=self)
+        return await client.users.send_message(
+            self.user_openid,
+            content,
+            markdown=markdown,
+            keyboard=keyboard,
+            media=media,
+            card=card,
+            quote=quote,
+            reply_to=self,
+        )
+
+    async def send_typing(self, *, seconds: int = 60) -> None:
+        """向发送者显示「正在输入」，作为对这条消息的被动回复；参数同 `client.users.send_typing()`。
+
+        Raises:
+            APIError: 平台拒绝。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: `seconds` 不是 1～60 之间的整数。
+            RuntimeError: 消息不是 `Bot` 分发来的（没有绑定客户端），或客户端已关闭。
+        """
+        client = self._bound_client()
+        await client.users.send_typing(self.user_openid, seconds=seconds, reply_to=self)
 
 
-class GroupMessage(_ChatMessage):
+class GroupMessage(_ChatMessage, GroupReplyTarget):
     """群里 @机器人 的消息，对应事件 `GROUP_AT_MESSAGE_CREATE`。
 
     平台可能重复推送同一条消息（`id` 相同），需要时自行去重。
@@ -254,15 +296,34 @@ class GroupMessage(_ChatMessage):
         """发送者的 openid，即 `author.member_openid`。"""
         return self.author.member_openid
 
-    async def reply(self, content: str) -> SentMessage:
-        """被动回复这条消息，`msg_id` 与 `msg_seq` 由 SDK 填写。
+    async def reply(
+        self,
+        content: str | None = None,
+        *,
+        markdown: str | Markdown | None = None,
+        keyboard: Keyboard | None = None,
+        media: Media | None = None,
+        card: Card | None = None,
+        quote: str | SentMessage | GroupMessage | None = None,
+    ) -> SentMessage:
+        """被动回复这条消息，`msg_id` 与 `msg_seq` 由 SDK 填写；参数同 `client.groups.send_message()`。
 
         对应官方接口 `POST /v2/groups/{group_openid}/messages`。
 
         Raises:
             APIError: 平台拒绝发送，例如回复已过期。
             NetworkError: 没有拿到平台的响应。
+            ValueError: 内容参数的组合不合法。
             RuntimeError: 消息不是 `Bot` 分发来的（没有绑定客户端），或客户端已关闭。
         """
         client = self._bound_client()
-        return await client.groups.send_message(self.group_openid, content, reply_to=self)
+        return await client.groups.send_message(
+            self.group_openid,
+            content,
+            markdown=markdown,
+            keyboard=keyboard,
+            media=media,
+            card=card,
+            quote=quote,
+            reply_to=self,
+        )

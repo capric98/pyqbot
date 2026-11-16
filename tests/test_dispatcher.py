@@ -39,6 +39,7 @@ class CountingPayload:
     """记录是否被解码的 payload 替身。"""
 
     t: str | None
+    id: str | None = None
     decoded: int = 0
 
     def decode_data[T](self, type_: type[T]) -> T:
@@ -46,8 +47,8 @@ class CountingPayload:
         raise AssertionError("不应解码")
 
 
-def frame(t: str, data: object) -> GatewayPayload:
-    return decode_payload(json.dumps({"op": 0, "s": 1, "t": t, "d": data}))
+def frame(t: str, data: object, event_id: str | None = None) -> GatewayPayload:
+    return decode_payload(json.dumps({"op": 0, "s": 1, "t": t, "d": data, "id": event_id}))
 
 
 def new_dispatcher() -> Dispatcher:
@@ -88,6 +89,30 @@ async def test_events_are_routed_by_name_and_bound_to_the_client(client: pyqbot.
     assert got == [Ping(n=1)]
     assert isinstance(got[0], Ping)
     assert got[0].client() is client
+
+
+@pytest.mark.parametrize("event_id", ["PING:abc", None])
+async def test_the_outer_event_id_is_bound_to_the_event(
+    client: pyqbot.Client, event_id: str | None
+) -> None:
+    dispatcher = new_dispatcher()
+    got: list[Ping] = []
+    done = asyncio.Event()
+
+    async def on_ping(event: Ping) -> None:
+        got.append(event)
+        done.set()
+
+    dispatcher.add_handler(Ping, on_ping)
+    dispatcher.dispatch(frame("PING", {"n": 1}, event_id), client)
+    async with asyncio.timeout(HANG_GUARD):
+        await done.wait()
+
+    [event] = got
+    assert event.event_id == event_id
+    assert event == Ping(n=1)
+    assert event.to_dict() == {"n": 1}
+    assert "PING:abc" not in repr(event)
 
 
 async def test_every_handler_of_an_event_is_called(client: pyqbot.Client) -> None:

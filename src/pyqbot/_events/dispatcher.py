@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from .._errors import PayloadError
 from .._gateway.intents import Intents
-from .._models.event import Event, bind_client
+from .._models.event import Event, bind_client, bind_event_id
 
 if TYPE_CHECKING:
     from .._client import Client
@@ -30,6 +30,9 @@ class DispatchPayload(Protocol):
 
     @property
     def t(self) -> str | None: ...
+
+    @property
+    def id(self) -> str | None: ...
 
     def decode_data[T](self, type_: type[T]) -> T: ...
 
@@ -86,6 +89,7 @@ class Dispatcher:
             _logger.warning("丢弃无法解码的事件：%s", exc)
             return
         bind_client(event, client)
+        bind_event_id(event, payload.id)
         for handler in route.handlers:
             task = asyncio.create_task(
                 self._run(payload.t, handler, event),

@@ -13,7 +13,14 @@ import pytest
 import pyqbot
 from pyqbot._errors import PayloadError
 from pyqbot._gateway.payload import GatewayPayload, decode_payload
-from pyqbot._models.event import Event, ReceivedMessage, bind_client, next_msg_seq
+from pyqbot._models.event import (
+    Event,
+    ReceivedMessage,
+    bind_client,
+    bind_event_id,
+    next_msg_seq,
+)
+from pyqbot._models.message import MessageScene
 
 SENT = {"id": "ROBOT1.0_sent", "timestamp": "2026-07-21T10:30:00+08:00"}
 UTC8 = timezone(timedelta(hours=8))
@@ -108,6 +115,24 @@ def c2c(message_id: str = "m", openid: str = "u") -> pyqbot.C2CMessage:
     return pyqbot.C2CMessage(id=message_id, author=pyqbot.C2CUser(user_openid=openid))
 
 
+# 仅测试用的可回复事件：真正的 FRIEND_ADD、GROUP_ADD_ROBOT 等由各自的模块实现。
+class FriendAdded(pyqbot.C2CReplyTarget):
+    openid: str = ""
+
+
+class RobotAdded(pyqbot.GroupReplyTarget):
+    group_openid: str = ""
+
+
+class Clicked(pyqbot.C2CReplyTarget, pyqbot.GroupReplyTarget):
+    """INTERACTION_CREATE 那样单聊、群聊都会发生的事件。"""
+
+
+def with_event_id[E: Event](event: E, event_id: str | None) -> E:
+    bind_event_id(event, event_id)
+    return event
+
+
 # ---- 基类 ----
 
 
@@ -138,6 +163,77 @@ async def test_failed_reply_still_uses_up_its_msg_seq() -> None:
         await client.users.send_message("u", "b", reply_to=message)
 
     assert platform.replies() == [("m", 1), ("m", 2)]
+
+
+async def test_events_reply_with_their_event_id_and_count_msg_seq_per_object() -> None:
+    platform = Platform()
+    friend = with_event_id(FriendAdded(openid="u"), "FRIEND_ADD:1")
+    robot = with_event_id(RobotAdded(group_openid="g"), "GROUP_ADD_ROBOT:2")
+    clicked = with_event_id(Clicked(), "INTERACTION_CREATE:3")
+
+    async with client_for(platform) as client:
+        await client.users.send_message("u", "a", reply_to=friend)
+        await client.users.send_message("u", "b", reply_to=friend)
+        await client.groups.send_message("g", "c", reply_to=robot)
+        await client.users.send_message("u", "d", reply_to=clicked)
+        await client.groups.send_message("g", "e", reply_to=clicked)
+
+    assert [(body.get("event_id"), body.get("msg_seq")) for _, body in platform.requests] == [
+        ("FRIEND_ADD:1", 1),
+        ("FRIEND_ADD:1", 2),
+        ("GROUP_ADD_ROBOT:2", 1),
+        ("INTERACTION_CREATE:3", 1),
+        ("INTERACTION_CREATE:3", 2),
+    ]
+    assert all("msg_id" not in body for _, body in platform.requests)
+
+
+async def test_failed_event_reply_still_uses_up_its_msg_seq() -> None:
+    platform = Platform()
+    friend = with_event_id(FriendAdded(), "FRIEND_ADD:1")
+
+    async with client_for(platform) as client:
+        platform.fail = True
+        with pytest.raises(pyqbot.APIError):
+            await client.users.send_message("u", "a", reply_to=friend)
+        platform.fail = False
+        await client.users.send_message("u", "b", reply_to=friend)
+
+    assert [body["msg_seq"] for _, body in platform.requests] == [1, 2]
+
+
+async def test_event_without_an_event_id_cannot_be_replied_to() -> None:
+    platform = Platform()
+    friend = FriendAdded()
+
+    async with client_for(platform) as client:
+        with pytest.raises(ValueError, match="FriendAdded 没有事件 ID"):
+            await client.users.send_message("u", "a", reply_to=friend)
+        bind_event_id(friend, "FRIEND_ADD:1")
+        await client.users.send_message("u", "b", reply_to=friend)
+
+    # 没发出去的那次不占用 msg_seq。
+    assert platform.requests[0][1]["msg_seq"] == 1
+
+
+def test_event_id_is_hidden_from_the_fields() -> None:
+    event = Ping(content="hi")
+    assert event.event_id is None
+
+    bind_event_id(event, "PING:1")
+
+    assert event.event_id == "PING:1"
+    assert event == Ping(content="hi")
+    assert event.to_dict() == {"content": "hi"}
+    assert "PING:1" not in repr(event)
+
+
+def test_reply_targets_say_which_scene_they_belong_to() -> None:
+    assert isinstance(c2c(), pyqbot.C2CReplyTarget)
+    assert not isinstance(c2c(), pyqbot.GroupReplyTarget)
+    message = pyqbot.GroupMessage(id="m", group_openid="g")
+    assert isinstance(message, pyqbot.GroupReplyTarget)
+    assert not isinstance(message, pyqbot.C2CReplyTarget)
 
 
 def test_msg_seq_counter_is_not_a_field() -> None:
@@ -230,6 +326,26 @@ def test_group_message_from_the_official_examples_decodes() -> None:
     )
     assert quote.message_type == pyqbot.ReceivedMessageType.QUOTE
     assert quote.msg_elements[0].content == "=== 消息 1 ===\n[消息内容] 今天的学习计划已完成"
+
+
+def test_msg_idx_is_read_from_the_message_scene() -> None:
+    group = dispatch_of("GROUP_AT_MESSAGE_CREATE", GROUP_TEXT).decode_data(pyqbot.GroupMessage)
+
+    assert c2c_sample().decode_data(pyqbot.C2CMessage).msg_idx == "REFIDX_fake"
+    assert group.msg_idx == "REFIDX_xxxxxxxxxxxxxxx=="
+    assert c2c().msg_idx is None
+    scene = pyqbot.C2CMessage(
+        id="m",
+        author=pyqbot.C2CUser(user_openid="u"),
+        message_scene=MessageScene(ext=("msg_idx", "ref_msg_idx=REFIDX_old", "msg_idx=a=b")),
+    )
+    assert scene.msg_idx == "a=b"
+    no_index = pyqbot.C2CMessage(
+        id="m",
+        author=pyqbot.C2CUser(user_openid="u"),
+        message_scene=MessageScene(ext=("ref_msg_idx=REFIDX_old",)),
+    )
+    assert no_index.msg_idx is None
 
 
 def test_c2c_ark_and_quote_examples_decode() -> None:
@@ -377,6 +493,67 @@ async def test_group_reply_answers_the_group() -> None:
             {"msg_type": 0, "content": "多云", "msg_id": "ROBOT1.0_x", "msg_seq": 2},
         ),
     ]
+
+
+async def test_reply_accepts_the_same_content_as_send_message() -> None:
+    platform = Platform()
+    private = c2c_sample().decode_data(pyqbot.C2CMessage)
+    group = dispatch_of("GROUP_AT_MESSAGE_CREATE", GROUP_TEXT).decode_data(pyqbot.GroupMessage)
+    keyboard = pyqbot.Keyboard(id="kb")
+    card = pyqbot.Card(title="t", description="d", url="https://a", pic_url="https://b")
+
+    async with client_for(platform) as client:
+        bind_client(private, client)
+        bind_client(group, client)
+        await private.reply(markdown="**hi**", keyboard=keyboard, quote=private)
+        await private.reply("图", media=pyqbot.Media(file_info="F"))
+        await group.reply(card=card, quote=group)
+
+    assert [body for _, body in platform.requests] == [
+        {
+            "msg_type": 2,
+            "markdown": {"content": "**hi**"},
+            "keyboard": {"id": "kb"},
+            "message_reference": {"message_id": "REFIDX_fake"},
+            "msg_id": "ROBOT1.0_fake-message-id",
+            "msg_seq": 1,
+        },
+        {
+            "msg_type": 7,
+            "content": "图",
+            "media": {"file_info": "F"},
+            "msg_id": "ROBOT1.0_fake-message-id",
+            "msg_seq": 2,
+        },
+        {
+            "msg_type": 8,
+            "card": {"type": "tuwen", "content": card.to_dict()},
+            "message_reference": {"message_id": "REFIDX_xxxxxxxxxxxxxxx=="},
+            "msg_id": "ROBOT1.0_x",
+            "msg_seq": 1,
+        },
+    ]
+
+
+async def test_send_typing_on_a_message_is_a_passive_reply() -> None:
+    platform = Platform()
+    message = c2c("m", "u")
+
+    async with client_for(platform) as client:
+        bind_client(message, client)
+        await message.send_typing(seconds=5)
+        await message.reply("好了")
+
+    assert platform.requests[0] == (
+        "/v2/users/u/messages",
+        {
+            "msg_type": 6,
+            "input_notify": {"input_type": 1, "input_second": 5},
+            "msg_id": "m",
+            "msg_seq": 1,
+        },
+    )
+    assert platform.replies()[1] == ("m", 2)
 
 
 @pytest.mark.parametrize(
