@@ -9,8 +9,8 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-def rfc3339(value: datetime | timedelta, name: str) -> str:
-    """把时刻或从现在起算的时长编码成 UTC 的 RFC3339 字符串，不足一秒的部分向上取整。
+def deadline(value: datetime | timedelta, name: str) -> datetime:
+    """把时刻或从现在起算的时长换成 UTC 时刻，不足一秒的部分向上取整。
 
     Raises:
         ValueError: `datetime` 没有时区，或 `timedelta` 不是正数。
@@ -27,7 +27,17 @@ def rfc3339(value: datetime | timedelta, name: str) -> str:
     if value.microsecond:
         # 截止时刻晚不到一秒无害，截掉小数则可能早于现在。
         value = value.replace(microsecond=0) + timedelta(seconds=1)
-    return value.isoformat(timespec="seconds")
+    return value
+
+
+def rfc3339(value: datetime | timedelta, name: str) -> str:
+    """编码成 UTC 的 RFC3339 字符串，规则同 `deadline()`。"""
+    return deadline(value, name).isoformat(timespec="seconds")
+
+
+def unix_seconds(value: datetime | timedelta, name: str) -> str:
+    """编码成 Unix 秒的十进制字符串，规则同 `deadline()`。"""
+    return str(int(deadline(value, name).timestamp()))
 
 
 def str_list(value: str | Iterable[str]) -> list[str]:

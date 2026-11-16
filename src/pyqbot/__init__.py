@@ -91,6 +91,15 @@ from ._models.guild import (
     PrivateType,
     SpeakPermission,
 )
+from ._models.guild_manage import (
+    APIIdentify,
+    APIPermission,
+    APIPermissionDemand,
+    ChannelPermission,
+    GuildRoles,
+    MessageSetting,
+    RecallDays,
+)
 from ._models.guild_message import (
     ChannelAnyMessage,
     ChannelMessage,
@@ -182,6 +191,9 @@ __version__ = version("pyqbot")
 
 __all__ = [
     "APIError",
+    "APIIdentify",
+    "APIPermission",
+    "APIPermissionDemand",
     "AudioFinish",
     "AudioOffMic",
     "AudioOnMic",
@@ -214,6 +226,7 @@ __all__ = [
     "ChannelCreate",
     "ChannelDelete",
     "ChannelMessage",
+    "ChannelPermission",
     "ChannelReplyTarget",
     "ChannelSubType",
     "ChannelType",
@@ -279,6 +292,7 @@ __all__ = [
     "GuildMemberUpdate",
     "GuildMessage",
     "GuildRole",
+    "GuildRoles",
     "GuildUpdate",
     "GuildUser",
     "Intents",
@@ -309,6 +323,7 @@ __all__ = [
     "MessageDelete",
     "MessageReactionAdd",
     "MessageReactionRemove",
+    "MessageSetting",
     "MuteRecurringRule",
     "MuteScheduleRule",
     "MutedMember",
@@ -333,6 +348,7 @@ __all__ = [
     "QQBotError",
     "ReactionTarget",
     "ReactionTargetType",
+    "RecallDays",
     "ReceivedMessageType",
     "RecvMsgSetting",
     "SentMessage",
