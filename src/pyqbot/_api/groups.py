@@ -170,12 +170,12 @@ class Groups:
     async def get(self, group_openid: str) -> GroupInfo:
         """获取群的基本信息：名称、简介、分类、标签、人数。
 
-        仅白名单机器人可用，否则平台以 `err_code` 11253 拒绝。
+        文档的错误码表说仅白名单机器人可用；实测没有成员列表权限的机器人也能调用。
 
         对应官方接口 `GET /v2/groups/{group_openid}/info`。
 
         Raises:
-            APIError: 平台拒绝，例如没有接口权限（11253）。
+            APIError: 平台拒绝，例如没有接口权限（40012010）。
             NetworkError: 没有拿到平台的响应。
             ValueError: `group_openid` 为空。
             RuntimeError: 客户端已关闭。
@@ -185,12 +185,12 @@ class Groups:
     async def get_bot_state(self, group_openid: str) -> GroupBotState:
         """获取机器人在群里的状态：群内角色、入群时间、接收哪些消息等。
 
-        仅白名单机器人可用，否则平台以 `err_code` 11253 拒绝。
+        文档的错误码表说仅白名单机器人可用；实测没有成员列表权限的机器人也能调用。
 
         对应官方接口 `GET /v2/groups/{group_openid}/bot_state`。
 
         Raises:
-            APIError: 平台拒绝，例如没有接口权限（11253）。
+            APIError: 平台拒绝，例如没有接口权限（40012010）。
             NetworkError: 没有拿到平台的响应。
             ValueError: `group_openid` 为空。
             RuntimeError: 客户端已关闭。
@@ -201,12 +201,12 @@ class Groups:
     def iter_members(self, group_openid: str) -> AsyncIterator[GroupMember]:
         """依次列出群成员。
 
-        内邀能力，且仅白名单机器人可用，否则平台以 `err_code` 11253 拒绝。
+        内邀能力，且仅白名单机器人可用，否则平台拒绝（实测 `err_code` 40012010，文档写 11253）。
 
         对应官方接口 `GET /v2/groups/{group_openid}/members`。
 
         Raises:
-            APIError: 平台拒绝，例如没有接口权限（11253）。
+            APIError: 平台拒绝，例如没有接口权限（40012010）。
             NetworkError: 没有拿到平台的响应。
             ValueError: `group_openid` 为空。
             RuntimeError: 客户端已关闭。
@@ -229,12 +229,12 @@ class Groups:
     async def get_member(self, group_openid: str, member_openid: str) -> GroupMember:
         """获取一个群成员的信息。
 
-        内邀能力，且仅白名单机器人可用，否则平台以 `err_code` 11253 拒绝。
+        内邀能力，且仅白名单机器人可用，否则平台拒绝（实测 `err_code` 40012010，文档写 11253）。
 
         对应官方接口 `GET /v2/groups/{group_openid}/members/{member_openid}`。
 
         Raises:
-            APIError: 平台拒绝，例如没有接口权限（11253）。
+            APIError: 平台拒绝，例如没有接口权限（40012010）。
             NetworkError: 没有拿到平台的响应。
             ValueError: `group_openid` 或 `member_openid` 为空。
             RuntimeError: 客户端已关闭。
@@ -251,7 +251,7 @@ class Groups:
     ) -> None:
         """把成员移出群，可以同时拉进群黑名单。
 
-        内邀能力，且仅白名单机器人可用，否则平台以 `err_code` 11253 拒绝。
+        内邀能力，且仅白名单机器人可用，否则平台拒绝（实测 `err_code` 40012010，文档写 11253）。
 
         对应官方接口 `POST /v2/groups/{group_openid}/batch_remove_members`。
 
@@ -262,7 +262,7 @@ class Groups:
 
         Raises:
             PartialFailureError: 成员已移出，但有的没能加入黑名单（`failed_ids`）。
-            APIError: 平台拒绝，例如没有接口权限（11253），或 `remove_members_result` 不是 `success`。
+            APIError: 平台拒绝，例如没有接口权限（40012010），或 `remove_members_result` 不是 `success`。
             NetworkError: 没有拿到平台的响应。
             ValueError: `group_openid` 为空。
             RuntimeError: 客户端已关闭。
@@ -287,12 +287,12 @@ class Groups:
     def iter_blacklist(self, group_openid: str) -> AsyncIterator[BlacklistedUser]:
         """依次列出群黑名单里的用户。
 
-        内邀能力，且仅白名单机器人可用，否则平台以 `err_code` 11253 拒绝。
+        内邀能力，且仅白名单机器人可用，否则平台拒绝（实测 `err_code` 40012010，文档写 11253）。
 
         对应官方接口 `GET /v2/groups/{group_openid}/member_blacklist`。
 
         Raises:
-            APIError: 平台拒绝，例如没有接口权限（11253）。
+            APIError: 平台拒绝，例如没有接口权限（40012010）。
             NetworkError: 没有拿到平台的响应。
             ValueError: `group_openid` 为空。
             RuntimeError: 客户端已关闭。
@@ -311,7 +311,7 @@ class Groups:
     ) -> None:
         """把用户加入群黑名单。只对已不在群里的用户有效，在群里的先用 `remove_members()`。
 
-        内邀能力，且仅白名单机器人可用，否则平台以 `err_code` 11253 拒绝。
+        内邀能力，且仅白名单机器人可用，否则平台拒绝（实测 `err_code` 40012010，文档写 11253）。
 
         对应官方接口 `POST /v2/groups/{group_openid}/member_blacklist`（`op` 为 `add`）。
 
@@ -321,7 +321,7 @@ class Groups:
 
         Raises:
             PartialFailureError: 有的用户没能加入（`failed_ids`），例如他还在群里；其余已加入。
-            APIError: 平台拒绝，例如没有接口权限（11253）。
+            APIError: 平台拒绝，例如没有接口权限（40012010）。
             NetworkError: 没有拿到平台的响应。
             ValueError: `group_openid` 为空。
             RuntimeError: 客户端已关闭。
@@ -333,7 +333,7 @@ class Groups:
     ) -> None:
         """把用户移出群黑名单。
 
-        内邀能力，且仅白名单机器人可用，否则平台以 `err_code` 11253 拒绝。
+        内邀能力，且仅白名单机器人可用，否则平台拒绝（实测 `err_code` 40012010，文档写 11253）。
 
         对应官方接口 `POST /v2/groups/{group_openid}/member_blacklist`（`op` 为 `del`）。
 
@@ -343,7 +343,7 @@ class Groups:
 
         Raises:
             PartialFailureError: 有的用户没能移出（`failed_ids`），其余已移出。
-            APIError: 平台拒绝，例如没有接口权限（11253）。
+            APIError: 平台拒绝，例如没有接口权限（40012010）。
             NetworkError: 没有拿到平台的响应。
             ValueError: `group_openid` 为空。
             RuntimeError: 客户端已关闭。
@@ -372,7 +372,7 @@ class Groups:
         对应官方接口 `GET /v2/groups/{group_openid}/restrict_chat_setting`。
 
         Raises:
-            APIError: 平台拒绝，例如机器人不是管理员。
+            APIError: 平台拒绝，例如机器人不是管理员（`err_code` 40011030）。
             NetworkError: 没有拿到平台的响应。
             ValueError: `group_openid` 为空。
             RuntimeError: 客户端已关闭。
@@ -396,7 +396,7 @@ class Groups:
             until: 禁言到什么时候：带时区的 `datetime`，或从现在起算的 `timedelta`。
 
         Raises:
-            APIError: 平台拒绝，例如机器人不是管理员，或对方是管理员。
+            APIError: 平台拒绝，例如机器人不是管理员（`err_code` 40011030），或对方是管理员。
             NetworkError: 没有拿到平台的响应。
             ValueError: `group_openid` 为空，`until` 是没有时区的 `datetime` 或不是正数的 `timedelta`。
             RuntimeError: 客户端已关闭。
@@ -424,7 +424,7 @@ class Groups:
             until: 新的到期时间，写法同 `mute_members()`。
 
         Raises:
-            APIError: 平台拒绝，例如机器人不是管理员，或成员没在禁言中（是否如此尚待实测）。
+            APIError: 平台拒绝，例如机器人不是管理员（`err_code` 40011030），或成员没在禁言中（是否如此尚待实测）。
             NetworkError: 没有拿到平台的响应。
             ValueError: 同 `mute_members()`。
             RuntimeError: 客户端已关闭。
@@ -444,7 +444,7 @@ class Groups:
             member_openids: 一个或多个成员的 `member_openid`，单次最多 20 个（超出由平台拒绝）。
 
         Raises:
-            APIError: 平台拒绝，例如机器人不是管理员。
+            APIError: 平台拒绝，例如机器人不是管理员（`err_code` 40011030）。
             NetworkError: 没有拿到平台的响应。
             ValueError: `group_openid` 为空。
             RuntimeError: 客户端已关闭。
@@ -470,7 +470,7 @@ class Groups:
         对应官方接口 `GET /v2/groups/{group_openid}/join_request_list`。
 
         Raises:
-            APIError: 平台拒绝，例如机器人不是管理员。
+            APIError: 平台拒绝，例如机器人不是管理员（`err_code` 40011030）。
             NetworkError: 没有拿到平台的响应。
             ValueError: `group_openid` 为空。
             RuntimeError: 客户端已关闭。
@@ -507,7 +507,7 @@ class Groups:
             join_request_id: 申请 ID（事件或 `iter_join_requests()` 里有），文档标为可选。
 
         Raises:
-            APIError: 平台拒绝，例如机器人不是管理员，或申请已处理。
+            APIError: 平台拒绝，例如机器人不是管理员（`err_code` 40011030），或申请已处理。
             NetworkError: 没有拿到平台的响应。
             ValueError: `group_openid` 或 `member_openid` 为空。
             RuntimeError: 客户端已关闭。
@@ -540,7 +540,7 @@ class Groups:
             add_to_blacklist: 同时加入群黑名单。
 
         Raises:
-            APIError: 平台拒绝，例如机器人不是管理员，或申请已处理。
+            APIError: 平台拒绝，例如机器人不是管理员（`err_code` 40011030），或申请已处理。
             NetworkError: 没有拿到平台的响应。
             ValueError: `group_openid` 或 `member_openid` 为空。
             RuntimeError: 客户端已关闭。

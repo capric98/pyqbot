@@ -340,7 +340,10 @@ async def test_group_at_message(
             "author_keys": sorted(author),
             "member_role": message.author.member_role,
             "message_type": message.message_type,
-            "message_scene": message.message_scene.to_dict() if message.message_scene else None,
+            # ext 里有 auth_token，只记键名
+            "scene_ext_keys": [item.split("=")[0] for item in message.message_scene.ext]
+            if message.message_scene
+            else None,
         }
         with GROUP_FILE.open("a", encoding="utf-8") as file:
             file.write(f"# @ 机器人的成员：{message.author.member_openid}\n")

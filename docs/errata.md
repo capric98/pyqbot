@@ -78,19 +78,6 @@
 - **当前做法**：SDK 不去重，同一条消息重复推送时处理函数会被调用多次；`message_scene.ext` 原样提供（含 `msg_idx`）。
 - **怎么测**：观察重复推送时 `id` 与 `msg_idx` 是否都相同，再决定 SDK 是否按 `id` 去重。
 
-### 群 @ 消息的 `content` 带首尾空格
-
-- **位置**：`autogen/event/group_at_message_create.md`。
-- **含糊**：说 `content` 「已去除@机器人的前缀」，但三个示例都带首尾空格（如 `" /今日天气 "`、`" "`）。
-- **当前做法**：原样保留，不替用户 `strip()`，在 `GroupAtMessage` 的 docstring 里提示。
-- **怎么测**：在群里 @机器人 发 `/ping`，看 `content` 是否为 `" /ping"` 之类。
-
-### 消息事件的 `author`：群聊未实测
-
-- **位置**：同上两页的 `User` 结构。
-- **含糊**：单聊的实测结果多一个 `avatar`（已确认，见下）；群聊 `author` 是否同样有 `avatar`、`member_role` 的取值是否只有三种，都没测到。`message_type` 的 101「并行消息」也没有说明含义。
-- **当前做法**：`avatar` 两边都建模为可选；`member_role` 是 `GroupMemberRole`（`OpenStrEnum`，收录 member、admin、owner），未知取值得到伪成员、原值保留。
-
 ### `msg_type` 的取值各页不一致
 
 - **位置**：单聊发消息页（0/2/6/7/8）、群聊发消息页（0/2/7/8）、`server-inter/message/overview.md`（0/2/7）、`server-inter/message/type/overview.md`（表格 0/2/7，表下又说「发送侧只有 msg_type=0/2/3/7 四种」）。
@@ -171,6 +158,7 @@
 - **位置**：`autogen/event/group_message_create.md`；`group_at_message_create.md`。
 - **含糊**：开启「接收所有消息」后，群里 @机器人 的消息是只推 `GROUP_MESSAGE_CREATE`，还是两个事件都推，没有说明。
 - **当前做法**：两个事件各走各的处理函数（`on_group_message`、`on_group_at_message`），SDK 不合并、不去重。
+- **已知**：机器人没有开接收全部消息时（`bot_state` 的 `recv_msg_setting` 是空串），@ 消息只推 `GROUP_AT_MESSAGE_CREATE`（2026-11-16，`test_group_at_message`）。
 - **怎么测**：开启全量模式的群里 @机器人 发一条消息，看收到几条事件、`id` 是否相同。要群与权限配置，须单独征得同意。
 
 ### 富媒体：各页列出的支持格式不一致
@@ -417,13 +405,6 @@
 - **矛盾**：`cursor`、`limit` 列在 GET 的「请求体」里，成员列表的示例却写成查询串 `?cursor=`；禁言查询、策略列表的 GET 与策略删除的 DELETE 示例各带了一个 `{}` 请求体。
 - **当前做法**：`cursor`、`limit` 一律作为查询参数，GET 与 DELETE 不发请求体。翻页时 `limit` 取文档给的最大值（黑名单 100，入群申请与策略 50；成员列表没有 `limit`）。
 - **怎么测**：实测用例 `test_iter_members_and_get_member` 在超过 30 人的群里翻页，成员不重复、总数与群人数一致即确认 `cursor` 在查询串里生效；`test_get_mute_settings` 成功即确认 GET 不需要请求体。
-
-### 机器人群内状态：示例 JSON 不完整
-
-- **位置**：`autogen/api/v2_groups_group_openid_bot_state.get.md` 的响应示例。
-- **含糊**：最后一行是 `"member_role": "member`，少了右引号，不是合法的 JSON；其余字段与字段表一致。
-- **当前做法**：按字段表解码，所有字段都可缺省，`recv_msg_setting`、`member_role` 是可容忍未知取值的枚举。
-- **怎么测**：实测用例 `test_get_bot_state` 记下真实响应。
 
 ### 禁言：`add` 对已禁言的成员，`del` 的 `mute_expire_at`
 
@@ -689,3 +670,26 @@
   - `created_at`、`updated_at` 是 RFC3339 字符串。
 - **客户端**：在单聊输入框里输入 `/` 弹出「快捷指令」面板，先后看到「pyqbot」「pyqbot2」，删除后面板消失；修改后要删掉 `/` 重新输入才刷新（重测确认）。
 - **实现**：不变；`panels.set()` 的 docstring 改为不传 `remark` 会清空备注。
+
+### 群：机器人入群与 @ 消息
+
+- **位置**：`autogen/event/group_add_robot.md`、`group_at_message_create.md` 及其 `User` 结构。
+- **结论**（`test_group_add_robot`、`test_group_at_message`，用户提供的测试群）：
+  - `GROUP_ADD_ROBOT` 的 `d` 只有 `group_openid`、`op_member_openid`、`timestamp`，外层 `id` 形如 `GROUP_ADD_ROBOT:<uuid>`；用它作 `event_id` 在群里被动回复被接受。
+  - @ 消息的 `content` 只在开头留一个空格：`@机器人 /ping` 得到 `" /ping"`，结尾没有空格（官方示例首尾都有）。
+  - `author` 有 `avatar`、`bot`、`id`（与 `member_openid` 相同）、`member_openid`、`member_role`、`union_openid`（空串）、`username`（QQ 昵称），另有文档没有的 `member_nickname`（群名片）；没有 `union_user_account`。群主之外的管理员发消息时 `member_role` 是 `admin`。
+  - `d` 里另有文档没有的 `group_id`，与 `group_openid` 相同。
+  - `message_scene.ext` 有 `msg_idx=REFIDX_...` 与 `auth_token=...` 两项。
+  - 外层 `id` 形如 `GROUP_AT_MESSAGE_CREATE:<小写字母与数字>`，`d.id` 是 `ROBOT1.0_` 开头的消息 ID；用 `msg_id`（`d.id`）被动回复被接受。
+  - `message_type` 101 没有见到。
+- **实现**：`GroupMessageMember` 新增 `member_nickname`；`content` 仍原样保留，docstring 写明开头的空格。`group_id` 不收录。fixture：`gateway_group_add_robot.json`、`gateway_group_at_message_create.json`（`auth_token` 已替换）。
+
+### 群管理：权限不足时的错误码，机器人状态的真实响应
+
+- **位置**：群信息、成员、黑名单等接口页的错误码表写 11253「应用无接口访问权限」（「仅白名单机器人可用」）；禁言与入群申请页说要群管理员。
+- **结论**（`tests/live/test_live_groups.py`，机器人是普通成员时）：
+  - 群信息、机器人状态、入群自动审批策略列表可以调用。
+  - 成员列表与黑名单报 `err_code` 40012010，文案同样是「应用无接口访问权限」：40012010 是现行错误码，11253 是旧式的。
+  - 禁言设置与入群申请列表报 40011030「机器人不是群管理员」。
+  - `bot_state` 的响应是合法的 JSON（文档示例少了引号），字段与字段表一致：`allow_proactive_msg` 为 false，`recv_msg_setting` 是空串（不在文档列的三个取值里），`member_role` 是 `member`，`joined_at` 是 RFC3339。
+- **实现**：错误码写进各接口的 docstring；`recv_msg_setting` 的空串由 `RecvMsgSetting` 原样保留。

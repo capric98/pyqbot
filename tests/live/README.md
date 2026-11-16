@@ -85,7 +85,7 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 - `test_live_events.py::test_group_add_robot`（`LIVE_GATEWAY`）：拉机器人进群，群里收到「pyqbot：已加入，用于 SDK 实测」。
 - `test_live_events.py::test_group_at_message`（`LIVE_GATEWAY`）：群里 @机器人 发「/ping」，收到「pyqbot：pong」；日志里看 `content` 是否带空格、有没有另推全量消息。
 
-只读的只要 `TEST_GROUP_OPENID`，多数还要白名单或管理员身份（否则 `err_code` 11253）：
+只读的只要 `TEST_GROUP_OPENID`，成员与黑名单要白名单（否则 `err_code` 40012010），禁言设置与入群申请要机器人是管理员（否则 40011030）：
 
 - `test_live_groups.py::test_get_group`：群名、人数与客户端一致。
 - `test_live_groups.py::test_get_bot_state`：`member_role` 与机器人在群里的身份一致。
