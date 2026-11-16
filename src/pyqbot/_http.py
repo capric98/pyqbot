@@ -142,7 +142,7 @@ def _parse_response[T](
             raise fail(f"无法解析响应（HTTP {status_code}）") from safe_cause(exc, *secrets)
         trace_id = trace_id or body.trace_id
         # 201、202 也是 2xx，但文档说它们带失败结构，靠错误码识别。
-        failed, err_code = find_error_code(body.code, body.err_code)
+        failed, err_code = find_error_code(body.err_code, body.code)
         if failed or not response.is_success:
             raise fail(body.message or f"HTTP {status_code}", err_code)
     elif not response.is_success:

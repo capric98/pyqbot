@@ -173,7 +173,7 @@ def _parse_response(response: httpx2.Response, secrets: Iterable[str | None]) ->
     secrets = (*secrets, body.access_token)
     trace_id = redact_optional(header_trace_id or body.trace_id, *secrets)
     # 文档要求优先依据 code 判断：业务失败时 HTTP 状态码仍是 200。
-    failed, err_code = find_error_code(body.code, body.err_code)
+    failed, err_code = find_error_code(body.err_code, body.code)
     if failed or not response.is_success:
         reason = body.message or f"HTTP {status_code}"
         raise APIError(

@@ -45,6 +45,24 @@ async def test_sent_message_response_decodes() -> None:
     assert sent.ext_info.ref_idx == "REFIDX_fake"
 
 
+async def test_expired_token_response_reports_the_err_code_not_the_legacy_code() -> None:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path.startswith("/app/"):
+            return httpx2.Response(200, content=sample("token_success.json"))
+        return httpx2.Response(401, content=sample("api_token_expired.json"))
+
+    async with (
+        httpx2.AsyncClient(transport=httpx2.MockTransport(handler)) as http_client,
+        pyqbot.Client("app-id", "app-secret", http_client=http_client) as client,
+    ):
+        with pytest.raises(pyqbot.APIError) as caught:
+            await client.users.send_message("0123456789ABCDEF0123456789ABCDEF", "你好")
+
+    error = caught.value
+    assert (error.status_code, error.err_code) == (401, 40011027)
+    assert error.trace_id == "0123456789abcdef0123456789abcdef"
+
+
 async def test_token_response_with_string_expires_in_is_accepted() -> None:
     assert await get_token_from("token_success.json") == "fake-access-token"
 

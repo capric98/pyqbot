@@ -4,14 +4,6 @@
 
 ## 待实测
 
-### 获取 token：60 秒换发窗口的边界
-
-- **位置**：`dev-prepare/access-token.md`「凭证有效期与刷新」。
-- **含糊**：「接近过期时间 60 秒内」获取会得到新 token、「老的在这个 60 秒内仍然有效」。没有说明：边界是否包含 60 秒整；旧 token 的有效期是延长到新 token 签发后 60 秒，还是仍到它原本的过期时刻。
-- **已知**：`expires_in` 是剩余秒数，不是固定的 7200（2026-11-16 实测：签发约 3 分钟后再取，同一个 token 返回 `"7008"`）。
-- **当前做法**：剩余 50 秒时刷新；刷新失败时，旧 token 在按原有效期估算的过期时刻之前继续使用。理由见 `_credentials.py` 的模块说明。
-- **怎么测**：`tests/live/test_live.py::test_token_refresh_window`，要跑到当前 token 过期为止。
-
 ### 获取 token：平台自身出错时的错误字段
 
 - **位置**：`dev-prepare/access-token.md`「失败响应」；`dev-prepare/api-call-guide.md` 的通用失败结构。
@@ -152,3 +144,17 @@
 - **位置**：`autogen/api/v2_users_user_openid_messages.post.md`。
 - **结论**：被动回复（`msg_id` 取自收到的消息，`msg_seq` 为 1）被接受，HTTP 200，响应是 `{"id": "ROBOT1.0_...", "timestamp": "2026-11-16T12:35:16+08:00", "ext_info": {"ref_idx": "REFIDX_..."}}`。用的是 `tests/live/test_live.py::test_bot_replies_to_a_c2c_message`：真实的 `Bot` 连上网关，收到单聊消息后回复。
 - **实现**：`SentMessage`。fixture：`message_sent.json`。
+
+### 获取 token：换发窗口与旧 token 的有效期
+
+- **位置**：`dev-prepare/access-token.md`「凭证有效期与刷新」。
+- **结论**（`tests/live/test_live.py::test_token_refresh_window`，跑满一个 token 的有效期）：
+  - `expires_in` 是剩余秒数。同一个 token 剩余 63 秒时再取，拿回的仍是它；6.5 秒后（剩余约 56 秒）再取，拿到了新 token，`expires_in` 是满额的 `"7200"`。换发的界线就在剩余 60 秒左右。
+  - 新 token 签发后，旧 token 在约 54 秒时仍可用，约 61 秒时失效。它当时原本还剩约 56 秒，所以分不清是「到原本的过期时刻」还是「新 token 签发后 60 秒」，两者只差几秒。
+- **实现**：剩余 50 秒时刷新，落在换发窗口内；刷新失败时旧 token 在按原有效期估算的过期时刻之前继续使用，与实测一致。
+
+### token 过期后的响应：`code` 与 `err_code` 同时出现且不相同
+
+- **位置**：`dev-prepare/api-call-guide.md` 的「响应结构」与错误码表。
+- **结论**：用过期的 token 调 `GET /users/@me`，返回 HTTP 401，响应体是 `{"message": "AccessToken无效或过期", "code": 11244, "err_code": 40011027, "trace_id": "..."}`。两个错误码字段同时出现，`err_code` 是文档里现行的错误码，`code` 是旧式错误码。
+- **实现**：两个都有时，异常的 `err_code` 取响应体的 `err_code`。fixture：`api_token_expired.json`。
