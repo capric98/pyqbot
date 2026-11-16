@@ -80,7 +80,7 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 - `test_live_events.py::test_interaction_ack_threshold`：四个按钮分别在 0、0.3、0.6、1 秒后回应，看哪些变成「已点」（实测约 1 秒为界）。
 - `test_live.py::test_resume_replays_backlog`：先发一条多图单聊，断开后 30 秒内再发两条文字，看 Resume 补发与心跳的先后。
 - `test_live_events.py::test_c2c_msg_reject_then_receive`：资料卡里关闭再打开主动消息；平台实际推的是授权互动，停手 15 秒后收到「pyqbot：授权已变更」。
-- `test_live_events.py::test_callback_button_interaction`：点「点我」，按钮不再转圈、文字变「已点」，再收到回复。
+- `test_live_events.py::test_callback_button_interaction`：点「点我」，按钮立刻变「已点」（SDK 自动回应），约 3 秒后收到回复。
 - `test_live_misc.py::test_message_upload_shortcut`：测试用户发一条单聊，收到带图的「pyqbot：upload 快捷方法」。
 
 ### 影响机器人全局配置，须单独同意

@@ -221,9 +221,9 @@ async def test_callback_button_interaction(
 ) -> None:
     """向测试用户主动发一条带回调按钮的 Markdown，让他点「点我」。
 
-    应看到：点后按钮不再转圈、文字变成「已点」（`ack()` 生效），随后收到被动回复「pyqbot：你点了
-    pyqbot-live-click-…」（每次运行的标识不同）。只认测试用户对本次按钮的点击，其它互动只记一笔。日志里看 `INTERACTION_CREATE` 的外层 `id` 与 `d.id` 是否不同、是否带
-    `INTERACTION_CREATE:` 前缀；被动回复用的是外层 `id`，被拒时把错误码记进 errata。占用一条主动消息额度。
+    处理函数不自己回应，还故意等 3 秒才回复，验证 `Bot` 默认的自动回应：应看到点后按钮立刻变成「已点」，
+    约 3 秒后收到被动回复「pyqbot：你点了 pyqbot-live-click-…」（每次运行的标识不同）。只认测试用户对本次按钮
+    的点击，其它互动只记一笔。占用一条主动消息额度。
     """
     bot = pyqbot.Bot(app_id, app_secret)
     record_event_ids(bot, monkeypatch)
@@ -247,8 +247,7 @@ async def test_callback_button_interaction(
             "chat_type": event.chat_type,
             "data_type": event.data.type,
         }
-        await event.ack()
-        outcome["acked"] = True
+        await asyncio.sleep(3)  # 回应已由 SDK 先发出；超过客户端约 1 秒的等待也不影响
         sent = await event.reply(f"pyqbot：你点了 {event.button_data}")
         outcome["sent"] = sent.id
         await bot.close()
@@ -475,7 +474,7 @@ async def test_interaction_ack_timing_and_event_ids(
     「快回应」：1 秒后回应，再回应第二次，记下错误码；然后用不带前缀的 `d.id` 作 `event_id` 被动回复一条，
     再用外层 `id` 连续被动回复两条（`msg_seq` 1、2）。测试用户应收到最多三条「pyqbot：…」回复。
     """
-    bot = pyqbot.Bot(app_id, app_secret)
+    bot = pyqbot.Bot(app_id, app_secret, auto_ack=False)  # 自己按时回应
     record_event_ids(bot, monkeypatch)
     tag = secrets.token_hex(4)
     slow, fast = f"pyqbot-slow-{tag}", f"pyqbot-fast-{tag}"
@@ -563,7 +562,7 @@ async def test_interaction_ack_threshold(
     让测试用户逐个点，告诉我们哪些变成「已点」、哪些提示失败。2026-11-16 隔 1 秒和 5 秒回应时，接口都返回成功，
     客户端却都显示「请求第三方失败」。日志里记下每个按钮从收到事件到回应完成的实际耗时。
     """
-    bot = pyqbot.Bot(app_id, app_secret)
+    bot = pyqbot.Bot(app_id, app_secret, auto_ack=False)  # 自己按时回应
     record_event_ids(bot, monkeypatch)
     tag = secrets.token_hex(4)
     delays = {f"pyqbot-ack-{tag}-{delay}": delay for delay in (0.0, 0.3, 0.6, 1.0)}
@@ -643,7 +642,7 @@ async def test_group_message_features(
     1. Markdown 加两个按钮：「回调」与「指令」（`enter=True`，文档说只在单聊直接发出）。
     2. 用 `message.upload(url=...)` 上传的图片，带文字「pyqbot：群图片」。
     3. 约 3.6 MB 的噪点图，走群的分片上传，发出 10 秒后撤回。
-    然后测试用户点「回调」：回应后用互动的 event_id 被动回复「pyqbot：群里点了回调」；再点「指令」，看是直接
+    然后测试用户点「回调」：SDK 自动回应，再用互动的 event_id 被动回复「pyqbot：群里点了回调」；再点「指令」，看是直接
     发出「/pyqbot-enter」（会推来新的 @ 消息，机器人回复「pyqbot：收到指令按钮发出的消息」）还是只填进输入框。
     """
     group = group_or_skip()
@@ -712,8 +711,7 @@ async def test_group_message_features(
             "scene": event.scene,
             "event_id_prefix": (event.event_id or "").split(":")[0],
         }
-        outcome["interaction"] = results
-        await attempt("ack", results, event.ack())
+        outcome["interaction"] = results  # 回应由 SDK 自动发出
         await attempt("reply", results, event.reply("pyqbot：群里点了回调"))
 
     await run_until_closed(bot, wait_seconds, outcome)
