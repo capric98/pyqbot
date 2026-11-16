@@ -5,6 +5,7 @@
 """
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 import msgspec
 
@@ -12,6 +13,9 @@ from .._gateway.intents import Intents
 from .._model import Model, OpenIntEnum, OpenStrEnum
 from .event import C2CReplyTarget, GroupReplyTarget, ReceivedMessage
 from .send import Card, Keyboard, Markdown, Media
+
+if TYPE_CHECKING:
+    from .._api.stream import StreamMessage
 
 
 class MessageType(OpenIntEnum):
@@ -268,6 +272,22 @@ class C2CMessage(_ChatMessage, C2CReplyTarget):
         """
         client = self._bound_client()
         await client.users.send_typing(self.user_openid, seconds=seconds, reply_to=self)
+
+    def reply_stream(self, *, markdown: bool = True) -> StreamMessage:
+        """以流式消息被动回复这条消息；参数同 `client.users.stream_message()`。
+
+        Raises:
+            RuntimeError: 消息不是 `Bot` 分发来的（没有绑定客户端）。
+
+        Example:
+            ```python
+            async with message.reply_stream() as stream:
+                async for piece in llm():
+                    await stream.append(piece)
+            ```
+        """
+        client = self._bound_client()
+        return client.users.stream_message(self.user_openid, reply_to=self, markdown=markdown)
 
 
 class GroupAnyMessage(_ChatMessage, GroupReplyTarget):

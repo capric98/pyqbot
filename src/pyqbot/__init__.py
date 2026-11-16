@@ -2,11 +2,13 @@
 
 from importlib.metadata import version
 
+from ._api.stream import StreamMessage
 from ._bot import Bot
 from ._client import Client
 from ._config import Config
 from ._errors import APIError, GatewayError, NetworkError, QQBotError
 from ._gateway.intents import Intents
+from ._models.bot import BotInfo
 from ._models.event import C2CReplyTarget, GroupReplyTarget
 from ._models.interaction import (
     AuthorizeOptScene,
@@ -18,6 +20,7 @@ from ._models.interaction import (
     InteractionScene,
     InteractionType,
 )
+from ._models.menu import CurrentMenu, Menu, MenuItem, MenuItemType, MenuSwitch, SubMenuItem
 from ._models.message import (
     C2CMessage,
     C2CUser,
@@ -48,6 +51,15 @@ from ._models.notice import (
     SubscribeOp,
     SubscribeResult,
 )
+from ._models.panel import (
+    Panel,
+    PanelDetail,
+    PanelItem,
+    PanelItemType,
+    PanelRecord,
+    PanelScope,
+    PanelTargetType,
+)
 from ._models.send import (
     Button,
     ButtonAction,
@@ -65,6 +77,7 @@ from ._models.send import (
     MarkdownParam,
     Media,
 )
+from ._models.stream import SentStreamChunk
 from ._models.upload import FileType, MediaImage
 
 __version__ = version("pyqbot")
@@ -74,6 +87,7 @@ __all__ = [
     "AuthorizeOptScene",
     "AuthorizeScope",
     "Bot",
+    "BotInfo",
     "Button",
     "ButtonAction",
     "ButtonActionType",
@@ -91,6 +105,7 @@ __all__ = [
     "ChatType",
     "Client",
     "Config",
+    "CurrentMenu",
     "FeedbackOption",
     "FileType",
     "FriendAdd",
@@ -123,11 +138,25 @@ __all__ = [
     "Media",
     "MediaImage",
     "MemberRole",
+    "Menu",
+    "MenuItem",
+    "MenuItemType",
+    "MenuSwitch",
     "MessageAttachment",
     "NetworkError",
+    "Panel",
+    "PanelDetail",
+    "PanelItem",
+    "PanelItemType",
+    "PanelRecord",
+    "PanelScope",
+    "PanelTargetType",
     "QQBotError",
     "ReceivedMessageType",
     "SentMessage",
+    "SentStreamChunk",
+    "StreamMessage",
+    "SubMenuItem",
     "SubscribeMessageStatus",
     "SubscribeOp",
     "SubscribeResult",

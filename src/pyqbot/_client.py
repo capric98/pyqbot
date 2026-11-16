@@ -8,10 +8,13 @@ import httpx2
 from ._api.groups import Groups
 from ._api.images import Images
 from ._api.interactions import Interactions
+from ._api.menu import CustomMenu
+from ._api.panels import Panels
 from ._api.users import Users
 from ._config import DEFAULT_BASE_URL, DEFAULT_TIMEOUT, Config
 from ._credentials import AccessTokenManager
 from ._http import HTTP
+from ._models.bot import BotInfo, ShareLinkResponse
 from ._models.gateway import Gateway
 from ._redact import redact
 
@@ -33,6 +36,8 @@ class Client:
         groups: 群聊接口，如 `client.groups.send_message(...)`。
         images: 素材库（Markdown 里引用的图片），如 `client.images.upload(path=...)`。
         interactions: 互动事件接口，如 `client.interactions.ack(...)`。
+        menu: 单聊的自定义菜单，如 `client.menu.set(...)`。
+        panels: 指令面板，如 `client.panels.create(...)`。
 
     Raises:
         ValueError: 凭证为空、`base_url` 不是完整的 http(s) 地址，或 `timeout` 不是正数。
@@ -73,6 +78,8 @@ class Client:
         self.groups = Groups(self._http)
         self.images = Images(self._http)
         self.interactions = Interactions(self._http)
+        self.menu = CustomMenu(self._http)
+        self.panels = Panels(self._http)
 
     @property
     def config(self) -> Config:
@@ -114,6 +121,45 @@ class Client:
         if self._closed:
             raise RuntimeError(f"{type(self).__name__} 已关闭，不能再发请求")
         return await self._access_token.get()
+
+    async def get_me(self) -> BotInfo:
+        """取机器人自身的信息：ID、名字、头像等。
+
+        对应官方接口 `GET /users/@me`。
+
+        Raises:
+            APIError: 平台拒绝或返回了无法识别的响应。
+            NetworkError: 没有拿到平台的响应。
+            RuntimeError: 已关闭。
+        """
+        return await self._http.request("GET", "/users/@me", type_=BotInfo)
+
+    async def generate_share_link(self, *, callback_data: str | None = None) -> str:
+        """生成邀请用户加机器人为好友的分享链接。
+
+        用户经这个链接添加机器人后，平台推送的 `FRIEND_ADD` 事件的 `scene_param` 就是 `callback_data`，
+        可以用来区分推广渠道。
+
+        对应官方接口 `POST /v2/generate_url_link`。
+
+        Args:
+            callback_data: 随加好友事件带回的数据，最多 32 个字符（由平台检查）。
+
+        Raises:
+            APIError: 平台拒绝。
+            NetworkError: 没有拿到平台的响应。
+            RuntimeError: 已关闭。
+
+        Example:
+            ```python
+            url = await client.generate_share_link(callback_data="from_website")
+            ```
+        """
+        body = {} if callback_data is None else {"callback_data": callback_data}
+        response = await self._http.request(
+            "POST", "/v2/generate_url_link", type_=ShareLinkResponse, json=body
+        )
+        return response.data.url
 
     def _redact_secrets(self, text: str) -> str:
         """把 `text` 里的 `app_secret` 与已知的 access_token 换成 `***`，写日志前用。"""

@@ -6,8 +6,10 @@ from .._http import HTTP, path_segment
 from .._models.event import C2CReplyTarget, reply_fields
 from .._models.message import C2CMessage, SentMessage
 from .._models.send import Card, Keyboard, Markdown, Media
+from .._models.stream import StreamContentType
 from .._models.upload import FileType
 from .message import message_body, message_path, send_message, typing_body
+from .stream import StreamMessage
 from .upload import upload_media
 
 
@@ -126,6 +128,35 @@ class Users:
         """
         base = f"/v2/users/{path_segment(openid, 'openid')}/messages"
         await self._http.request("DELETE", message_path(base, message), type_=None)
+
+    def stream_message(
+        self, openid: str, *, reply_to: C2CReplyTarget, markdown: bool = True
+    ) -> StreamMessage:
+        """开始一条流式消息：内容分多次发出，用户看到的是同一条消息逐渐变长。只有单聊支持。
+
+        流式消息只能是被动回复。这里不发请求，第一次 `append()` 时才发出第一个分片；
+        `index`、`stream_msg_id`、`msg_id` / `event_id` 与 `msg_seq` 都由 SDK 填写。
+
+        对应官方接口 `POST /v2/users/{user_openid}/stream_messages`。
+
+        Args:
+            openid: 用户的 `user_openid`。
+            reply_to: 被动回复的对象，同 `send_message()`；整条流式消息只占用它的一个 `msg_seq`。
+            markdown: 内容按 Markdown 渲染；为 `False` 时按纯文本。
+
+        Raises:
+            ValueError: `openid` 为空。
+
+        Example:
+            ```python
+            async with client.users.stream_message(openid, reply_to=message) as stream:
+                async for piece in llm():
+                    await stream.append(piece)
+            ```
+        """
+        path = f"/v2/users/{path_segment(openid, 'openid')}/stream_messages"
+        content_type = StreamContentType.MARKDOWN if markdown else StreamContentType.TEXT
+        return StreamMessage(self._http, path, reply_to, content_type)
 
     async def upload(
         self,
