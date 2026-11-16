@@ -112,6 +112,13 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
   ```
   `fetch(None)` 取第一页。`next` 为 `None`、空串或与刚用过的相同时结束；游标的类型随接口（字符串、`cookie`、偏移量等），`is_end` 之类的结束标志在 `fetch` 里换成 `next=None`，`before/after` 形式把下一页的锚点放进 `next`。要整页信息（总数等）的接口另给一个取单页的方法，不经它。
 - **网关地址**：`Client._get_gateway_url()` 调 `GET /gateway`，由 `Bot.start()` 作为 `get_url` 注入网关连接。
+- **富媒体上传**（`_api/upload.py`，单聊与群聊共用）：`client.users.upload(openid, *, path, url, data, file_name, file_type, send)`，群聊同形，返回 `Media`。协议步骤对调用方不可见。本地文件读不了（不存在、无权限、读取中被删）原样抛 `OSError`，不包装成 `QQBotError`：约定 3 针对的是平台与网络，调用方自己给的文件出错时标准库异常更符合预期，docstring 的 Raises 写明。
+  - **分派**：`path`、`url`、`data` 恰好传一个，否则抛 `ValueError`。`url` 交给平台下载；本地数据（读 `path` 或 `data`）不超过 `INLINE_LIMIT`（3 MiB，base64 后约 4 MiB，留在文档的 5M 之内）时 base64 后放进 `file_data`，更大的分片上传。`file_type` 不传就按扩展名推断（`url` 取路径部分），推不出抛 `ValueError`。`file_name` 默认取 `path` 的文件名，`data` 必须给，`url` 不能给。`srv_send_msg` 即 `send=`，总是显式发出（文档没写默认值）。
+  - **分片**：在线程里逐块读文件，算出 MD5、SHA1、`md5_10m` 后调 `upload_prepare`；按响应顶层的 `block_size` 切片（第 i 片从 `i * block_size` 起，到文件末尾为止），每片在线程里读出、算 MD5，PUT 成功后调 `upload_part_finish`（`block_size` 填这一片的实际字节数），全部完成后带 `upload_id` 调 `/files`。只有正在上传的分片在内存里，占用约为并发数 × `block_size`。预上传响应的 `block_size` 不是正整数、`parts` 的 `index` 不恰好是 0..n-1（宽容解码丢掉坏分片后会断号）时按「响应无法识别」抛 `APIError`；分片数与文件大小对不上不在本地判断，由合并接口拒绝。
+  - **并发**：`TaskGroup` + 信号量，并发数取 `upload_config.concurrency`，限制在 1～8。一片最终失败就取消其余、不再合并，抛出那个异常本身而不是异常组。
+  - **重试**：只有 PUT 与 `upload_part_finish` 重试（平台为分片下发了 `upload_config`；预上传与合并照常不重试），两者各自计时。只重试临时性失败：`NetworkError`、HTTP 5xx 或 429、`err_code` 40093001（「请重试」）。每次失败后等 `retry_delay` 秒再试；等完会超过从这一步首次尝试算起的 `retry_timeout` 秒就不再重试，抛出最后一次的异常。其它失败（如对象存储 403 签名失效）立即抛出。
+- **对象存储的 PUT**：`HTTP.put_presigned(url, content, *, content_type=None)` 自己构造 `httpx2.Request`，经 `client.http_client` 的 `send()` 发出：不合并客户端默认的 headers、cookies、params（params 会替换掉签名查询串），`auth=None` 关掉客户端的鉴权，不跟随重定向，显式传超时；不拼 `base_url`、不解析响应体，返回 2xx 的响应（素材库要读 `ETag`）。错误语义同 `request()`：拿不到响应抛 `NetworkError`（两者共用 `_network_error()`），地址解析不了也是；非 2xx 抛 `APIError`（`err_code`、`trace_id` 为 `None`，文案附上对象存储 XML 里的 `<Code>`）。预签名地址的查询串是临时签名，按凭证对待：文案只写 `PUT scheme://host/path`；脱敏时在凭证之外再替换整个地址、查询串和其中不短于 8 个字符的参数值（编码前后两种写法），异常链里出现它们就整条丢掉；持有预签名地址的模型（含公开的 `MediaImage.preview_url`）把它列进 `_secret_fields`。SDK 不改动第三方库的 logger：调用方自己开启 httpx2 的 INFO 日志时，日志里会有预签名地址（短期有效，只对这一次上传有效）。
+- **素材库**（`_api/images.py`，挂成 `client.images`，属于机器人本身）：`upload(*, path, data, file_name)` 返回 `MediaImage`，`iter_images()`，`delete(image)`。Content-Type 由扩展名决定（png、jpg/jpeg、gif、webp），其它扩展名抛 `ValueError`；大小与数量上限不在本地检查，由平台在 prepare 时拒绝，所以先流式算哈希，prepare 通过后才把整个文件读进内存 PUT。`complete` 的 `md5` 取 PUT 响应的 `ETag`（去掉引号），没有时退回本地算的 MD5。列表的 `total` 暂不暴露。
 
 ## 网关连接（已落地）
 
@@ -203,7 +210,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 - **其余事件**：单聊、群聊的事件（好友增删、主动消息开关、机器人进出群、群成员与入群申请、全量群消息、订阅消息授权）和 `INTERACTION_CREATE` 已落地，见「事件」。剩下频道的事件，照「加一种事件」的步骤做；频道的互动回复要补上 `Interaction.reply()` 的频道分支。
 - **其余接口**：`autogen/api/` 下的群管理、用户、面板等，以及 `server-inter/channel/` 下的频道接口，照约定 5 按资源分组。
 - **其它消息类型**（已落地）：Markdown、键盘、富媒体、卡片、引用、正在输入、互动召回、撤回，见「请求层与接口分组」。剩下：流式消息（`v2_users_user_openid_stream_messages`）；文本里的 `<qqbot-at-user>` 等交互标签（`trans/text-chain.md`）现在由调用方自己拼。
-- **富媒体上传**：预上传、分片、完成三步，需要实测。返回 `pyqbot.Media`（字段即上传接口的响应体，可直接 `decode` 成它），按场景挂在 `client.users` / `client.groups` 上。
+- **富媒体上传与素材库**（已落地）：见「请求层与接口分组」，文档出入与待实测项见 `errata.md`，实测用例在 `tests/live/test_live_upload.py`。
 - **Webhook**（未确认）：见上。
 - **待定的语义**：HTTP 202 加 304023 / 304024 表示「已受理、等待审核」，现在按失败抛出，响应体里的 `data.message_audit.audit_id` 也没有带出来；做频道消息时要定下怎么表达（见 `errata.md`）。
 

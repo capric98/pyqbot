@@ -190,6 +190,67 @@
 - **当前做法**：两个事件各走各的处理函数（`on_group_message`、`on_group_at_message`），SDK 不合并、不去重。
 - **怎么测**：开启全量模式的群里 @机器人 发一条消息，看收到几条事件、`id` 是否相同。要群与权限配置，须单独征得同意。
 
+### 富媒体：各页列出的支持格式不一致
+
+- **位置**：`server-inter/message/rich-media.md` 的「支持的消息类型」与同页「文件类型与限制」表格；单聊、群聊上传页的 `file_type` 一行。
+- **矛盾**：正文说图片 jpg/png/gif/webp/bmp、语音 silk/mp3/wav/ogg；同页表格与单聊上传页说图片 png/jpg、语音 silk；群聊上传页说语音 silk/mp3/wav。
+- **当前做法**：不传 `file_type` 时按最宽的列表推断（png/jpg/jpeg/gif/webp/bmp 为图片，mp4 为视频，silk/slk/mp3/wav/ogg 为语音），平台不支持时由它拒绝（850019），调用方可改传 `FileType.FILE`。
+- **怎么测**：单聊、群聊分别上传 gif、webp、bmp 图片与 mp3、wav、ogg 语音，看是否成功、展示成什么。
+
+### 富媒体：`file_data` 的编码与 5M 的口径
+
+- **位置**：单聊、群聊上传页的 `file_data` 一行与「直接上传二进制数据」，示例只写了 `"xxxx图片的二进制数据"`。
+- **含糊**：字段是字符串，却没说二进制怎么编码；5M 是编码前还是编码后、按 10^6 还是 2^20 也没说。
+- **当前做法**：标准 base64（带填充）；原始数据不超过 3 MiB 才内联（base64 后约 4 MiB），更大的分片上传。
+- **怎么测**：实测用例 `test_inline_data_is_base64`，图片显示正常即确认 base64；要确认上限可再内联一个 4～5 MB 的文件。
+
+### 分片上传：`block_size` 默认 5MB 与示例的 10485760
+
+- **位置**：`rich-media.md`「注意事项」与预上传页 `block_size` 一行都说默认 5MB，预上传页的响应示例是 `"10485760"`（10 MiB）。
+- **当前做法**：不假设大小，一律按响应顶层的 `block_size` 切片；它是字符串还是数字都接受。
+- **怎么测**：实测用例 `test_large_file_is_uploaded_in_parts` 运行时记下响应的 `block_size` 与 `upload_config`。
+
+### 分片上传：`md5_10m` 在文件不足 10002432 字节时
+
+- **位置**：预上传页的 `md5_10m` 一行；`rich-media.md`「注意事项」。
+- **含糊**：只说是「文件前 10002432 字节的 MD5」，没说文件不够长时怎么算。
+- **当前做法**：取整个文件的 MD5（即前 min(文件大小, 10002432) 字节）。
+- **怎么测**：实测用例 `test_large_file_is_uploaded_in_parts` 的文件约 3.6 MB，成功即确认；再上传一个超过 10002432 字节的文件确认另一种情况。
+
+### 分片上传：分片完成接口的 `block_size`
+
+- **位置**：单聊分片完成页写「分块大小（字节）」，群聊页写「该分块的实际大小」。
+- **含糊**：最后一片不足 `block_size` 时填哪个。
+- **当前做法**：填这一片的实际字节数，字符串。
+- **怎么测**：实测用例 `test_large_file_is_uploaded_in_parts` 的文件大小不是分片大小的整数倍，成功即确认。
+
+### 分片上传：`upload_config.retry_timeout` 的含义
+
+- **位置**：预上传页的 `UploadConfig`。
+- **含糊**：「重试超时时间（秒），默认 300」没说是从什么时候算、限制的是单次请求还是整个重试过程。
+- **当前做法**：PUT 与分片完成各自重试；从这一步首次尝试算起，等完 `retry_delay` 会超过 `retry_timeout` 就不再重试。规则见 `design.md`。
+- **不主动实测**：要人为制造对象存储或平台的临时故障，实际遇到时记到这里。
+
+### `file_size`：预上传是字符串，素材库是整数
+
+- **位置**：预上传页的 `file_size`（string）；`server-inter/message/material-management.md` 申请上传的 `file_size`（uint64，示例是数字）。
+- **当前做法**：各按各页：预上传发字符串，素材库发整数。
+- **怎么测**：实测用例 `test_large_file_is_uploaded_in_parts` 与 `test_media_image_library` 成功即确认。
+
+### 素材库：`expires_at` 的示例与 90 天不符
+
+- **位置**：`material-management.md` 查询有效图片的响应示例。
+- **矛盾**：示例里 `expires_at - created_at` 是 604801 秒（约 7 天），而限制说明与 `complete` 的 `ttl` 都是 90 天（7776000 秒）。
+- **当前做法**：原样透出，SDK 不据此计算。
+- **怎么测**：实测用例 `test_media_image_library` 上传后列出，记下 `expires_at - created_at`。
+
+### 素材库：`.jpg` 是否算与 `image/jpeg` 一致
+
+- **位置**：`material-management.md`「限制说明」要求扩展名与 Content-Type 一致；错误码 40035001 写「扩展名与 Content-Type 需为 png/jpeg/gif/webp 且一致」。
+- **含糊**：`.jpg` 扩展名配 `image/jpeg` 算不算一致。
+- **当前做法**：`.jpg`、`.jpeg` 都发 `image/jpeg`；其它扩展名在本地抛 `ValueError`。
+- **怎么测**：在素材库上传一张文件名为 `.jpg` 的图片，看 prepare 是否返回 40035001。
+
 ## 已确认
 
 以下都是 2026-11-16 用真实机器人实测的结果。
