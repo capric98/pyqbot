@@ -65,6 +65,8 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 - `test_live_upload.py::test_image_and_voice_formats`：gif、webp、bmp、jpg 四张绿色小图与一条 wav 语音；被拒的格式记进日志。
 - `test_live_upload.py::test_inline_size_limit`：不发消息，内联约 3.6、4.5、5.5 MB 的图片，看「5M」限制的是编码前还是编码后。
 - `test_live_upload.py::test_large_file_type_upload`：约 25 MB 的文件（`FileType.FILE`），看是否支持、分几片。
+- `test_live_upload.py::test_ffmpeg_voice_and_video_formats`：mp3、ogg 两条语音与一段 mp4 视频，样本由 ffmpeg 生成（`FFMPEG` 或 PATH）。
+- `test_live_upload.py::test_large_video_in_parts`：约 25 MB 的雪花视频，看视频类型怎么分片。
 
 ### 需要测试用户动手配合
 
@@ -79,6 +81,7 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 - `test_live_events.py::test_interaction_ack_timing_and_event_ids`：先点「晚回应」再点「快回应」，收到最多三条回复。
 - `test_live_events.py::test_interaction_ack_threshold`：四个按钮分别在 0、0.3、0.6、1 秒后回应，看哪些变成「已点」（实测约 1 秒为界）。
 - `test_live.py::test_resume_replays_backlog`：先发一条多图单聊，断开后 30 秒内再发两条文字，看 Resume 补发与心跳的先后。
+- `test_live_events.py::test_multi_image_message`：在电脑上一次发多张图，记下一条消息里的附件数与大小。
 - `test_live_events.py::test_c2c_msg_reject_then_receive`：资料卡里关闭再打开主动消息；平台实际推的是授权互动，停手 15 秒后收到「pyqbot：授权已变更」。
 - `test_live_events.py::test_callback_button_interaction`：点「点我」，按钮立刻变「已点」（SDK 自动回应），约 3 秒后收到回复。
 - `test_live_misc.py::test_message_upload_shortcut`：测试用户发一条单聊，收到带图的「pyqbot：upload 快捷方法」。

@@ -8,12 +8,14 @@
 另设 `LIVE_MEDIA_IMAGES=1` 才运行；用例结束时删除自己上传的图片。
 """
 
+import asyncio
 import base64
 import io
 import json
 import logging
 import math
 import os
+import shutil
 import struct
 import wave
 import zlib
@@ -66,6 +68,19 @@ def wav(seconds: float = 2.0, rate: int = 16000) -> bytes:
         out.setframerate(rate)
         out.writeframes(frames)
     return buffer.getvalue()
+
+
+async def render(tmp_path: Path, name: str, *args: str) -> Path:
+    """用 ffmpeg 生成样本：路径取环境变量 `FFMPEG`，没有就从 PATH 找，都没有则 skip。"""
+    ffmpeg = os.environ.get("FFMPEG") or shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("需要 ffmpeg：放进 PATH，或设 FFMPEG=它的路径")
+    out = tmp_path / name
+    process = await asyncio.create_subprocess_exec(
+        ffmpeg, "-hide_banner", "-loglevel", "error", "-y", *args, str(out)
+    )
+    assert await process.wait() == 0, f"ffmpeg 生成 {name} 失败"
+    return out
 
 
 @pytest.fixture
@@ -340,3 +355,77 @@ async def test_media_image_library_jpg(client: pyqbot.Client) -> None:
         _logger.warning("素材库 .jpg：被接受 %s", image.image_id)
     finally:
         await client.images.delete(image)
+
+
+TONE = ("-f", "lavfi", "-i", "sine=frequency=440:duration=2")
+
+
+async def test_ffmpeg_voice_and_video_formats(
+    client: pyqbot.Client, openid: str, tmp_path: Path
+) -> None:
+    """应看到：两条约 2 秒的语音（mp3、ogg），一段约 5 秒带声音的测试图样视频（mp4）。
+
+    文档各页对语音格式说法不一；被拒的格式与错误码记进日志。样本由 ffmpeg 现场生成。
+    """
+    samples = [
+        await render(tmp_path, "pyqbot.mp3", *TONE, "-c:a", "libmp3lame"),
+        await render(tmp_path, "pyqbot.ogg", *TONE, "-c:a", "libvorbis"),
+        await render(
+            tmp_path,
+            "pyqbot.mp4",
+            *("-f", "lavfi", "-i", "testsrc2=size=640x360:rate=25:duration=5"),
+            *("-f", "lavfi", "-i", "sine=frequency=440:duration=5"),
+            *("-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest"),
+        ),
+    ]
+    results: dict[str, object] = {}
+    for path in samples:
+        try:
+            media = await client.users.upload(openid, path=path)
+            sent = await client.users.send_message(openid, media=media)
+            results[path.suffix] = f"被接受 {sent.id[:24]}"
+        except pyqbot.APIError as error:
+            results[path.suffix] = ("被拒", error.err_code, error.message)
+    _logger.warning("ffmpeg 生成的格式：%s", results)
+
+
+async def test_large_video_in_parts(
+    app_id: str, app_secret: str, openid: str, tmp_path: Path
+) -> None:
+    """应看到：一段约 10 秒的雪花噪点视频（约 25 MB，视频上限 30 MB）。
+
+    看视频类型分几片、分片大小是多少（25 MB 的文件是 10 MiB 一片，12 MB 的图片只有一片）。分片情况记进日志。
+    """
+    video = await render(
+        tmp_path,
+        "pyqbot-noise.mp4",
+        *("-f", "lavfi", "-i", "nullsrc=size=1280x720:rate=25,geq=random(1)*255:128:128"),
+        *("-t", "10", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"),
+        *("-b:v", "20M", "-maxrate", "20M", "-bufsize", "20M"),
+    )
+    prepared: list[object] = []
+
+    async def record_response(response: httpx2.Response) -> None:
+        if response.request.url.path.endswith("/upload_prepare"):
+            await response.aread()
+            body = cast(dict[str, object], response.json())
+            parts = cast(list[dict[str, object]], body.get("parts") or [])
+            prepared.append(
+                {
+                    "block_size": body.get("block_size"),
+                    "parts": [(part.get("index"), part.get("block_size")) for part in parts],
+                }
+            )
+
+    async with (
+        httpx2.AsyncClient(event_hooks={"response": [record_response]}) as http_client,
+        pyqbot.Client(app_id, app_secret, http_client=http_client) as client,
+    ):
+        try:
+            media = await client.users.upload(openid, path=video)
+            sent = await client.users.send_message(openid, media=media)
+            result: object = f"被接受 {sent.id[:24]}"
+        except pyqbot.APIError as error:
+            result = ("被拒", error.err_code, error.message)
+
+    _logger.warning("视频 %d 字节；预上传 %s；结果 %s", video.stat().st_size, prepared, result)

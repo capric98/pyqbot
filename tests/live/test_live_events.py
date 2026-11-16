@@ -64,7 +64,10 @@ def record_event_ids(bot: pyqbot.Bot, monkeypatch: pytest.MonkeyPatch) -> None:
     def recording(payload: GatewayPayload, client: pyqbot.Client) -> None:
         data: object = json.loads(payload.data)
         inner = cast(dict[str, object], data).get("id") if isinstance(data, dict) else None
-        note("dispatch", {"t": payload.t, "outer_id": payload.id, "d_id": inner})
+        note(
+            "dispatch",
+            {"t": payload.t, "outer_id": payload.id, "d_id": inner, "bytes": len(payload.data)},
+        )
         RAW_DIR.mkdir(parents=True, exist_ok=True)
         raw = json.dumps(data, ensure_ascii=False, indent=2)
         (RAW_DIR / f"event_{payload.t}_{payload.s}.json").write_text(raw, encoding="utf-8")
@@ -267,6 +270,42 @@ async def test_callback_button_interaction(
 
     note("callback_button_interaction", outcome)
     assert "sent" in outcome, outcome
+
+
+async def test_multi_image_message(
+    app_id: str,
+    app_secret: str,
+    openid: str,
+    wait_seconds: float,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """让测试用户在电脑上一次选多张图发给机器人（手机上会拆成每张一条）。
+
+    记下每条单聊消息的附件数、类型与 `d` 的字节数；收到附件不止一个的消息就结束，机器人不回复。
+    """
+    bot = pyqbot.Bot(app_id, app_secret)
+    record_event_ids(bot, monkeypatch)
+    messages: list[object] = []
+    outcome: dict[str, object] = {"messages": messages}
+
+    @bot.on_c2c_message
+    async def received(message: pyqbot.C2CMessage) -> None:
+        if message.user_openid != openid:
+            return
+        messages.append(
+            {
+                "content": message.content,
+                "attachments": [a.content_type for a in message.attachments],
+                "sizes": [(a.width, a.height, a.size) for a in message.attachments],
+            }
+        )
+        if len(message.attachments) > 1:
+            await bot.close()
+
+    await run_until_closed(bot, wait_seconds, outcome)
+
+    note("multi_image_message", outcome)
+    assert messages, outcome
 
 
 # ---- 测试群：入群与 @ 消息 ----
