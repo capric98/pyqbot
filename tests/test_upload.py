@@ -62,6 +62,7 @@ class Platform:
         self.config: dict[str, object] = {"concurrency": 1, "retry_timeout": 300, "retry_delay": 0}
         self.prepare: dict[str, object] | None = None  # 不为 None 时原样返回它
         self.extra_parts = 0
+        self.first_index = 0
         self.put_failures: list[Respond] = []
         self.finish_failures: list[Respond] = []
         self.on_put: Callable[[httpx2.Request], Awaitable[None]] | None = None
@@ -93,7 +94,7 @@ class Platform:
         count = math.ceil(int(str(body["file_size"])) / int(str(self.block_size)))
         parts = [
             {"index": i, "presigned_url": presigned(i), "block_size": self.block_size}
-            for i in range(count + self.extra_parts)
+            for i in range(self.first_index, self.first_index + count + self.extra_parts)
         ]
         return {
             "upload_id": "up-1",
@@ -390,6 +391,25 @@ async def test_large_data_goes_through_prepare_put_finish_and_merge(small_inline
         assert put.extensions["timeout"]["read"] == 7
 
 
+async def test_parts_numbered_from_one_are_offset_from_the_first_index(
+    small_inline: None,
+) -> None:
+    platform = Platform()
+    platform.first_index = 1  # 文档写从 0 开始，实测从 1 开始
+    data = bytes(range(25))
+
+    async with client_for(platform) as client:
+        await client.users.upload("u", data=data, file_name="a.png")
+
+    assert [(str(put.url), put.content) for put in platform.puts] == [
+        (presigned(1), data[:10]),
+        (presigned(2), data[10:20]),
+        (presigned(3), data[20:]),
+    ]
+    finished = [body for _, path, body in platform.calls if path.endswith("/upload_part_finish")]
+    assert [(body or {})["part_index"] for body in finished] == [1, 2, 3]
+
+
 async def test_large_file_is_hashed_and_split_without_reading_it_whole(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, small_inline: None
 ) -> None:
@@ -573,8 +593,13 @@ async def test_cancelling_the_upload_cancels_in_flight_parts(small_inline: None)
         {  # 坏掉的分片会被宽容解码丢掉，序号就断了
             "upload_id": "x",
             "block_size": "10",
-            "parts": [{"index": 0}, {"index": 1, "presigned_url": "u"}],
+            "parts": [
+                {"index": 1, "presigned_url": "u"},
+                {"index": 2},
+                {"index": 3, "presigned_url": "u"},
+            ],
         },
+        {"upload_id": "x", "block_size": "10", "parts": [{"index": 2, "presigned_url": "u"}]},
         {"block_size": "10", "parts": [{"index": 0, "presigned_url": "u"}]},
     ],
 )

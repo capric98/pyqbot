@@ -51,16 +51,23 @@ class UploadPrepared(Model):
         # 在解码时检查：不合法就是「响应无法识别」。宽容解码会丢掉坏的分片，序号就不连续了。
         if self.chunk_size <= 0:
             raise ValueError("block_size 不是正数")
+        indexes = sorted(part.index for part in self.parts)
         if (
-            sorted(part.index for part in self.parts) != list(range(len(self.parts)))
-            or not self.parts
+            not indexes
+            or indexes[0] not in (0, 1)
+            or indexes != list(range(indexes[0], indexes[0] + len(indexes)))
         ):
-            raise ValueError("parts 的序号不是从 0 开始的连续整数")
+            raise ValueError("parts 的序号不是从 0 或 1 开始的连续整数")
 
     @property
     def chunk_size(self) -> int:
         """分片大小（字节）。"""
         return int(self.block_size)
+
+    @property
+    def first_index(self) -> int:
+        """第一片的序号：文档写从 0 开始，实测从 1 开始（`docs/errata.md`）。"""
+        return min(part.index for part in self.parts)
 
 
 class ImagePrepared(Model):

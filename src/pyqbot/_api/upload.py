@@ -180,10 +180,10 @@ async def _upload_parts(
     config = prepared.upload_config
     slots = asyncio.Semaphore(max(1, min(config.concurrency, MAX_CONCURRENCY)))
     delay, give_up_after = max(0, config.retry_delay), max(0, config.retry_timeout)
-    chunk_size = prepared.chunk_size
+    chunk_size, first_index = prepared.chunk_size, prepared.first_index
 
     async def upload_part(part: UploadPart) -> None:
-        offset = part.index * chunk_size
+        offset = (part.index - first_index) * chunk_size
         async with slots:
             # 分片数与文件大小对不上时不在本地判断，由合并接口拒绝。
             length = max(0, min(chunk_size, size - offset))
