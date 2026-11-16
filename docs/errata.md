@@ -82,14 +82,14 @@
 
 - **位置**：`autogen/event/group_at_message_create.md`。
 - **含糊**：说 `content` 「已去除@机器人的前缀」，但三个示例都带首尾空格（如 `" /今日天气 "`、`" "`）。
-- **当前做法**：原样保留，不替用户 `strip()`，在 `GroupMessage` 的 docstring 里提示。
+- **当前做法**：原样保留，不替用户 `strip()`，在 `GroupAtMessage` 的 docstring 里提示。
 - **怎么测**：在群里 @机器人 发 `/ping`，看 `content` 是否为 `" /ping"` 之类。
 
 ### 消息事件的 `author`：群聊未实测
 
 - **位置**：同上两页的 `User` 结构。
 - **含糊**：单聊的实测结果多一个 `avatar`（已确认，见下）；群聊 `author` 是否同样有 `avatar`、`member_role` 的取值是否只有三种，都没测到。`message_type` 的 101「并行消息」也没有说明含义。
-- **当前做法**：`avatar` 两边都建模为可选；`member_role` 是 `MemberRole`（`OpenStrEnum`，收录 member、admin、owner），未知取值得到伪成员、原值保留。
+- **当前做法**：`avatar` 两边都建模为可选；`member_role` 是 `GroupMemberRole`（`OpenStrEnum`，收录 member、admin、owner），未知取值得到伪成员、原值保留。
 
 ### 被动回复的 `event_id`：取外层 `id` 还是 `d.id`
 
@@ -153,7 +153,7 @@
 
 - **位置**：`server-inter/message/overview.md`「撤回消息」；`autogen/api/v2_groups_group_openid_messages_message_id.delete.md`。
 - **矛盾**：概述只说「机器人可撤回自己发送的消息」，群聊撤回页说机器人是群管理员时还能撤回普通成员的消息（`d.id`）。两处都说超过 2 分钟不可撤回。
-- **当前做法**：`client.groups.recall_message()` 也接受收到的 `GroupMessage`；时限不在本地判断，由平台拒绝（40064004）。
+- **当前做法**：`client.groups.recall_message()` 也接受收到的 `GroupMessage`（含 `GroupAtMessage`）；时限不在本地判断，由平台拒绝（40064004）。
 
 ### 入群申请 `GROUP_JOIN_REQUEST` 的字段
 
@@ -291,7 +291,7 @@
 
 - **位置**：`autogen/api/v2_panels.post.md`、`autogen/api/v2_panels_panel_id.put.md` 的 `Panel`。
 - **含糊**：请求体的 `panel.version` 只写「当前版本号」，没说是否用于并发校验；修改接口说「覆盖原有的面板元素列表和备注」，没说不传 `remark` 时备注是清空还是保留。
-- **当前做法**：不发送 `version`；`update()` 不传 `remark` 时请求里没有它，docstring 提示备注可能被清空。
+- **当前做法**：不发送 `version`；`panels.set()` 不传 `remark` 时请求里没有它，docstring 提示备注可能被清空。
 - **怎么测**：实测用例 `test_panel_lifecycle` 之外，再修改一次不带 `remark`，用 `get()` 看备注。
 
 ### 频道：测试条件
@@ -436,8 +436,15 @@
 - **含糊**：
   - `PATCH /guilds/{guild_id}/mute` 在两页里分别是全员禁言（成功 204）和带 `user_ids` 的批量禁言（成功 200，返回 `{user_ids}`）。
   - `mute_end_timestamp` 与 `mute_seconds`「二选一」，同时传「以 `mute_end_timestamp` 为准」；没说只传 `mute_seconds` 时缺省的 `mute_end_timestamp` 会不会被当成 0（解除）。解除时说「任一传 `'0'` 即可」。
-- **当前做法**：全员与单个成员不解码响应；批量解成 `{user_ids}`。禁言只发 `mute_end_timestamp`（`timedelta` 在本地换算成时刻），解除时两个字段都发 `"0"`。
+- **当前做法**：全员与单个成员不解码响应；批量解成 `{user_ids}`（见下一条）。禁言只发 `mute_end_timestamp`（`timedelta` 在本地换算成时刻），解除时两个字段都发 `"0"`。
 - **怎么测**：对测试成员分别禁言、批量禁言并解除，看是否生效、批量的响应是否有 `user_ids`；全员禁言要另征得同意。
+
+### 频道批量禁言：只给成功清单
+
+- **位置**：`speak/patch_guild_mute_multi_member.md`「返回」与示例。
+- **含糊**：只说「返回设置成功的成员 `user_ids`」，示例请求两个、响应一个，没说没列出的是失败还是另有原因（如本来就在禁言中、是管理员），也没说批量解除禁言的响应是否同形、`user_ids` 缺失或为空意味着什么。
+- **当前做法**：`mute_members()` / `unmute_members()` 把请求的 ID 与成功清单求差，非空时抛 `PartialFailureError`（`failed_ids` 按请求的顺序、去重）；成功清单缺失或 `null` 当作空清单（即全部失败），不是字符串列表时整条响应「无法识别」。全部成功返回 `None`。
+- **怎么测**：在测试频道里对一个普通成员和一个管理员批量禁言，看响应是否只列普通成员；再批量解除，看响应是否同样列出成功的成员。
 
 ### 子频道在线人数：空对象还是 `{online_nums}`
 
@@ -485,7 +492,7 @@
 
 - **位置**：`autogen/api/v2_groups_group_openid_restrict_chat_setting.post.md` 的 `SetMemberMuteState`。
 - **含糊**：`op` 分 `add`（增加）与 `update`（更新到期时间），没说对已在禁言中的成员 `add` 会怎样；`mute_expire_at` 说「`op=del` 时可传空串表示立即解除」，没说不传或传一个时刻会怎样。
-- **当前做法**：`client.groups.mute()` 发 `add`，`update_mute()` 发 `update`，两者的 docstring 都写明「再次 `add` 是否等于 `update`」尚待实测；`unmute()` 发 `del` 并带 `mute_expire_at: ""`。
+- **当前做法**：`client.groups.mute_members()` 发 `add`，`update_member_mutes()` 发 `update`，两者的 docstring 都写明「再次 `add` 是否等于 `update`」尚待实测；`unmute_members()` 发 `del` 并带 `mute_expire_at: ""`。
 - **怎么测**：实测用例 `test_mute_twice_with_add` 对同一成员连续 `add` 两次，看第二次是报错还是改写到期时间；`test_mute_update_then_unmute` 确认 `update` 与带空串的 `del`。
 
 ### 群黑名单：在群里的用户怎么拉黑失败
