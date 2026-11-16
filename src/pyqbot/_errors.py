@@ -17,20 +17,12 @@ class QQBotError(Exception):
         err_code: int | None = None,
         trace_id: str | None = None,
     ) -> None:
-        """创建异常。
-
-        Args:
-            message: 错误描述。
-            err_code: 平台返回的错误码。
-            trace_id: 平台的链路追踪 ID。
-        """
         super().__init__(message)
         self.message = message
         self.err_code = err_code
         self.trace_id = trace_id
 
     def __str__(self) -> str:
-        """返回错误描述，并附上已知的 `err_code` 与 `trace_id`。"""
         details = [
             f"{name}={value}"
             for name, value in (("err_code", self.err_code), ("trace_id", self.trace_id))
@@ -54,14 +46,6 @@ class APIError(QQBotError):
         err_code: int | None = None,
         trace_id: str | None = None,
     ) -> None:
-        """创建异常。
-
-        Args:
-            message: 错误描述。
-            status_code: 响应的 HTTP 状态码。
-            err_code: 平台返回的错误码。
-            trace_id: 平台的链路追踪 ID。
-        """
         super().__init__(message, err_code=err_code, trace_id=trace_id)
         self.status_code = status_code
 
@@ -71,3 +55,7 @@ class NetworkError(QQBotError):
 
     底层的 httpx2 异常保留在 `__cause__` 上。
     """
+
+
+class PayloadError(QQBotError):
+    """网关下发的一帧数据无法解码。只影响这一帧，不代表连接不可用。"""

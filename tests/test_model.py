@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import msgspec
 import pytest
 
-from pyqbot._model import Model
+from pyqbot._model import Model, OpenIntEnum, decode
 
 
 class Role(enum.IntEnum):
@@ -68,3 +68,125 @@ def test_unknown_fields_are_ignored_when_decoding() -> None:
     user = msgspec.json.decode(b'{"id": "u1", "unionOpenid": "x", "added_later": 1}', type=User)
 
     assert user == User(id="u1", union_openid="x")
+
+
+class Level(OpenIntEnum):
+    LOW = 1
+    HIGH = 2
+
+
+class Message(Model):
+    level: Level
+
+
+def test_open_enum_decodes_known_values_to_members() -> None:
+    assert msgspec.json.decode(b'{"level": 2}', type=Message).level is Level.HIGH
+
+
+def test_open_enum_keeps_unknown_values_instead_of_failing() -> None:
+    message = msgspec.json.decode(b'{"level": 9}', type=Message)
+
+    assert isinstance(message.level, Level)
+    assert (message.level.name, message.level.value) == ("UNKNOWN", 9)
+    assert message.level == 9
+    assert message.to_dict() == {"level": 9}
+
+
+def test_unknown_values_are_not_registered_as_members() -> None:
+    assert Level(9) == Level(9)
+    assert repr(Level(9)) == "<Level.UNKNOWN: 9>"
+    assert 9 not in Level
+    assert list(Level) == [Level.LOW, Level.HIGH]
+    assert 9 not in Level._value2member_map_  # pyright: ignore[reportPrivateUsage]  验证不缓存
+
+
+# Level 没有取值 0；False == 0，若不排除 bool 会被当成未知整数收下。
+@pytest.mark.parametrize("value", [False, "1", 1.5, None])
+def test_open_int_enum_rejects_values_of_the_wrong_type(value: object) -> None:
+    with pytest.raises(ValueError, match="is not a valid Level"):
+        Level(value)
+
+
+def test_values_equal_to_a_member_follow_the_standard_library() -> None:
+    # 标准库先按值查表，_missing_ 管不到：True == 1、1.0 == 1 直接命中成员。
+    assert Level(True) is Level.LOW
+    assert Level(1.0) is Level.LOW
+
+
+@pytest.mark.parametrize("raw", [b'{"level": true}', b'{"level": 1.0}', b'{"level": "1"}'])
+def test_decoding_checks_the_json_type_strictly(raw: bytes) -> None:
+    with pytest.raises(msgspec.ValidationError):
+        msgspec.json.decode(raw, type=Message)
+
+
+# ---- 凭证字段 ----
+
+
+class Credential(Model):
+    _secret_fields = frozenset({"token"})
+
+    name: str
+    token: str
+
+
+class Holder(Model):
+    credential: Credential
+
+
+def test_secret_fields_are_hidden_in_both_representations() -> None:
+    holder = Holder(credential=Credential(name="n", token="tok-123"))
+
+    assert repr(holder) == "Holder(credential=Credential(name='n', token='***'))"
+    assert dict(holder.credential.__rich_repr__()) == {"name": "n", "token": "***"}
+    assert holder.to_dict() == {"credential": {"name": "n", "token": "tok-123"}}
+
+
+def test_models_without_secrets_keep_the_default_repr() -> None:
+    assert repr(User(id="u1")) == "User(id='u1', nickname=None, union_openid=None)"
+
+
+def test_misspelled_secret_field_is_rejected_at_class_creation() -> None:
+    with pytest.raises(TypeError, match="tokne"):
+
+        class Broken(Model):  # pyright: ignore[reportUnusedClass]  只验证类创建时报错
+            _secret_fields = frozenset({"tokne"})
+
+            token: str
+
+
+# ---- 宽容解码：只有必填字段会让整条数据失败 ----
+
+
+class Profile(Model):
+    id: str
+    age: int | None = None
+    tags: tuple[str, ...] = ()
+    owner: User | None = None
+
+
+def test_decode_takes_the_fast_path_for_valid_data() -> None:
+    assert decode(b'{"id": "p", "age": 3}', Profile) == Profile(id="p", age=3)
+
+
+def test_optional_fields_of_the_wrong_type_fall_back_to_defaults() -> None:
+    raw = b'{"id": "p", "age": "3", "tags": null, "owner": {"id": 1, "nickname": "n"}}'
+
+    # owner.id 是必填字段，类型不符让 owner 整体退回默认值；Profile 本身照常解出。
+    assert decode(raw, Profile) == Profile(id="p")
+
+
+def test_nested_models_are_cleaned_field_by_field() -> None:
+    raw = b'{"id": "p", "owner": {"id": "u", "nickname": 5, "unionOpenid": "x"}}'
+
+    assert decode(raw, Profile).owner == User(id="u", union_openid="x")
+
+
+@pytest.mark.parametrize("raw", [b'{"age": 3}', b'{"id": 1}', b"[]", b"not json"])
+def test_required_fields_still_fail(raw: bytes) -> None:
+    with pytest.raises(msgspec.DecodeError):
+        decode(raw, Profile)
+
+
+def test_non_model_types_are_decoded_strictly() -> None:
+    with pytest.raises(msgspec.ValidationError):
+        decode(b'"x"', int)

@@ -5,7 +5,7 @@ from importlib.metadata import version
 from ._bot import Bot
 from ._client import Client
 from ._config import Config
-from ._errors import APIError, NetworkError, QQBotError
+from ._errors import APIError, NetworkError, PayloadError, QQBotError
 
 __version__ = version("pyqbot")
 
@@ -15,6 +15,7 @@ __all__ = [
     "Client",
     "Config",
     "NetworkError",
+    "PayloadError",
     "QQBotError",
     "__version__",
 ]

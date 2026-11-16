@@ -1,6 +1,7 @@
 import pytest
 
 import pyqbot
+from pyqbot._redact import redact, safe_cause
 
 
 def test_base_error_carries_message_only_by_default() -> None:
@@ -29,6 +30,36 @@ def test_api_error_adds_status_code() -> None:
 
     assert isinstance(error, pyqbot.QQBotError)
     assert (error.status_code, error.err_code, error.trace_id) == (401, 11243, "4a8a")
+
+
+def test_payload_error_is_a_separate_kind_of_failure() -> None:
+    error = pyqbot.PayloadError("无法解码")
+
+    assert isinstance(error, pyqbot.QQBotError)
+    assert not isinstance(error, pyqbot.APIError | pyqbot.NetworkError)
+
+
+def test_redact_replaces_every_known_secret() -> None:
+    text = "secret=s3cr3t access=t0k-1 t0k-1 s3cr3t/t0k-1"
+
+    assert redact(text, "s3cr3t", "t0k-1", None, "") == "secret=*** access=*** *** ***/***"
+
+
+def test_redact_replaces_the_longer_secret_first() -> None:
+    assert redact("abc-xyz", "abc", "abc-xyz") == "***"
+
+
+def test_safe_cause_keeps_a_chain_without_secrets() -> None:
+    cause = TimeoutError("timed out")
+
+    assert safe_cause(cause, "s3cr3t", None) is cause
+
+
+def test_safe_cause_drops_a_chain_that_mentions_a_secret_anywhere() -> None:
+    outer = OSError("connect failed")
+    outer.__cause__ = ValueError("illegal header value: s3cr3t")
+
+    assert safe_cause(outer, "s3cr3t") is None
 
 
 def test_network_error_is_caught_by_the_base_class_and_keeps_its_cause() -> None:
