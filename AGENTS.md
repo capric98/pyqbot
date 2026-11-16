@@ -1,6 +1,6 @@
 # AGENTS.md
 
-pyqbot 是 QQ 机器人 API v2 的 Python SDK，存在的理由只有一个：比官方 SDK 好用。源码在 `src/pyqbot/`，测试在 `tests/`。
+pyqbot 是 QQ 机器人 API v2 的 Python SDK，存在的理由只有一个：比官方 SDK 好用。源码在 `src/pyqbot/`，测试在 `tests/`，包结构与模块约定见 `docs/design.md`。
 
 ## 环境与命令
 
