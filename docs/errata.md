@@ -68,6 +68,7 @@
 - **位置**：`dev-prepare/event-emit/websocket.md`。
 - **含糊**：没说网关是否回应 WebSocket 层的 Ping、单帧最大多大、会不会发二进制帧。
 - **当前做法**：关掉 httpx2 默认每 20 秒一次的 Ping，存活只看 OpCode 1 心跳；单帧上限放宽到 1 MiB（httpx2 默认 64 KiB）；二进制帧记日志后跳过。
+- **已知**：网关会回应 WebSocket 层的 Ping。2026-11-16 实测时用 httpx2 默认的 20 秒 Ping（超时 20 秒）连了约 78 秒，连接没有因为 Ping 超时而断开。
 - **怎么测**：长时间挂着连接，并发送带多张图片的消息，看帧大小与类型。
 
 ### Intents：尚未确认的两处
@@ -145,3 +146,9 @@
 
 - **位置**：`autogen/event/c2c_message_create.md`。
 - **结论**：与文档一致。`author.id` 与 `author.user_openid` 相同，是 32 位大写十六进制；`author` 里另有文档没提的 `avatar`。纯文本消息没有 `attachments` 等字段。消息 `id` 以 `ROBOT1.0_` 开头，`timestamp` 形如 `2026-11-16T11:55:42+08:00`。fixture：`gateway_c2c_message_create.json`。
+
+### 发单聊消息：响应的字段与被动回复
+
+- **位置**：`autogen/api/v2_users_user_openid_messages.post.md`。
+- **结论**：被动回复（`msg_id` 取自收到的消息，`msg_seq` 为 1）被接受，HTTP 200，响应是 `{"id": "ROBOT1.0_...", "timestamp": "2026-11-16T12:35:16+08:00", "ext_info": {"ref_idx": "REFIDX_..."}}`。用的是 `tests/live/test_live.py::test_bot_replies_to_a_c2c_message`：真实的 `Bot` 连上网关，收到单聊消息后回复。
+- **实现**：`SentMessage`。fixture：`message_sent.json`。

@@ -1,6 +1,7 @@
 """用实测得到的真实响应回归 SDK 的解析。样本脱敏后存在 `tests/fixtures/`，出处见 `docs/errata.md`。"""
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx2
@@ -25,6 +26,23 @@ async def get_token_from(name: str) -> str:
         pyqbot.Client("app-id", "app-secret", http_client=http_client) as client,
     ):
         return await client.get_access_token()
+
+
+async def test_sent_message_response_decodes() -> None:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        name = "token_success.json" if request.url.path.startswith("/app/") else "message_sent.json"
+        return httpx2.Response(200, content=sample(name))
+
+    async with (
+        httpx2.AsyncClient(transport=httpx2.MockTransport(handler)) as http_client,
+        pyqbot.Client("app-id", "app-secret", http_client=http_client) as client,
+    ):
+        sent = await client.users.send_message("0123456789ABCDEF0123456789ABCDEF", "你好")
+
+    assert sent.id == "ROBOT1.0_fake-sent-message-id"
+    assert sent.timestamp == datetime(2026, 11, 16, 12, 35, 16, tzinfo=timezone(timedelta(hours=8)))
+    assert sent.ext_info is not None
+    assert sent.ext_info.ref_idx == "REFIDX_fake"
 
 
 async def test_token_response_with_string_expires_in_is_accepted() -> None:
