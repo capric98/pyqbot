@@ -72,7 +72,8 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
   ```text
   QQBotError        基类：message、err_code、trace_id（后两者可为 None）
   ├── APIError      平台返回了失败：另带 status_code；可按需再细分
-  │   └── PartialFailureError  批量操作部分失败（其余已生效）：另带 failed_ids
+  │   ├── PartialFailureError  批量操作部分失败（其余已生效）：另带 failed_ids
+  │   └── AuditPendingError  已受理、等待人工审核：另带 audit_id（见「频道消息与内容」）
   ├── NetworkError  没拿到响应：连接失败、超时
   └── GatewayError  网关被关闭且不可恢复：err_code 为关闭码（有的话）
   ```
@@ -81,18 +82,19 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 
 ## 请求层与接口分组（已落地）
 
-- **`_http.py` 的 `HTTP`**（内部）：`Client` 构造时创建，各组接口只经它发请求。`await http.request(method, path, *, type_, params=None, json=None)` 负责拼绝对地址、加 `Authorization: QQBot {token}`、显式传超时，`json` 经 msgspec 编码，成功时用 `_model.decode()` 解成 `type_`；`type_=None` 不解码、返回 `None`，给没有响应体的接口用。token 取自注入的 `Client.get_access_token`，所以客户端关闭后请求抛 `RuntimeError`。路径参数一律经 `path_segment()` 转义。
+- **`_http.py` 的 `HTTP`**（内部）：`Client` 构造时创建，各组接口只经它发请求。`await http.request(method, path, *, type_, params=None, json=None, data=None, files=None)` 负责拼绝对地址、加 `Authorization: QQBot {token}`、显式传超时，`json` 经 msgspec 编码（`data` / `files` 则发 `multipart/form-data`，与 `json` 二选一；`request_decoded()` 同），成功时用 `_model.decode()` 解成 `type_`；`type_=None` 不解码、返回 `None`，给没有响应体的接口用。token 取自注入的 `Client.get_access_token`，所以客户端关闭后请求抛 `RuntimeError`。路径参数一律经 `path_segment()` 转义。
 - **失败映射**（`dev-prepare/api-call-guide.md`）：文案前缀为 `{method} {path} 失败：`，脱敏时传 `app_secret` 与本次请求用的 token（约定 7）；`err_code`、`trace_id` 的取法同约定 3。不做自动重试和限频退避。
 
   | 情况 | 结果 |
   | --- | --- |
   | 拿不到响应（`httpx2.RequestError`） | `NetworkError` |
+  | 2xx 且错误码为 304023 / 304024（已受理、等待人工审核） | `AuditPendingError` |
   | 响应体带非零或认不出的 `err_code` / `code`，不论状态码（文档说 201、202 会带失败结构） | `APIError` |
   | 状态码不是 2xx | `APIError` |
   | 响应体不是 JSON | `APIError`（「无法解析响应」） |
   | 2xx、没有错误码，但解不成 `type_` | `APIError`（「响应无法识别」） |
 
-- **接口分组**：`_api/users.py`、`_api/groups.py` 各一个小类，挂成 `client.users`、`client.groups`。单聊与群聊共用 `_api/message.py` 拼请求体。`_api/interactions.py` 挂成 `client.interactions`，只有回应互动的 `ack()`。
+- **接口分组**：`_api/users.py`、`_api/groups.py` 各一个小类，挂成 `client.users`、`client.groups`；频道的见下文「频道管理」与「频道消息与内容」。单聊与群聊共用 `_api/message.py` 拼请求体。`_api/interactions.py` 挂成 `client.interactions`，只有回应互动的 `ack()`。
 - **发消息**：`send_message(openid, content=None, *, markdown, keyboard, media, card, quote, reply_to)`，单聊另有 `wakeup`；返回 `pyqbot.SentMessage`。新的内容类型照样追加仅限关键字的参数，不改已有签名。
   - `msg_type` 由 SDK 推断：传了 `markdown` 为 2、`media` 为 7、`card` 为 8，否则为 0。调用方不接触 `msg_type`。
   - 发请求前抛 `ValueError` 的组合：什么内容都没有；`markdown`、`media`、`card` 传了不止一个；`markdown` 与 `content` 同传（接口页）；`keyboard` 不随 `markdown`（`msg-btn.md`）；`wakeup` 与 `reply_to` 同传。`content` 可以随 `media`、`card` 一起发（文档没禁止，见 `errata.md`）。
@@ -130,7 +132,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
   - 每个分片的响应是 `SentStreamChunk`（`SentMessage` 的子类，多一个 `remain_msg_len`），经 `stream.last_sent` 取最近一个；SDK 不按 `remain_msg_len` 做任何判断。`is_wakeup` 暂不提供（与发消息页的说法冲突，见 `errata.md`）。
 - **群管理**（`_api/groups.py`，挂在 `client.groups` 上）：`get_info`、`get_bot_state`、`iter_members`、`get_member`、`remove_members`、`iter_blacklist`、`add_to_blacklist` / `remove_from_blacklist`、`get_mute_settings`、`mute` / `unmute`、`iter_join_requests`、`approve_join_request` / `decline_join_request`。白名单、内邀、管理员等前提写在各方法的 docstring 里，本地不检查，由平台拒绝。GET 的 `cursor`、`limit` 一律放查询串、不发请求体（文档的出入见 `errata.md`），翻页时 `limit` 取文档给的最大值、不对调用方暴露。批量接口全部成功时返回 `None`；平台报告部分失败时抛 `PartialFailureError`（继承 `APIError`），`failed_ids` 是平台给的失败 openid，文案写明是哪一步失败（如「成员已移出，但 N 个未能加入黑名单」）。它要用成功响应的状态码与 trace_id，所以这类接口经 `HTTP.request_decoded()` 发请求，结果的 `partial_failure()` / `failure()` 构造已脱敏的异常。失败清单（以及 `remove_members_result` 这类表示成败的字段）在模型里写成 `object` 并在 `__post_init__` 里校验：缺失或 `null` 算没有失败，类型不符就让整条响应「无法识别」，不能像普通可选字段那样退回默认值，否则已知的失败会变成全部成功。禁言分 `mute()`（`add`）与 `update_mute()`（`update`，改正在禁言中的到期时间）；全员禁言只能查。入群申请事件上有 `GroupJoinRequest.approve()` / `decline()`。
 - **入群自动审批策略**（`_api/join_strategies.py`，挂成 `client.join_strategies`，属于机器人本身）：`iter_strategies()`、`create()`、`update()`、`add_groups()` / `remove_groups()`、`delete()`、`execute()`、`add_whitelist_users()` / `remove_whitelist_users()`；`strategy` 参数接受 `strategy_id` 或 `JoinStrategy`。`group_openids` 与 `group_ids` 恰好传一个，否则 `ValueError`。修改接口的响应只有启用状态与过期时间，所以 `update()` 等返回 `None`。
-- **时间与批量参数**（`_api/params.py`，以后频道的禁言、日程等沿用）：
+- **时间与批量参数**（`_api/params.py`，频道的禁言、日程也用它）：
   - 调用方传入的时刻是带时区的 `datetime`，没有时区抛 `ValueError`（无法知道指哪个时区）；时长用 `timedelta`，须为正数。一个参数两种都收时（如 `mute(..., until)`、`create(expire_at=...)`），`timedelta` 表示从现在起算。都由 `rfc3339()` 先转成 UTC（带秒级偏移的时区直接输出不是合法的 RFC3339），再把不足一秒的部分向上取整（截止时刻晚不到一秒无害，截掉则可能早于现在），编码成 `2026-08-05T03:23:05+00:00` 这样的字符串。当前时间取自 `params.utc_now()`，测试替换它来固定时钟。响应里的时间照「事件」的时间戳规则解码。
   - 接受多个 ID 的参数写成 `str | Iterable[str]`，单个字符串当作一个元素（`str_list()`），免得被拆成字符；QQ 号、群号这类整数同理写 `int | Iterable[int]`。单次数量上限写在 docstring 里，本地不检查，也不自动拆成多次请求（部分失败难以表达）。
   - 接口里的 `on|off`、`add|del` 之类，公共签名用 `bool`（如 `enabled=`）或分开的方法（如 `add_to_blacklist` / `remove_from_blacklist`）表达，请求体里用 `OpenStrEnum`；响应模型保留接口原样的字段，字段类型是从顶层导出的枚举（如 `JoinStrategyStatus`，否则调用方无法标注或构造），另给便捷属性（如 `JoinStrategy.enabled`）。
@@ -141,6 +143,24 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
   - **翻页**：频道列表与成员列表以本页最后一条的 ID（成员是 `user.id`）作 `after`，空页结束；最后一条解不出非空 ID 时抛 `APIError`，不当作结束（否则漏掉后面的条目）。没有 `user.id` 的成员跳过；平台会重复上一页的成员，迭代器只记上一页的用户 ID 去重，内存不随人数增长。身份组成员以 `next` 作 `start_index`，空页或 `next` 为 `"0"` 时结束。
   - **禁言**：时间参数照「时间与批量参数」，编码成 Unix 秒的字符串（`params.unix_seconds()`，与 `rfc3339()` 共用 `deadline()` 的校验与取整），只发 `mute_end_timestamp`；解除是单独的 `unmute_*`，两个字段都发 `"0"`。全员、批量、单个成员各一对方法（`mute_all`、`mute_members`、`mute_member`），批量的返回设置成功的用户 ID。
   - **前提**：私域、管理员等前提写在各方法 docstring 的摘要里，本地不检查。
+
+## 频道消息与内容（已落地）
+
+- **接口分组**：`client.channels`（子频道：消息、表态、精华、日程、论坛、音频）、`client.guilds`（频道公告）、`client.dms`（频道私信）。子频道公告（`/channels/{channel_id}/announces`）官方已弃用、让改用精华消息，不实现。子频道与私信共用 `_api/guild_message.py` 拼请求体。
+- **发消息**：`send_message(channel_id, content=None, *, markdown, keyboard, embed, ark, image, image_path, image_data, quote, reply_to)`，私信同形（第一个参数是私信会话的 `guild_id`），返回 `GuildMessage`。没有 `msg_type`，各内容字段原样放进请求体，可以同时给。
+  - 发请求前抛 `ValueError` 的组合：什么内容都没有（`content`、`markdown`、`embed`、`ark`、图片都没给）；`image`（URL，由平台转存）、`image_path`、`image_data` 传了不止一个；`keyboard` 不随 `markdown`。发消息页没列 `keyboard`，照单聊群聊接受（见 `errata.md`）。
+  - `embed`、`ark` 是请求模型 `Embed`、`Ark`（与消息里解码用的 `MessageEmbed`、`MessageArk` 分开）；`quote` 是消息 ID 或 `GuildMessage`，填 `message_reference.message_id`，`ignore_get_message_error` 暂不提供。
+  - **本地图片**：`image_path` / `image_data` 时整个请求改为 `multipart/form-data`：图片放在 `file_image`（`image_data` 的文件名固定为 `image`），其余字段中字符串原样、对象与数组写成 JSON 字符串（`send.md`）。文件在线程里读出，读不了原样抛 `OSError`（同富媒体上传）。
+  - **被动回复**：`reply_to` 照单聊群聊用场景标记限定（`ChannelReplyTarget` / `DirectMessageReplyTarget`），填 `msg_id` / `event_id`，但不带 `msg_seq`：发消息页没有这个字段，所以 `reply_fields(target, seq=False)` 既不发也不占用计数（见 `errata.md`）。
+  - **待审核**：响应是 2xx 且错误码为 304023 / 304024 时，请求层（`_raise_if_audit_pending()`，在判定失败之前调用）抛 `AuditPendingError`，`audit_id` 取响应体的 `data.message_audit.audit_id`（缺了为 `None`，经脱敏）。只看错误码与 2xx，不限接口；非 2xx 带这两个码仍是普通 `APIError`。审核结果由 `MESSAGE_AUDIT_*` 事件推送，SDK 不替调用方等待。
+- **快捷方法**：`ChannelAnyMessage`（含 `ChannelMessage`）、`MessageReaction*`、论坛的 `Forum*` 事件的 `reply()` 发到事件的 `channel_id`，`DirectMessage.reply()` 发到它的 `guild_id`，参数同 `send_message`。频道成员事件没有子频道，不加 `reply()`，作为 `client.channels.send_message(channel_id, ..., reply_to=event)` 的 `reply_to`。`Interaction.reply()` 的频道分支发到 `channel_id`，所以它的返回类型是 `SentMessage | GuildMessage`；频道里 `quote` 是消息 ID，传 `media`、`card` 或 `SentMessage` 抛 `ValueError`。
+- **撤回**：`recall_message(channel_id, message, *, hidetip=False)`，私信同形；`hidetip` 总是显式发出（`true` / `false`）。
+- **表情表态**：`add_reaction()` / `remove_reaction()`（`channel_id, message, emoji`，路径用 `emoji.type` 的整数值与 `emoji.id`）；`iter_reaction_users()` 照「分页接口」，第一页只发 `limit`（默认 20，只在第一页有效），之后只发上一页的 `cookie`，`is_end` 为真时结束。
+- **「全部」的 message_id**：精华消息的 `all` 会清空全部，所以单独给 `remove_all_pins()`，`remove_pin(..., "all")` 抛 `ValueError`；频道公告同一时间只有一个，`delete_announcement(guild_id)` 不传 `message` 就是 `all`（推荐子频道类型的公告只能这样删）。
+- **时间参数**：日程的 `start`、`end` 照「时间与批量参数」收带时区的 `datetime` 或正的 `timedelta`（`since` 只收 `datetime`），经 `params.unix_millis()` 编码成毫秒时间戳的字符串：校验与当前时刻同 `deadline()`，但保留毫秒精度，不足一毫秒的部分向上取整。日程的时间字段在接口里是毫秒字符串，模型照原样保留，另给 `Schedule.start` / `end` 属性（UTC 的 `datetime`，认不出为 `None`）。
+- **顶层是数组的响应**（如日程列表）：`type_` 写 `tuple[模型, ...]`，`decode()` 照「宽容解码」逐个元素处理，不合法的元素只丢掉它自己。「频道管理」的列表接口另用 `_list_items()`：那些接口的表格与示例形状不一致（对象或数组），要先取任意 JSON 再包装；只有数组一种形状的接口直接用前者。
+- **论坛**：`list_threads()` 返回 `ForumThreadList`（文档没有翻页参数，`finished` 为 `False` 时也取不到后面的），`get_thread()` 去掉 `thread` 外壳返回 `ForumThread`；`publish_thread()` 只返回 `ForumPublishTask`，结果看 `FORUM_PUBLISH_AUDIT_RESULT`。
+- **音频**：`control_audio(channel_id, status, *, audio_url, text)`：`START` 必须有 `audio_url`，其它操作不能带 `audio_url`、`text`（`audio/model.md`）；上下麦是 `join_mic()` / `leave_mic()`。
 
 ## 网关连接（已落地）
 
@@ -195,11 +215,11 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 - **时间戳**：RFC3339 字符串解成带时区的 `datetime`（如消息的 `timestamp`、`GroupJoinRequest.apply_at`）；整数的 Unix 秒保持 `int`，字段名照官方 JSON（`timestamp`、`subscribe_ts`）。不转成 `datetime`：`to_dict()` 要与接口 JSON 一一对应，`decode()` 严格解码也不会把整数当成时间。调用方要时间对象时写 `datetime.fromtimestamp(event.timestamp, UTC)`。
 - **字段相同、事件名不同的消息**：`GroupAnyMessage`（`GROUP_MESSAGE_CREATE`，群里的全部消息）是基类，`GroupMessage`（`GROUP_AT_MESSAGE_CREATE`）继承它、只覆盖 `event_name`。分发只按事件名找处理函数，不看继承，所以 `on_group_at_message` 收不到全量消息；反过来，标注为 `GroupAnyMessage` 的处理函数可以两处都注册。接受群消息的参数（`quote`、`recall_message`）写基类。以后遇到同类情况照此办理：更宽的事件做基类。
 - **`Interaction` 的两个 ID**：字段 `id`（`d.id`）只用于回应互动 `ack()`（`PUT /interactions/{id}`）；被动回复用 `event_id`（payload 外层的 `id`），与其它事件一样由 `reply_fields()` 填写。回应不自动做，也不在本地防重复，由平台拒绝。
-- **多场景事件的回复分派**：`Interaction.reply()` 按 `chat_type` 选接口，没有时按 `scene`：单聊发给 `user_openid`，群聊发到 `group_openid`；频道抛 `NotImplementedError`（`RuntimeError` 的子类，频道接口落地后补上）；认不出场景或缺少该场景的 openid 抛 `ValueError`，都在发请求之前。因为两个场景共用一个方法，它的 `quote` 只接受引用索引与 `SentMessage`。
+- **多场景事件的回复分派**：`Interaction.reply()` 按 `chat_type` 选接口，没有时按 `scene`：单聊发给 `user_openid`，群聊发到 `group_openid`，频道发到 `channel_id`（见「频道消息与内容」）；认不出场景或缺少该场景的 openid / `channel_id` 抛 `ValueError`，都在发请求之前。因为两个场景共用一个方法，它的 `quote` 只接受引用索引与 `SentMessage`。
 - **频道的事件**（`_models/guild.py`、`guild_message.py`、`forum.py`、`audio.py`）：类名与装饰器的规则同上（`GUILD_MEMBER_ADD` → `GuildMemberAdd` / `on_guild_member_add`）。消息照群聊：`MESSAGE_CREATE` 是 `ChannelAnyMessage` / `on_channel_message`，`AT_MESSAGE_CREATE` 是它的子类 `ChannelMessage` / `on_channel_at_message`，`DIRECT_MESSAGE_CREATE` 是 `DirectMessage` / `on_direct_message`；`PublicMessageDelete` 继承 `MessageDelete`。
   - **数据模型与事件**：频道里的对象另有纯数据模型（`Guild`、`Channel`、`GuildUser`、`GuildMember`、`GuildRole`、`GuildMessage` 等），供事件嵌套与频道接口返回；同形的事件直接继承它（`GuildCreate(Guild, Event)`），处理函数拿到的事件也能当数据模型用。`GuildMessage`（官方的 Message 对象）继承 `ReceivedMessage`：msgspec 只允许一个带字段的基类，而 `reply_fields()` 靠它认出消息；它没有 `event_name`、不带场景标记，不会被分发，也不能作为 `reply_to`。频道成员事件的 `user` 必填，所以不继承 `GuildMember`（那里的 `user` 可选：消息里的 `member` 没有它）。
   - **场景标记**：`ChannelReplyTarget`（`POST /channels/{channel_id}/messages`）与 `DirectMessageReplyTarget`（`POST /dms/{guild_id}/messages`）。继承前者的是 `ChannelAnyMessage`、`ChannelMessage`（用 `msg_id`），`send.md` 的 `event_id` 列表里的 `GuildMember*`、`MessageReaction*`、`ForumThread*`、`ForumPost*`、`ForumReply*`，以及 `Interaction`；继承后者的只有 `DirectMessage`。
-  - **留给频道消息接口的**：发送接口与各事件的 `reply()` 还没有。`reply_to` 照单聊、群聊用上面两个标记类限定；`reply_fields()` 照常给出 `msg_id` / `event_id` 与 `msg_seq`，但子频道发消息的文档没有 `msg_seq`，带不带由实现者定。发送目标：子频道消息、表态、论坛事件取 `channel_id`（都必填），私信取 `guild_id`；频道成员事件没有子频道 ID，它的 `reply()` 要让调用方传 `channel_id`；`Interaction.reply()` 的频道分支（现在抛 `NotImplementedError`）发到 `channel_id`。
+  - **发送接口与 `reply()`**：见「频道消息与内容」。
   - **没有 Intent 位的事件**（`OPEN_FORUM_*`、`AUDIO_OR_LIVE_CHANNEL_MEMBER_*`）：`intent` 为 `Intents(0)`，不编造位。注册了照常分发，但不参与推导：调用方须在构造 `Bot` 时传入完整的 `intents`；只注册这类处理函数又不传时，`start()` 照常抛「没有要订阅的事件」。
   - **论坛富文本与 ID**：论坛事件的 `title`、`content` 是 `str | tuple[ForumRichObject, ...]`，两种原样保留（模型写字符串，事件示例是数组）；字符串可能是 JSON 形式的 RichText，由调用方按需用 `ForumRichText.from_json()` 解析，SDK 不猜。论坛事件与富文本里的 ID 在示例里有时是数字：对外标注为 `str`，运行时也收整数并在 `__post_init__` 里转成字符串（`forum.py` 的 `_Id`），`to_dict()` 里随之是字符串。其它频道事件的示例里 ID 都是字符串，不放宽。
 
@@ -235,13 +255,13 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 
 骨架已经打通：凭证、请求层、网关连接、事件分发、`Bot.start()` / `run()` 都已落地，单聊消息能收能回。剩下的主要是按现有写法铺开：
 
-- **其余事件**：单聊、群聊、频道的事件和 `INTERACTION_CREATE` 都已落地，见「事件」。频道的发送接口、各事件的 `reply()` 与 `Interaction.reply()` 的频道分支随频道消息接口补上，要接的点见「事件」的「留给频道消息接口的」。
+- **其余事件**：单聊、群聊、频道的事件和 `INTERACTION_CREATE` 都已落地，见「事件」；频道事件的 `reply()` 见「频道消息与内容」。
 - **群管理与入群自动审批策略**（已落地）：见「请求层与接口分组」，文档出入与待实测项见 `errata.md`，实测用例在 `tests/live/test_live_groups.py`（须用户提供测试群并单独同意）。
-- **其余接口**：频道与子频道的管理接口已落地（见「请求层与接口分组」的「频道管理」）；频道消息与内容接口加在 `client.channels` 上。机器人自身、分享链接、自定义菜单、指令面板已落地。
+- **频道接口**（已落地）：频道与子频道的管理（见「请求层与接口分组」的「频道管理」），以及消息、私信、表态、精华、公告、日程、论坛、音频（见「频道消息与内容」）都已落地；频道目前不能实测，条件见 `errata.md`「频道：测试条件」。机器人自身、分享链接、自定义菜单、指令面板也已落地。
 - **其它消息类型**（已落地）：Markdown、键盘、富媒体、卡片、引用、正在输入、互动召回、撤回、流式消息，见「请求层与接口分组」。剩下：文本里的 `<qqbot-at-user>` 等交互标签（`trans/text-chain.md`）现在由调用方自己拼。
 - **富媒体上传与素材库**（已落地）：见「请求层与接口分组」，文档出入与待实测项见 `errata.md`，实测用例在 `tests/live/test_live_upload.py`。
 - **Webhook**（未确认）：见上。
-- **待定的语义**：HTTP 202 加 304023 / 304024 表示「已受理、等待审核」，现在按失败抛出，响应体里的 `data.message_audit.audit_id` 也没有带出来；做频道消息时要定下怎么表达（见 `errata.md`）。
+- **已定的语义**：HTTP 202 加 304023 / 304024（「已受理、等待审核」）抛 `AuditPendingError`，带出 `audit_id`，见「频道消息与内容」。
 
 已知限制，都还没有处理，动手前先和用户确认做法：
 

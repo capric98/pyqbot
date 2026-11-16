@@ -21,8 +21,8 @@
 
 - **位置**：`dev-prepare/api-call-guide.md`「HTTP 状态码」。
 - **含糊**：201、202 是「异步操作成功」，但「会返回一个 error body，需要特殊处理」，没有说明哪些接口会返回、失败结构里是什么。公共错误码表里的 `304023`、`304024`（异步调用成功、等待人工审核）可能就是这种情况，属于频道消息。
-- **当前做法**：不看状态码，只要响应体带非零的 `err_code` / `code` 就抛 `APIError`，调用方可按 `status_code` 与 `err_code` 区分；没有错误码则按成功解码。
-- **不主动实测**：单聊、群聊的发消息接口还没见过这种响应，实际遇到时记到这里。
+- **当前做法**：不看状态码，只要响应体带非零的 `err_code` / `code` 就抛 `APIError`；其中 2xx 且错误码为 304023 / 304024 的抛子类 `AuditPendingError`，带出 `data.message_audit.audit_id`（`server-inter/channel/message/send.md`「错误码」）。没有错误码则按成功解码。
+- **不主动实测**：单聊、群聊的发消息接口还没见过这种响应；频道见「频道：测试条件」，实际遇到时记到这里。
 
 ### 关闭码：表格与表下简化说明冲突
 
@@ -300,6 +300,8 @@
 
 管理接口（`client.guilds`、`client.channels`）另需：机器人在测试频道里是管理员；成员列表、身份组成员列表、移出成员、创建/修改/删除子频道要私域机器人，且开通私域后要把机器人移出频道再重新添加；禁言、移出成员、改身份组与权限须有一个同意配合的测试成员（不能是管理员）；子频道在线人数要有音视频或直播子频道；授权链接每个频道每天只能发 3 条。这些操作都会影响频道里的其他人，每次须单独征得同意，用完把测试成员与子频道恢复原状。
 
+频道的消息与内容接口还要：在测试频道里能发消息的子频道（发消息时机器人须在线，即连着网关）；撤回、论坛接口要私域机器人；精华消息、公告、日程要机器人是管理员，日程另需日程子频道；论坛要论坛子频道；音频要申请过权限的音频机器人与语音子频道；私信要一个与机器人同在测试频道、同意接收私信的测试用户；表情表态的用户列表要有人先对消息表态。所以目前没有频道的实测用例。
+
 ### 子频道全量消息 `MESSAGE_CREATE` 的 Intent
 
 - **位置**：`server-inter/channel/message/event.md` 的 `MESSAGE_CREATE` 标题；`dev-prepare/event-emit/payload.md`「事件订阅 Intents」。
@@ -506,6 +508,76 @@
 - **矛盾**：创建与修改都说 `group_ids` 是「QQ 群号列表（uint64）」，列表的响应示例却是打了码的字符串（`"10****499"`）；白名单号码明确要求字符串「避免 JS 精度问题」，群号没有。创建示例带了 `"expire_at": ""`，字段说明是「不传默认一年过期」。执行接口说请求为空，示例是 `{}`。
 - **当前做法**：请求里 `group_ids` 发整数；响应里的 `JoinStrategy.group_ids` 是 `tuple[int | str, ...]`，原样保留。不传 `expire_at` 时不发这个键。执行接口发 `{}`。
 - **怎么测**：实测用例 `test_join_strategy_lifecycle` 用 `group_openids` 创建；要确认 `group_ids` 须用户另给一个测试群的群号，看创建能否成功、列表里返回什么类型、是否打码。
+
+### 频道发消息：没有 `msg_seq`
+
+- **位置**：`server-inter/channel/message/send.md`「通用参数」；单聊、群聊的发消息页有 `msg_seq`。
+- **含糊**：子频道（私信同参数）的请求体没有 `msg_seq`，没说同一条消息能被动回复几次、靠什么去重。
+- **当前做法**：频道不发 `msg_seq`，也不占用回复对象的计数（`reply_fields(..., seq=False)`）。
+- **怎么测**：见「频道：测试条件」。由人 @机器人 发一条消息，对它连续被动回复 3 条，看是否都成功；再带上 `msg_seq` 发一次，看是否被拒或被去重。
+
+### 频道发消息：`keyboard`
+
+- **位置**：`send.md` 的「通用参数」；`server-inter/message/trans/msg-btn.md`。
+- **含糊**：发消息页没有 `keyboard`，按钮页却有「仅频道可用」的身份组权限（`specify_role_ids`），频道里也有互动事件。
+- **当前做法**：子频道与私信接受 `keyboard`，照单聊群聊只能随 `markdown` 发送。
+- **怎么测**：Markdown 已开通的机器人在测试子频道发一条带回调按钮的 Markdown 消息，看按钮是否显示、点击后是否推送 `INTERACTION_CREATE`。
+
+### 频道发消息：待审核响应用 `code`，`ark` 能否发送
+
+- **位置**：`send.md`「错误码」的示例；`dev-prepare/api-call-guide.md` 的通用失败结构；`server-inter/message/type/overview.md`「各场景支持情况」。
+- **矛盾**：审核示例的错误码字段是 `code`，通用结构是 `err_code`；`overview.md` 说结构化卡片在频道「发 ❌」，`send.md` 与 `ark.md` 却给了频道发 `ark` 的方法。
+- **当前做法**：两个错误码字段都认（同「获取 token：平台自身出错时的错误字段」）；`ark` 照 `send.md` 发送，能否发由平台决定（无权限时 `304004`）。
+- **怎么测**：向测试子频道发主动消息直到平台要求审核，记下响应体；有 Ark 权限的机器人发一条模板 23 的 Ark。
+
+### 频道的 @ 写法：`<@user_id>` 还是 `<qqbot-at-user>`
+
+- **位置**：`server-inter/channel/message/format.md`「支持的格式」；`server-inter/message/trans/text-chain.md`「使用 @ 能力」。
+- **矛盾**：`format.md` 用 `<@user_id>` / `<@!user_id>` 与 `@everyone`，`text-chain.md` 说它们「即将弃用」、改用 `<qqbot-at-user id="" />` 与 `<qqbot-at-everyone />`，并说子频道里 `id` 填 `user_openid`（频道里用户的 ID 是 `GuildUser.id`）。
+- **当前做法**：SDK 不拼这些标签，`content` 原样发送；docstring 举的是 `format.md` 的写法。
+- **怎么测**：在测试子频道分别用两种写法 @测试用户，看是否都渲染成 @ 标签，`id` 该填哪个值。
+
+### Ark：示例用了模板没有的变量
+
+- **位置**：`server-inter/message/type/ark.md`「请求示例」；`send.md`「form-data 格式示例」。
+- **矛盾**：第一个示例用模板 23，却填了模板 23 没有定义的 `#TITLE#`、`#META_URL#`、`#META_LIST#`（模板 23 只有 `#DESC#`、`#PROMPT#`、`#LIST#`）；`send.md` 的 form-data 示例里 `ark` 字段的值多包了一层 `{"ark": ...}`，`template_id` 是没有列出的 1。
+- **当前做法**：`Ark` 只是 `template_id` 与 `kv` 的容器，变量由调用方按模板的「字段说明」填；multipart 里的 `ark` 字段是 Ark 对象本身的 JSON，不多包一层。
+- **怎么测**：有 Ark 权限的机器人用 multipart（带一张本地图片）发一条模板 23 的 Ark，看是否成功。
+
+### 表情表态：emoji 的 ID
+
+- **位置**：`openapi/emoji/model.md` 的 `Emoji` 与「Emoji 列表」。
+- **矛盾**：字段说明说「emoji 使用 emoji 本身为 id」，列表里 type 2 的 ID 却是码点的十进制（如 `9728` 是 ☀）。
+- **当前做法**：`Emoji.id` 原样放进表态接口的路径（经转义），不转换；`EmojiType` 的 docstring 按列表写成码点的十进制。
+- **怎么测**：对测试子频道的一条消息分别用 `"128077"` 与 `"👍"` 表态，看哪个成功；再由人用 emoji 表态，记下事件里的 `emoji.id`。
+
+### 日程列表：`since` 写成 GET 的请求体
+
+- **位置**：`server-inter/channel/content/schedule/get_schedules.md` 的「参数」与示例。
+- **含糊**：`GET` 接口的示例把 `since` 放在 JSON 请求体里。
+- **当前做法**：放进查询参数 `?since=毫秒`，GET 不带请求体。
+- **怎么测**：在日程子频道建两个日程，一个今天结束、一个明天结束，用 `since` 取明天之后的，看是否只返回后者。
+
+### 修改日程：没传的字段怎么办
+
+- **位置**：`schedule/patch_schedule.md`。
+- **含糊**：`PATCH` 的请求体是完整的 `Schedule`（「不需要带 id」），没说缺省字段是保留还是清空。
+- **当前做法**：`update_schedule()` 的名称与时间必填，其余只在给出时发送；docstring 提示按需要的结果给全。
+- **怎么测**：建一个带描述的日程，修改时不传 `description`，再取详情看描述是否还在。
+
+### 帖子详情：`thread` 是 `ThreadInfo` 还是 `Thread`
+
+- **位置**：`server-inter/channel/content/forum/get_thread.md` 的「返回」与示例。
+- **矛盾**：返回表说 `thread` 是 `ThreadInfo`（`thread_id`、`title`、`content`、`date_time`），示例却是完整的 `Thread`（`guild_id`、`channel_id`、`author_id` 加嵌套的 `thread_info`）。
+- **当前做法**：按示例解成 `ForumThread`，`thread_info` 必填；若实际是扁平的 `ThreadInfo`，会按「响应无法识别」抛 `APIError`。两种都认要先取原始字典再分派，宽容解码没有现成入口，等实测确认再改。
+- **怎么测**：私域机器人在论坛子频道取一个真实帖子的详情，看 `thread` 下是否有 `thread_info`。
+
+### 帖子列表：没有翻页参数
+
+- **位置**：`forum/get_threads_list.md`。
+- **含糊**：响应有 `is_finish`（是否拉取完毕），但接口没有游标、偏移量之类的参数，取不到后面的帖子。
+- **当前做法**：`list_threads()` 只取一次，返回 `ForumThreadList`，`finished` 反映 `is_finish`；不做成 `iter_*`。
+- **怎么测**：在论坛子频道发足够多的帖子，看 `is_finish` 何时为 0、响应里是否另有游标字段。
 
 ## 已确认
 
