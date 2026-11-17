@@ -291,7 +291,7 @@
 - **含糊**：只有不在群里的用户才能加入黑名单，但没说对在群里的用户 `add` 时，是放进响应的 `fail_openids` 还是整个请求报错；`op=del` 时 `fail_openids`「同义」也没说清。批量移出成员的响应同理：`add_to_member_blacklist_fail_openids` 是拉黑失败的成员，`remove_members_result` 只说「成功时返回 success」，没有逐个的移出结果，也没说失败时是什么。
 - **当前做法**：`fail_openids` 非空时 `add_to_blacklist()`、`remove_from_blacklist()` 抛 `PartialFailureError`（`failed_ids` 即它）；`remove_members()` 在拉黑失败清单非空时同样抛它，`remove_members_result` 是字符串但不是 `success` 时抛 `APIError`，缺失或 `null` 算没有报告。失败清单缺失或为 `null` 算没有失败，不是字符串列表时按「响应无法识别」抛 `APIError`，不退回空清单；`remove_members_result` 不是字符串也不是 `null` 时同样按「响应无法识别」处理。
 - **已知**（2026-11-16，机器人是管理员）：查黑名单仍报 40012010，用例第一步就停了，拉黑没有发出。移出成员报 40103011「操作失败, 机器人已经关闭操作权限」（文档没有这个错误码）；用户在群设置「机器人管理员权限设置」里打开「移除群成员」后，只移出、不拉黑又试了两次，仍是 40103011，请求体与文档一致。移出接口页写着「该能力正在内邀接入中」。
-- **已知**（2026-11-17，机器人加入白名单群、开通「移除群成员」之后）：只移出、不拉黑被接受，`remove_members()` 没有抛异常，即 `remove_members_result` 是 `success` 或没有给出，拉黑失败清单为空；原始响应没有留存。查黑名单仍报 40012010，拉黑仍没有发出。
+- **已知**（2026-11-17，机器人加入白名单群、开通「移除群成员」之后）：只移出、不拉黑被接受，`remove_members()` 没有抛异常，即 `remove_members_result` 是 `success` 或没有给出，拉黑失败清单为空，用户确认该成员已不在群里；原始响应没有留存。查黑名单仍报 40012010，拉黑仍没有发出。
 - **怎么测**：开通黑名单接口后，再跑实测用例 `test_blacklist_add_only_works_for_users_outside_the_group` 与 `LIVE_REMOVE_BLACKLIST=1` 的 `test_remove_member_and_blacklist`。
 
 ### 入群申请审批：`join_request_id` 标为可选
@@ -748,7 +748,7 @@
 ### @全体成员：超限报 40034142，不是 304019
 
 - **位置**：`server-inter/message/trans/text-chain.md`（机器人须是群管理员，每个群每天一次）；`openapi/error/error.md`、`dev-prepare/api-call-guide.md` 的 304019「@全体成员 次数超限」。群聊发消息页的错误码表里两者都没有。
-- **结论**（`test_at_everyone`，2026-11-17，机器人是管理员，主动发文本）：第一次被接受；5 秒后再发一次被拒，`err_code` 40034142「消息发送失败，@全体成员次数超限」。
+- **结论**（`test_at_everyone`，2026-11-17，机器人是管理员，主动发文本）：第一次被接受；5 秒后再发一次被拒，`err_code` 40034142「消息发送失败，@全体成员次数超限」。用户确认第一条在群里正常显示。
 - **实现**：不变，SDK 不在本地计数。群聊 `send_message()` 的 docstring 写明这个限制与错误码。
 
 ### 链接：按钮不接受自定义 scheme，第三方 https 链接可用
@@ -757,7 +757,7 @@
 - **结论**（2026-11-17，群主动消息，Markdown 加跳转按钮；被拒时把按钮逐个拆开重发）：
   - 跳转按钮的 `data` 是 App 的自定义 scheme（`xxx://...`）时整条消息被拒：40034028「请求参数不允许包含url {scheme 后的第一段}」。
   - 第三方网站的 https 链接作跳转按钮被接受，没有遇到 304003。
-  - Markdown 正文里第三方网站的 `[文字](https://...)` 与裸链接、第三方图床的带尺寸图片都被接受；`pic_url` 是第三方图床的卡片也被接受。
+  - Markdown 正文里第三方网站的 `[文字](https://...)` 与裸链接、第三方图床的带尺寸图片都被接受；`pic_url` 是第三方图床的卡片也被接受。用户确认这些消息在群里显示正常：图片、换行与空行、引用块里的图片、链接、卡片、按钮。
 - **实现**：`Button.link()` 的 docstring 写明不能用自定义 scheme。SDK 不在本地校验，交给平台判断。
 
 ### Markdown：形如链接、目标却不是 URL 的文字被判「消息内容违规」
