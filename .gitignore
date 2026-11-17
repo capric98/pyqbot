@@ -222,3 +222,22 @@ __marimo__/
 # Claude Code：子代理的 worktree 与本机设置
 .claude/worktrees/
 .claude/settings.local.json
+
+# macOS（取自 github/gitignore 的 Global/macOS.gitignore）
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon[\r]
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
