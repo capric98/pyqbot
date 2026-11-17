@@ -29,7 +29,7 @@ class Interactions:
             code: 处理结果，客户端据此给用户提示。
 
         Raises:
-            APIError: 平台拒绝，例如互动已过期或已回应过。
+            APIError: 平台拒绝，例如互动不存在（超时与重复回应实测都不报错）。
             NetworkError: 没有拿到平台的响应。
             ValueError: 互动 ID 为空。
             RuntimeError: 客户端已关闭。

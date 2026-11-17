@@ -34,6 +34,7 @@ class Client:
     Args:
         app_id: 机器人的 AppID，在开放平台管理端获得。
         app_secret: 机器人的 AppSecret，在开放平台管理端获得。
+        base_url: 开放平台 API 的地址，默认是官方地址，一般不用改。
         timeout: 单次请求的超时时间，单位秒。
         http_client: 自备的 `httpx2.AsyncClient`，用于配置代理、证书、连接池等，由调用方负责关闭；
             它自身的 `base_url` 和 `timeout` 不会被使用。不传则由客户端自建并负责关闭。
