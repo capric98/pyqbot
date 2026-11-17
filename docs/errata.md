@@ -88,14 +88,6 @@
 - **已知**：不带 `msg_id` 的召回消息（`wakeup=True`）被接受，测试用户收到了（2026-11-16，`test_wakeup`）。
 - **不主动实测**：与 `msg_id` / `event_id` 同传的情况；召回消息每个周期只能发一条，测一次就占掉一个周期。
 
-### 富媒体：各页列出的支持格式不一致
-
-- **位置**：`server-inter/message/rich-media.md` 的「支持的消息类型」与同页「文件类型与限制」表格；单聊、群聊上传页的 `file_type` 一行。
-- **矛盾**：正文说图片 jpg/png/gif/webp/bmp、语音 silk/mp3/wav/ogg；同页表格与单聊上传页说图片 png/jpg、语音 silk；群聊上传页说语音 silk/mp3/wav。
-- **当前做法**：不传 `file_type` 时按最宽的列表推断（png/jpg/jpeg/gif/webp/bmp 为图片，mp4 为视频，silk/slk/mp3/wav/ogg 为语音），平台不支持时由它拒绝（850019），调用方可改传 `FileType.FILE`。
-- **已知**：单聊里 gif、webp、bmp、jpg 图片，wav、mp3、ogg（vorbis）语音与 mp4 视频都上传、发送成功（2026-11-16，`test_image_and_voice_formats`、`test_ffmpeg_voice_and_video_formats`）。
-- **怎么测**：silk 语音；群聊里的这些格式。
-
 ### 分片上传：`upload_config.retry_timeout` 的含义
 
 - **位置**：预上传页的 `UploadConfig`。
@@ -730,3 +722,12 @@
   - `mentions` 里机器人那一项有文档没提的 `is_you: true`、`scope: "single"`，以及 `bot: true`、`member_nickname`。
   - QQ 表情在 `content` 里写作 `<faceType=3,faceId="427",ext="...">`，`ext` 是 base64 的 JSON（如 `{"text":"偷感"}`）。
 - **实现**：`GroupMessageMember` 补上 `is_you`、`scope`；`GroupMessage.mentions_me` 判断是否 @ 了本机器人（`GroupAtMessage` 上恒为真）；`on_group_at_message` 的 docstring 写明全量模式下收不到。表情原样保留在 `content` 里，不解析。fixture：`gateway_group_message_create_mention.json`。
+
+### 富媒体：图片、语音、视频格式比文档列的多
+
+- **位置**：`server-inter/message/rich-media.md` 的「支持的消息类型」与同页「文件类型与限制」表格；单聊、群聊上传页的 `file_type` 一行（图片 png/jpg、语音 silk 等，各页不一）。
+- **结论**（`test_image_and_voice_formats`、`test_ffmpeg_voice_and_video_formats`、`test_group_media_formats`）：
+  - 单聊与群聊里，gif、webp、bmp、jpg 图片，wav、mp3、ogg（vorbis）语音，mp4 视频都上传、发送成功，客户端正常显示、播放。
+  - 曾用的 1×1 webp 样本是全透明像素，客户端显示空白；换成 64×64 的绿色 webp 后正常。
+- **没有测**：silk 语音（本机没有编码器）。
+- **实现**：不变，SDK 按扩展名推断 `file_type`。
