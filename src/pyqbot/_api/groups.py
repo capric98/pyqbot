@@ -63,7 +63,8 @@ class Groups:
 
         Args:
             group_openid: 群的 openid。
-            content: 文本内容；各内容参数的组合规则同 `client.users.send_message()`。
+            content: 文本内容；各内容参数的组合规则同 `client.users.send_message()`。文本或 Markdown 里写
+                `<qqbot-at-everyone />` 即 @全体成员：机器人须是群管理员，每个群每天一次，超出报 40034142。
             markdown: Markdown 正文或 `Markdown` 对象。
             keyboard: 消息下方的按钮。
             media: 在群聊上传的富媒体（与单聊上传的不互通）。

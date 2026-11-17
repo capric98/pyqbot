@@ -319,7 +319,7 @@ async def test_at_everyone(client: pyqbot.Client, write_allowed: str) -> None:
     """须用户单独同意，另要 `LIVE_AT_EVERYONE=1`：会提醒群里所有人，每个群每天只能发一次。
 
     主动发一条文本「pyqbot 实测：<qqbot-at-everyone />」。应看到：群成员收到 @全体成员 的提醒；
-    文档要求机器人是管理员，当天已经发过时报 304019。
+    文档要求机器人是管理员。当天已经发过时报 40034142（文档写的是 304019）。
     """
     if os.environ.get("LIVE_AT_EVERYONE") != "1":
         pytest.skip("会提醒群里所有人：须用户单独同意后设 LIVE_AT_EVERYONE=1")

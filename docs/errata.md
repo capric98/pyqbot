@@ -82,6 +82,12 @@
 - **已知**：自定义 `content` 可用，标题、粗体、斜体、链接都正常显示（2026-11-16，`test_markdown`）。
 - **不测**：模板没有可用的模板 ID。
 
+### Markdown：一段转义测试被判「消息内容违规」
+
+- **位置**：群聊发消息页错误码 40034006「消息内容违规」；`server-inter/message/type/markdown.md` 没提转义。
+- **已知**（2026-11-17，群主动消息）：一段专门测转义的 Markdown 被拒，40034006。它用反斜杠转义了 `` *_~`[]<>|$ ``，行首的 `#>+-` 与 `1.`，含 `\<b>f\</b>`、`C:\\path\\to`、`\$x^2\$` 这类文字。同一批里其它 Markdown（标题、粗体、换行、空行、引用块、带尺寸的图片、链接）都被接受，其中一条含转义的 `\_`、`\*`，所以这两种不是原因。
+- **怎么测**：逐行拆开发送，找出触发的那部分。反复触发违规可能影响机器人，须用户同意。
+
 ### 互动召回 `is_wakeup` 与 `msg_id` / `event_id`
 
 - **位置**：单聊发消息页的 `is_wakeup` 一行；`autogen/api/v2_users_user_openid_stream_messages.post.md` 的 `is_wakeup` 一行。
@@ -291,7 +297,8 @@
 - **含糊**：只有不在群里的用户才能加入黑名单，但没说对在群里的用户 `add` 时，是放进响应的 `fail_openids` 还是整个请求报错；`op=del` 时 `fail_openids`「同义」也没说清。批量移出成员的响应同理：`add_to_member_blacklist_fail_openids` 是拉黑失败的成员，`remove_members_result` 只说「成功时返回 success」，没有逐个的移出结果，也没说失败时是什么。
 - **当前做法**：`fail_openids` 非空时 `add_to_blacklist()`、`remove_from_blacklist()` 抛 `PartialFailureError`（`failed_ids` 即它）；`remove_members()` 在拉黑失败清单非空时同样抛它，`remove_members_result` 是字符串但不是 `success` 时抛 `APIError`，缺失或 `null` 算没有报告。失败清单缺失或为 `null` 算没有失败，不是字符串列表时按「响应无法识别」抛 `APIError`，不退回空清单；`remove_members_result` 不是字符串也不是 `null` 时同样按「响应无法识别」处理。
 - **已知**（2026-11-16，机器人是管理员）：查黑名单仍报 40012010，用例第一步就停了，拉黑没有发出。移出成员报 40103011「操作失败, 机器人已经关闭操作权限」（文档没有这个错误码）；用户在群设置「机器人管理员权限设置」里打开「移除群成员」后，只移出、不拉黑又试了两次，仍是 40103011，请求体与文档一致。移出接口页写着「该能力正在内邀接入中」。
-- **怎么测**：开通黑名单接口、打开机器人的操作权限后，再跑实测用例 `test_blacklist_add_only_works_for_users_outside_the_group`、`test_remove_member_and_blacklist`。
+- **已知**（2026-11-17，机器人加入白名单群、开通「移除群成员」之后）：只移出、不拉黑被接受，`remove_members()` 没有抛异常，即 `remove_members_result` 是 `success` 或没有给出，拉黑失败清单为空；原始响应没有留存。查黑名单仍报 40012010，拉黑仍没有发出。
+- **怎么测**：开通黑名单接口后，再跑实测用例 `test_blacklist_add_only_works_for_users_outside_the_group` 与 `LIVE_REMOVE_BLACKLIST=1` 的 `test_remove_member_and_blacklist`。
 
 ### 入群申请审批：`join_request_id` 标为可选
 
@@ -572,6 +579,7 @@
   - 禁言设置与入群申请列表报 40011030「机器人不是群管理员」。
   - `bot_state` 的响应是合法的 JSON（文档示例少了引号），字段与字段表一致：`allow_proactive_msg` 为 false，`recv_msg_setting` 是空串（不在文档列的三个取值里），`member_role` 是 `member`，`joined_at` 是 RFC3339。
 - **机器人是管理员之后**：禁言设置与入群申请列表可以查；成员列表、查单个成员、黑名单仍报 40012010（内邀能力，与身份无关）；批量移出成员报 40103011「操作失败, 机器人已经关闭操作权限」。
+- **加入白名单群之后**（2026-11-17，开通了撤回消息、进群管理、发言管理、移除群成员、@全体成员）：批量移出成员被接受；成员列表、查单个成员、黑名单仍报 40012010，不在这几项里。
 - **实现**：错误码写进各接口的 docstring；`recv_msg_setting` 的空串由 `RecvMsgSetting` 原样保留。
 
 ### 网关：Resume 时积压的事件先于 `RESUMED` 补发
@@ -665,11 +673,11 @@
 - **结论**（用户提供的测试群，机器人不是管理员）：
   - 被动回复 Markdown 加键盘、`message.upload(url=...)` 的图片、分片上传的大图都成功；撤回自己的消息成功。
   - 群里点回调按钮：`type` 11、`chat_type` 1、`scene` 为 `"group"`，用外层 `id` 被动回复成功。
-  - 不带 `msg_id` 的群主动消息被拒：`err_code` 40034105「主动消息失败, 无权限」（`bot_state` 的 `allow_proactive_msg` 为 false）。
+  - 不带 `msg_id` 的群主动消息被拒：`err_code` 40034105「主动消息失败, 无权限」（`bot_state` 的 `allow_proactive_msg` 为 false）。群里打开主动消息后 `allow_proactive_msg` 为 true，同样的主动消息被接受（2026-11-17，`test_proactive_group_message`）。
   - 查单个成员与成员列表一样报 40012010。
   - `GROUP_MEMBER_ADD`、`GROUP_MEMBER_REMOVE` 有 `group_openid`、`member_openid`、`timestamp` 和文档没有的 `union_openid`（空串）；退群事件没有文档说的 `user_openid`。
   - `GROUP_DEL_ROBOT` 有 `group_openid`、`op_member_openid`、`timestamp`；拉回后的 `GROUP_ADD_ROBOT` 同前，用它回复成功。
-- **没有测**：群级的主动消息开关（`GROUP_MSG_REJECT` / `RECEIVE`，或 `type` 19 的授权互动），以及各种需要管理员的接口。
+- **没有测**：群级主动消息开关的事件（`GROUP_MSG_REJECT` / `RECEIVE`，或 `type` 19 的授权互动）。
 - **实现**：`GroupMemberAdd`、`GroupMemberRemove` 补上 `union_openid`。fixture：`gateway_group_member_add.json`、`gateway_group_member_remove.json`。
 
 ### 单聊被动回复的有效期：至少 55 分钟
@@ -742,3 +750,18 @@
   - 曾用的 1×1 webp 样本是全透明像素，客户端显示空白；换成 64×64 的绿色 webp 后正常。
 - **没有测**：silk 语音（本机没有编码器）。
 - **实现**：不变，SDK 按扩展名推断 `file_type`。
+
+### @全体成员：超限报 40034142，不是 304019
+
+- **位置**：`server-inter/message/trans/text-chain.md`（机器人须是群管理员，每个群每天一次）；`openapi/error/error.md`、`dev-prepare/api-call-guide.md` 的 304019「@全体成员 次数超限」。群聊发消息页的错误码表里两者都没有。
+- **结论**（`test_at_everyone`，2026-11-17，机器人是管理员，主动发文本）：第一次被接受；5 秒后再发一次被拒，`err_code` 40034142「消息发送失败，@全体成员次数超限」。
+- **实现**：不变，SDK 不在本地计数。群聊 `send_message()` 的 docstring 写明这个限制与错误码。
+
+### 链接：按钮不接受自定义 scheme，第三方 https 链接可用
+
+- **位置**：`server-inter/message/trans/msg-btn.md` 说跳转按钮用「http 或 小程序 客户端识别 scheme」；公共错误码 304003「url 未报备」。群聊发消息页的错误码表里没有 40034028。
+- **结论**（2026-11-17，群主动消息，Markdown 加跳转按钮；被拒时把按钮逐个拆开重发）：
+  - 跳转按钮的 `data` 是 App 的自定义 scheme（`xxx://...`）时整条消息被拒：40034028「请求参数不允许包含url {scheme 后的第一段}」。
+  - 第三方网站的 https 链接作跳转按钮被接受，没有遇到 304003。
+  - Markdown 正文里第三方网站的 `[文字](https://...)` 与裸链接、第三方图床的带尺寸图片都被接受；`pic_url` 是第三方图床的卡片也被接受。
+- **实现**：`Button.link()` 的 docstring 写明不能用自定义 scheme。SDK 不在本地校验，交给平台判断。

@@ -228,6 +228,7 @@ class Button(RequestModel):
     ) -> Button:
         """跳转按钮：点击后打开 `url`。
 
+        `url` 用 http(s) 链接；App 的自定义 scheme（如 `app://...`）会让整条消息被拒（40034028）。
         `permission=None` 表示所有人可点；点击后按钮文字不变。
         """
         return cls._make(
