@@ -304,7 +304,7 @@
 - **位置**：`autogen/api/v2_groups_group_openid_member_blacklist.post.md`。
 - **含糊**：只有不在群里的用户才能加入黑名单，但没说对在群里的用户 `add` 时，是放进响应的 `fail_openids` 还是整个请求报错；`op=del` 时 `fail_openids`「同义」也没说清。批量移出成员的响应同理：`add_to_member_blacklist_fail_openids` 是拉黑失败的成员，`remove_members_result` 只说「成功时返回 success」，没有逐个的移出结果，也没说失败时是什么。
 - **当前做法**：`fail_openids` 非空时 `add_to_blacklist()`、`remove_from_blacklist()` 抛 `PartialFailureError`（`failed_ids` 即它）；`remove_members()` 在拉黑失败清单非空时同样抛它，`remove_members_result` 是字符串但不是 `success` 时抛 `APIError`，缺失或 `null` 算没有报告。失败清单缺失或为 `null` 算没有失败，不是字符串列表时按「响应无法识别」抛 `APIError`，不退回空清单；`remove_members_result` 不是字符串也不是 `null` 时同样按「响应无法识别」处理。
-- **已知**（2026-11-16，机器人是管理员）：查黑名单仍报 40012010，用例第一步就停了，拉黑没有发出；移出成员报 40103011「操作失败, 机器人已经关闭操作权限」。
+- **已知**（2026-11-16，机器人是管理员）：查黑名单仍报 40012010，用例第一步就停了，拉黑没有发出。移出成员报 40103011「操作失败, 机器人已经关闭操作权限」（文档没有这个错误码）；用户打开操作权限后只移出、不拉黑再试，仍是 40103011，请求体与文档一致。移出接口页写着「该能力正在内邀接入中」。
 - **怎么测**：开通黑名单接口、打开机器人的操作权限后，再跑实测用例 `test_blacklist_add_only_works_for_users_outside_the_group`、`test_remove_member_and_blacklist`。
 
 ### 入群申请审批：`join_request_id` 标为可选

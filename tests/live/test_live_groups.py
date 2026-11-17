@@ -226,11 +226,15 @@ async def test_blacklist_add_only_works_for_users_outside_the_group(
 async def test_remove_member_and_blacklist(client: pyqbot.Client, write_allowed: str) -> None:
     """须用户单独同意，可能需要白名单；`TEST_GROUP_REMOVABLE_OPENID` 是同意被移出的群成员。
 
-    应看到：该成员被移出群并进了黑名单，之后又被移出黑名单；中途失败也会移出黑名单。
-    移出群无法撤销，需要时由人重新拉回群。
+    默认只移出、不拉黑：查、改黑名单要另外开通，拉黑后可能没法再移出黑名单。`LIVE_REMOVE_BLACKLIST=1` 时
+    移出并拉黑，再移出黑名单（中途失败也会尝试移出黑名单）。移出群无法撤销，需要时由人重新申请或拉回群。
     """
     group = write_allowed
     member = env("TEST_GROUP_REMOVABLE_OPENID", "同意被移出测试群的成员")
+    if os.environ.get("LIVE_REMOVE_BLACKLIST") != "1":
+        await client.groups.remove_members(group, member)
+        note("移出（不拉黑）", "被接受")
+        return
 
     async with undo_on_failure(lambda: client.groups.remove_from_blacklist(group, member)):
         await client.groups.remove_members(group, member, add_to_blacklist=True)
