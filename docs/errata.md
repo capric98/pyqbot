@@ -559,7 +559,7 @@
   - `message_scene.ext` 有 `msg_idx=REFIDX_...` 与 `auth_token=...` 两项。
   - 外层 `id` 形如 `GROUP_AT_MESSAGE_CREATE:<小写字母与数字>`，`d.id` 是 `ROBOT1.0_` 开头的消息 ID；用 `msg_id`（`d.id`）被动回复被接受。
   - `message_type` 101 没有见到。
-- **实现**：`GroupMessageMember` 新增 `member_nickname`；`content` 仍原样保留，docstring 写明开头的空格。`group_id` 不收录。fixture：`gateway_group_add_robot.json`、`gateway_group_at_message_create.json`（`auth_token` 已替换）。
+- **实现**：发送者（`GroupMessageAuthor`）与被 @ 的成员（`GroupMessageMember`）都有 `member_nickname`；`content` 仍原样保留，docstring 写明开头的空格。`group_id` 不收录。fixture：`gateway_group_add_robot.json`、`gateway_group_at_message_create.json`（`auth_token` 已替换）。
 
 ### 群管理：权限不足时的错误码，机器人状态的真实响应
 

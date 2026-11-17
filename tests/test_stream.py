@@ -533,6 +533,8 @@ async def test_cancelled_body_still_sends_the_pending_text_but_no_final_chunk() 
 
 async def wrong_scene_is_rejected_by_pyright(client: pyqbot.Client) -> None:
     """不运行，只给 pyright 看：群消息不能作为流式消息的回复对象。"""
-    group = pyqbot.GroupAtMessage(id="m", group_openid="g")
+    group = pyqbot.GroupAtMessage(
+        id="m", group_openid="g", author=pyqbot.GroupMessageAuthor(member_openid="member")
+    )
     client.users.stream_message("u", reply_to=group)  # pyright: ignore[reportArgumentType]
     client.users.stream_message("u")  # pyright: ignore[reportCallIssue]

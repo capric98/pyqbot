@@ -8,8 +8,6 @@ import os
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-import msgspec
-
 from .._gateway.intents import Intents
 from .._model import Model, OpenIntEnum, OpenStrEnum
 from .event import C2CReplyTarget, GroupReplyTarget, ReceivedMessage
@@ -103,13 +101,29 @@ class C2CUser(_UserBase):
     user_openid: str
 
 
+class GroupMessageAuthor(_UserBase):
+    """群消息的发送者。
+
+    Attributes:
+        member_openid: 发送者在群里的 openid，与单聊的 `user_openid` 不是同一套取值。
+        member_role: 群内角色。
+        member_nickname: 群昵称（群名片）；文档没有列出，实测有。
+        username: QQ 昵称，可能为空串。
+        bot: 是否为机器人。
+    """
+
+    member_openid: str
+    member_role: GroupMemberRole | None = None
+    member_nickname: str | None = None
+
+
 class GroupMessageMember(_UserBase):
-    """群消息的发送者或被 @ 的群成员。
+    """群消息里被 @ 的成员（`GroupMessage.mentions`）。
 
     Attributes:
         member_openid: 群成员的 openid，与单聊的 `user_openid` 不是同一套取值。
         member_role: 群内角色。
-        member_nickname: 群昵称（群名片）；文档没有列出，实测消息的发送者带它。
+        member_nickname: 群昵称（群名片）；文档没有列出，实测有。
         username: QQ 昵称，可能为空串。
         bot: 是否为机器人。
         is_you: 被 @ 的是不是本机器人；文档没有列出，实测只在 `mentions` 里有。
@@ -352,7 +366,7 @@ class GroupMessage(_ChatMessage, GroupReplyTarget):
 
     Attributes:
         group_openid: 群的 openid，主动往群里发消息时传给 `client.groups.send_message()`。
-        author: 发送者；缺失时各字段都是 `None`。
+        author: 发送者。
         content: 文本内容。@ 某成员写作 `<@member_openid>`，@全体成员写作 `<@all>`。
         mentions: 消息里 @ 的成员。
 
@@ -371,7 +385,7 @@ class GroupMessage(_ChatMessage, GroupReplyTarget):
     intent = Intents.GROUP_AND_C2C_EVENT
 
     group_openid: str
-    author: GroupMessageMember = msgspec.field(default_factory=GroupMessageMember)
+    author: GroupMessageAuthor
     mentions: tuple[GroupMessageMember, ...] = ()
 
     @property
@@ -380,7 +394,7 @@ class GroupMessage(_ChatMessage, GroupReplyTarget):
         return any(member.is_you for member in self.mentions)
 
     @property
-    def member_openid(self) -> str | None:
+    def member_openid(self) -> str:
         """发送者的 openid，即 `author.member_openid`。"""
         return self.author.member_openid
 

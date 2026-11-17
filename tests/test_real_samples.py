@@ -248,8 +248,13 @@ def test_all_mode_mention_arrives_as_a_plain_group_message() -> None:
 
 def test_mentions_me_is_false_without_is_you_and_always_true_for_at_messages() -> None:
     plain = pyqbot.GroupMessage(
-        id="m", group_openid="g", mentions=(pyqbot.GroupMessageMember(member_openid="x"),)
+        id="m",
+        group_openid="g",
+        mentions=(pyqbot.GroupMessageMember(member_openid="x"),),
+        author=pyqbot.GroupMessageAuthor(member_openid="member"),
     )
-    at = pyqbot.GroupAtMessage(id="m", group_openid="g")
+    at = pyqbot.GroupAtMessage(
+        id="m", group_openid="g", author=pyqbot.GroupMessageAuthor(member_openid="member")
+    )
 
     assert (plain.mentions_me, at.mentions_me) == (False, True)

@@ -302,8 +302,13 @@ def test_member_role_decodes_to_an_enum() -> None:
         "msg_elements": [{"author": {"member_openid": MEMBER, "member_role": "owner"}}],
     }
     known = decoded(pyqbot.GroupMessage, {**GROUP_ANY, **quote})
-    unknown = decoded(pyqbot.GroupMessage, {**GROUP_ANY, "author": {"member_role": "guest"}})
-    wrong = decoded(pyqbot.GroupMessage, {**GROUP_ANY, "author": {"member_role": 1}})
+    unknown = decoded(
+        pyqbot.GroupMessage,
+        {**GROUP_ANY, "author": {"member_openid": MEMBER, "member_role": "guest"}},
+    )
+    wrong = decoded(
+        pyqbot.GroupMessage, {**GROUP_ANY, "author": {"member_openid": MEMBER, "member_role": 1}}
+    )
 
     assert known.author.member_role == pyqbot.GroupMemberRole.MEMBER
     assert known.author.member_role == "member"  # StrEnum：与原字符串比较照样成立
@@ -384,7 +389,10 @@ def test_group_any_message_keeps_mentions_in_the_content() -> None:
     assert message.timestamp == datetime(2026, 7, 21, 8, 0, tzinfo=UTC8)
     # 与 @机器人 的消息字段相同，但不是它。
     assert not isinstance(message, pyqbot.GroupAtMessage)
-    assert isinstance(pyqbot.GroupAtMessage(id="m", group_openid="g"), pyqbot.GroupMessage)
+    at = pyqbot.GroupAtMessage(
+        id="m", group_openid="g", author=pyqbot.GroupMessageAuthor(member_openid="member")
+    )
+    assert isinstance(at, pyqbot.GroupMessage)
 
 
 # ---- 被动回复 ----
@@ -538,7 +546,10 @@ async def wrong_scene_is_rejected_by_pyright(client: pyqbot.Client) -> None:
     await client.groups.send_message("g", "x", reply_to=added)  # pyright: ignore[reportArgumentType]
     await client.users.send_message("u", "x", reply_to=joined)  # pyright: ignore[reportArgumentType]
     await client.users.send_message("u", "x", reply_to=pyqbot.FriendDel(openid="u"))  # pyright: ignore[reportArgumentType]
-    await added.reply("x", quote=pyqbot.GroupMessage(id="m", group_openid="g"))  # pyright: ignore[reportArgumentType]
+    group = pyqbot.GroupMessage(
+        id="m", group_openid="g", author=pyqbot.GroupMessageAuthor(member_openid="member")
+    )
+    await added.reply("x", quote=group)  # pyright: ignore[reportArgumentType]
 
 
 # ---- 注册与分发 ----

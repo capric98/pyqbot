@@ -138,7 +138,12 @@ def with_event_id[E: Event](event: E, event_id: str | None) -> E:
 
 async def test_reply_to_fills_msg_id_and_increments_msg_seq() -> None:
     platform = Platform()
-    first, second = c2c("m-1"), pyqbot.GroupAtMessage(id="m-2", group_openid="g")
+    first, second = (
+        c2c("m-1"),
+        pyqbot.GroupAtMessage(
+            id="m-2", group_openid="g", author=pyqbot.GroupMessageAuthor(member_openid="member")
+        ),
+    )
 
     async with client_for(platform) as client:
         await client.users.send_message("u", "a", reply_to=first)
@@ -231,7 +236,9 @@ def test_event_id_is_hidden_from_the_fields() -> None:
 def test_reply_targets_say_which_scene_they_belong_to() -> None:
     assert isinstance(c2c(), pyqbot.C2CReplyTarget)
     assert not isinstance(c2c(), pyqbot.GroupReplyTarget)
-    message = pyqbot.GroupAtMessage(id="m", group_openid="g")
+    message = pyqbot.GroupAtMessage(
+        id="m", group_openid="g", author=pyqbot.GroupMessageAuthor(member_openid="member")
+    )
     assert isinstance(message, pyqbot.GroupReplyTarget)
     assert not isinstance(message, pyqbot.C2CReplyTarget)
 
@@ -379,7 +386,6 @@ def test_c2c_ark_and_quote_examples_decode() -> None:
 def test_secondary_fields_of_the_wrong_type_fall_back_to_defaults() -> None:
     data = {
         **GROUP_TEXT,
-        "author": "不是对象",
         "content": 42,
         "timestamp": 1700000000,
         "message_type": "text",
@@ -391,8 +397,7 @@ def test_secondary_fields_of_the_wrong_type_fall_back_to_defaults() -> None:
 
     assert message.id == "ROBOT1.0_x"
     assert message.group_openid == GROUP_TEXT["group_openid"]
-    assert message.author == pyqbot.GroupMessageMember()
-    assert message.member_openid is None
+    assert message.member_openid == "A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4"
     assert (message.content, message.timestamp, message.message_type) == ("", None, None)
     # 元组里的模型逐个清理：附件只丢掉坏字段；mentions 本身不是列表，退回默认值。
     assert message.attachments == (pyqbot.MessageAttachment(),)
@@ -440,6 +445,9 @@ def test_unknown_message_type_and_fields_are_tolerated() -> None:
         (pyqbot.C2CMessage, {"id": "m", "author": {"id": "u"}}),
         (pyqbot.C2CMessage, {"author": {"user_openid": "u"}}),
         (pyqbot.GroupAtMessage, {"id": "m", "author": {"member_openid": "u"}}),
+        # 与单聊一样，发送者是必填的：没有它就不知道是谁发的
+        (pyqbot.GroupAtMessage, {"id": "m", "group_openid": "g", "author": "不是对象"}),
+        (pyqbot.GroupAtMessage, {"id": "m", "group_openid": "g", "author": {"id": "x"}}),
     ],
 )
 def test_message_without_what_reply_needs_is_rejected(
@@ -557,7 +565,14 @@ async def test_send_typing_on_a_message_is_a_passive_reply() -> None:
 
 
 @pytest.mark.parametrize(
-    "message", [c2c(), pyqbot.GroupAtMessage(id="m", group_openid="g")], ids=["c2c", "group"]
+    "message",
+    [
+        c2c(),
+        pyqbot.GroupAtMessage(
+            id="m", group_openid="g", author=pyqbot.GroupMessageAuthor(member_openid="member")
+        ),
+    ],
+    ids=["c2c", "group"],
 )
 async def test_reply_on_an_unbound_message_raises(
     message: pyqbot.C2CMessage | pyqbot.GroupAtMessage,

@@ -253,7 +253,9 @@ async def test_received_messages_upload_to_their_own_user_or_group(tmp_path: Pat
     path = tmp_path / "cat.png"
     path.write_bytes(b"png")
     private = pyqbot.C2CMessage(id="m1", author=pyqbot.C2CUser(user_openid="u1"))
-    group = pyqbot.GroupAtMessage(id="m2", group_openid="g1")
+    group = pyqbot.GroupAtMessage(
+        id="m2", group_openid="g1", author=pyqbot.GroupMessageAuthor(member_openid="member")
+    )
 
     async with client_for(platform) as client:
         bind_client(private, client)
@@ -279,7 +281,9 @@ async def test_received_messages_upload_to_their_own_user_or_group(tmp_path: Pat
 
 
 async def test_upload_on_an_unbound_message_raises() -> None:
-    message = pyqbot.GroupMessage(id="m", group_openid="g")
+    message = pyqbot.GroupMessage(
+        id="m", group_openid="g", author=pyqbot.GroupMessageAuthor(member_openid="member")
+    )
     with pytest.raises(RuntimeError, match="没有绑定 Client"):
         await message.upload(url="https://example.com/a.png")
 

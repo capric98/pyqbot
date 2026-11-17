@@ -240,7 +240,10 @@ async def test_invalid_combinations_are_rejected_before_sending(
 async def test_quote_accepts_sent_and_received_messages_and_indexes() -> None:
     platform = Platform()
     received = pyqbot.GroupAtMessage(
-        id="m", group_openid="g", message_scene=MessageScene(ext=("msg_idx=REFIDX_in",))
+        id="m",
+        group_openid="g",
+        message_scene=MessageScene(ext=("msg_idx=REFIDX_in",)),
+        author=pyqbot.GroupMessageAuthor(member_openid="member"),
     )
 
     async with client_for(platform) as client:
@@ -308,7 +311,12 @@ async def test_recall_accepts_ids_and_messages() -> None:
     async with client_for(platform) as client:
         await client.users.recall_message("u", "ROBOT1.0_a/b")
         await client.users.recall_message("u", pyqbot.SentMessage(id="s"))
-        await client.groups.recall_message("g", pyqbot.GroupAtMessage(id="m", group_openid="g"))
+        await client.groups.recall_message(
+            "g",
+            pyqbot.GroupAtMessage(
+                id="m", group_openid="g", author=pyqbot.GroupMessageAuthor(member_openid="member")
+            ),
+        )
         await client.groups.recall_message("g", pyqbot.SentMessage(id="s"))
 
     assert platform.requests == [
@@ -414,7 +422,9 @@ def test_buttons_can_be_built_field_by_field() -> None:
 
 async def wrong_scene_is_rejected_by_pyright(client: pyqbot.Client) -> None:
     """不运行，只给 pyright 看：群聊的回复对象不能传给单聊接口，反之亦然。"""
-    group = pyqbot.GroupAtMessage(id="m", group_openid="g")
+    group = pyqbot.GroupAtMessage(
+        id="m", group_openid="g", author=pyqbot.GroupMessageAuthor(member_openid="member")
+    )
     await client.users.send_message("u", "x", reply_to=group)  # pyright: ignore[reportArgumentType]
     await client.users.send_typing("u", reply_to=group)  # pyright: ignore[reportArgumentType]
     await client.users.send_message("u", "x", quote=group)  # pyright: ignore[reportArgumentType]
