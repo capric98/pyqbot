@@ -104,6 +104,7 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 - `test_live_events.py::test_group_message_features`（`LIVE_GATEWAY`）：@机器人后收到按钮、图片、分片上传的大图（10 秒后撤回）；点「回调」收到回复，点「指令」看是否直接发出。
 - `test_live_events.py::test_group_notices`（`LIVE_GATEWAY`）：等满等待时间，记下进群、退群、群主动消息开关、移出与拉回机器人等事件。
 - `test_live_events.py::test_group_admin_session`（`LIVE_GATEWAY`，机器人是管理员）：记下 @ 机器人的成员（`LIVE_GROUP_RECALL=1` 时撤回普通成员的消息），并审批入群申请（默认拒绝，`LIVE_JOIN_DECISION=approve` 时通过）。
+- `test_live_events.py::test_group_all_messages`（`LIVE_GATEWAY`，群设为获取全部消息）：发一条不 @ 与一条 @ 机器人的消息，看推哪些事件；机器人不回复。
 - `test_live_groups.py::test_get_member_seen_in_a_message`：用 @ 过机器人的成员查单个成员。
 - `test_live_groups.py::test_proactive_group_message`：往测试群发一条主动消息，预计被拒。
 

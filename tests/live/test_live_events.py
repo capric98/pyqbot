@@ -893,3 +893,43 @@ async def test_group_admin_session(
     await run_until_closed(bot, wait_seconds, outcome)
 
     note("group_admin_session", outcome)
+
+
+async def test_group_all_messages(
+    app_id: str, app_secret: str, wait_seconds: float, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """群设置里打开「获取群内全部消息」后，等满 `LIVE_WAIT_SECONDS`，机器人不回复。
+
+    让测试用户在测试群里先发一条不 @ 机器人的消息，再发一条 @机器人 的消息。记下各推了哪些事件：
+    不 @ 的消息是否推 `GROUP_MESSAGE_CREATE`，@ 消息是只推 `GROUP_AT_MESSAGE_CREATE` 还是两个都推、
+    两条的 `id` 是否相同。
+    """
+    group = group_or_skip()
+    bot = pyqbot.Bot(app_id, app_secret)
+    record_event_ids(bot, monkeypatch)
+    seen: list[object] = []
+    outcome: dict[str, object] = {"seen": seen}
+
+    def remember(kind: str, message: pyqbot.GroupMessage) -> None:
+        if message.group_openid == group:
+            seen.append(
+                {
+                    "kind": kind,
+                    "id": message.id,
+                    "event_id_prefix": (message.event_id or "").split(":")[0],
+                    "content": message.content,
+                    "mentions": len(message.mentions),
+                }
+            )
+
+    @bot.on_group_message
+    async def any_message(message: pyqbot.GroupMessage) -> None:
+        remember("GROUP_MESSAGE_CREATE", message)
+
+    @bot.on_group_at_message
+    async def mentioned(message: pyqbot.GroupAtMessage) -> None:
+        remember("GROUP_AT_MESSAGE_CREATE", message)
+
+    await run_until_closed(bot, wait_seconds, outcome)
+
+    note("group_all_messages", outcome)

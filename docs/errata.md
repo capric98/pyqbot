@@ -88,14 +88,6 @@
 - **已知**：不带 `msg_id` 的召回消息（`wakeup=True`）被接受，测试用户收到了（2026-11-16，`test_wakeup`）。
 - **不主动实测**：与 `msg_id` / `event_id` 同传的情况；召回消息每个周期只能发一条，测一次就占掉一个周期。
 
-### 全量群消息与 @ 消息会不会重复推送
-
-- **位置**：`autogen/event/group_message_create.md`；`group_at_message_create.md`。
-- **含糊**：开启「接收所有消息」后，群里 @机器人 的消息是只推 `GROUP_MESSAGE_CREATE`，还是两个事件都推，没有说明。
-- **当前做法**：两个事件各走各的处理函数（`on_group_message`、`on_group_at_message`），SDK 不合并、不去重。
-- **已知**：机器人没有开接收全部消息时（`bot_state` 的 `recv_msg_setting` 是空串），@ 消息只推 `GROUP_AT_MESSAGE_CREATE`（2026-11-16，`test_group_at_message`）。
-- **怎么测**：开启全量模式的群里 @机器人 发一条消息，看收到几条事件、`id` 是否相同。要群与权限配置，须单独征得同意。
-
 ### 富媒体：各页列出的支持格式不一致
 
 - **位置**：`server-inter/message/rich-media.md` 的「支持的消息类型」与同页「文件类型与限制」表格；单聊、群聊上传页的 `file_type` 一行。
@@ -304,7 +296,7 @@
 - **位置**：`autogen/api/v2_groups_group_openid_member_blacklist.post.md`。
 - **含糊**：只有不在群里的用户才能加入黑名单，但没说对在群里的用户 `add` 时，是放进响应的 `fail_openids` 还是整个请求报错；`op=del` 时 `fail_openids`「同义」也没说清。批量移出成员的响应同理：`add_to_member_blacklist_fail_openids` 是拉黑失败的成员，`remove_members_result` 只说「成功时返回 success」，没有逐个的移出结果，也没说失败时是什么。
 - **当前做法**：`fail_openids` 非空时 `add_to_blacklist()`、`remove_from_blacklist()` 抛 `PartialFailureError`（`failed_ids` 即它）；`remove_members()` 在拉黑失败清单非空时同样抛它，`remove_members_result` 是字符串但不是 `success` 时抛 `APIError`，缺失或 `null` 算没有报告。失败清单缺失或为 `null` 算没有失败，不是字符串列表时按「响应无法识别」抛 `APIError`，不退回空清单；`remove_members_result` 不是字符串也不是 `null` 时同样按「响应无法识别」处理。
-- **已知**（2026-11-16，机器人是管理员）：查黑名单仍报 40012010，用例第一步就停了，拉黑没有发出。移出成员报 40103011「操作失败, 机器人已经关闭操作权限」（文档没有这个错误码）；用户打开操作权限后只移出、不拉黑再试，仍是 40103011，请求体与文档一致。移出接口页写着「该能力正在内邀接入中」。
+- **已知**（2026-11-16，机器人是管理员）：查黑名单仍报 40012010，用例第一步就停了，拉黑没有发出。移出成员报 40103011「操作失败, 机器人已经关闭操作权限」（文档没有这个错误码）；用户在群设置「机器人管理员权限设置」里打开「移除群成员」后，只移出、不拉黑又试了两次，仍是 40103011，请求体与文档一致。移出接口页写着「该能力正在内邀接入中」。
 - **怎么测**：开通黑名单接口、打开机器人的操作权限后，再跑实测用例 `test_blacklist_add_only_works_for_users_outside_the_group`、`test_remove_member_and_blacklist`。
 
 ### 入群申请审批：`join_request_id` 标为可选
@@ -727,3 +719,14 @@
 - **位置**：`server-inter/message/overview.md`「撤回消息」只说能撤回自己的；群聊撤回页说管理员还能撤回普通成员的消息。
 - **结论**：机器人撤回自己 10 秒前发的群消息成功（`test_group_message_features`）；机器人是管理员时，用 `recall_message(group, message)` 撤回普通成员刚 @ 它的消息也成功（`test_group_admin_session`）。
 - **实现**：不变，`client.groups.recall_message()` 接受收到的 `GroupMessage`。
+
+### 群：「获取群内全部消息」时 @ 消息只推全量事件
+
+- **位置**：`autogen/event/group_message_create.md`、`group_at_message_create.md`。没说开启接收全部消息后 @机器人 的消息推哪个事件。
+- **结论**（`test_group_all_messages`，群设置「机器人可获取的群聊消息范围」为「获取群内全部消息」）：
+  - `bot_state` 的 `recv_msg_setting` 随之变为 `all`（「仅获取 @机器人的消息」时是空串）。
+  - 不 @ 机器人的消息推 `GROUP_MESSAGE_CREATE`，字段与 @ 消息相同，含 `author.member_nickname` 与 `group_id`。
+  - @机器人 的消息也只推 `GROUP_MESSAGE_CREATE`，不推 `GROUP_AT_MESSAGE_CREATE`，所以不会重复。它的 `content` 是 `"<@机器人的 member_openid> 测试一下at"`，前缀没有去掉。
+  - `mentions` 里机器人那一项有文档没提的 `is_you: true`、`scope: "single"`，以及 `bot: true`、`member_nickname`。
+  - QQ 表情在 `content` 里写作 `<faceType=3,faceId="427",ext="...">`，`ext` 是 base64 的 JSON（如 `{"text":"偷感"}`）。
+- **实现**：`GroupMessageMember` 补上 `is_you`、`scope`；`GroupMessage.mentions_me` 判断是否 @ 了本机器人（`GroupAtMessage` 上恒为真）；`on_group_at_message` 的 docstring 写明全量模式下收不到。表情原样保留在 `content` 里，不解析。fixture：`gateway_group_message_create_mention.json`。
