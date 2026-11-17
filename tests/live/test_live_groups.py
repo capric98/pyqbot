@@ -98,13 +98,17 @@ async def test_get_member_seen_in_a_message(client: pyqbot.Client, group: str) -
     seen = Path(__file__).parents[2] / ".cache" / "live" / "test_group.env"
     prefix = "# @ 机器人的成员："
     lines = seen.read_text(encoding="utf-8").splitlines() if seen.exists() else []
-    members = [line.removeprefix(prefix) for line in lines if line.startswith(prefix)]
+    # 行尾可能有人工加的备注（昵称、身份），openid 只取第一段
+    members = dict.fromkeys(
+        line.removeprefix(prefix).split()[0] for line in lines if line.startswith(prefix)
+    )
     if not members:
         pytest.skip("还没有 @ 过机器人的成员：先跑 test_live_events.py::test_group_at_message")
-    try:
-        note("单个成员", await client.groups.get_member(group, members[-1]))
-    except pyqbot.APIError as error:
-        note("单个成员：被拒", (error.err_code, error.message))
+    for member in members:
+        try:
+            note("单个成员", await client.groups.get_member(group, member))
+        except pyqbot.APIError as error:
+            note("单个成员：被拒", (error.err_code, error.message))
 
 
 async def test_iter_blacklist(client: pyqbot.Client, group: str) -> None:
