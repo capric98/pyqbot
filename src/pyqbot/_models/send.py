@@ -22,6 +22,7 @@ class Markdown(RequestModel):
     `content`（自定义 Markdown，所有机器人可用）与 `custom_template_id`（模板，官方已标为弃用，
     只为已申请过模板的机器人保留）二选一，模板用 `Markdown.from_template()` 构造更方便。
     平台模板的整数 `template_id` 已弃用，不支持。语法见官方文档 `server-inter/message/type/markdown.md`。
+    形如 `[文字](目标)` 而目标不是 URL 的文字，即使转义了方括号也会被判违规（40034006），圆括号也要转义。
 
     Attributes:
         content: Markdown 正文。
