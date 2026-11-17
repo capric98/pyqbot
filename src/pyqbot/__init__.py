@@ -14,6 +14,7 @@ from ._errors import (
     PartialFailureError,
     QQBotError,
 )
+from ._events.dispatcher import Handler
 from ._gateway.intents import Intents
 from ._models.audio import (
     AudioFinish,
@@ -377,6 +378,7 @@ __all__ = [
     "GuildRoles",
     "GuildUpdate",
     "GuildUser",
+    "Handler",
     "Intents",
     "Interaction",
     "InteractionAuthorizeData",

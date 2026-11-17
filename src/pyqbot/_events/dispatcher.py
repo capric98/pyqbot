@@ -22,7 +22,7 @@ CLOSE_GRACE_PERIOD = 5.0  # 秒：aclose() 等处理函数结束的默认期限
 _UNNAMED_HANDLER = "<未命名的处理函数>"
 
 type Handler[E: Event] = Callable[[E], Awaitable[object]]
-"""事件处理函数：只收一个事件对象，必须是 `async def`。"""
+"""事件处理函数的类型：只收一个事件对象，必须是 `async def`，如 `pyqbot.Handler[pyqbot.C2CMessage]`。"""
 
 
 class DispatchPayload(Protocol):
