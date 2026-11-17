@@ -29,6 +29,7 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 | `TEST_GROUP_MEMBER_OPENID` | 群里一个可以被禁言、不在黑名单的普通成员 |
 | `TEST_GROUP_REMOVABLE_OPENID` | 同意被移出测试群的成员 |
 | `TEST_GROUP_APPLICANT_OPENID` | 正在申请加入测试群的用户 |
+| `LIVE_AT_EVERYONE` | 往测试群发 @全体成员（提醒所有人，每天一次） |
 
 ## 用例
 
@@ -108,9 +109,9 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 - `test_live_upload.py::test_group_media_formats`（`LIVE_GATEWAY`）：群里 @机器人 两次，先收到 gif、webp、bmp、jpg 四张图，再收到 wav、mp3、ogg 语音与 mp4 视频。
 - `test_live_events.py::test_long_connection`（`LIVE_GATEWAY`，`LIVE_LONG_SECONDS` 默认 3 小时）：只看不回，统计断线、重连与重复推送，SDK 日志在 `.cache/live/long_connection.log`。
 - `test_live_groups.py::test_get_member_seen_in_a_message`：用 @ 过机器人的成员查单个成员。
-- `test_live_groups.py::test_proactive_group_message`：往测试群发一条主动消息，预计被拒。
+- `test_live_groups.py::test_proactive_group_message`：往测试群发一条主动消息；群里没打开主动消息时被拒（40034105）。
 
-只读的只要 `TEST_GROUP_OPENID`，成员与黑名单要白名单（否则 `err_code` 40012010），禁言设置与入群申请要机器人是管理员（否则 40011030）：
+只读的只要 `TEST_GROUP_OPENID`，成员与黑名单要开通接口权限（否则 `err_code` 40012010），禁言设置与入群申请要机器人是管理员（否则 40011030）：
 
 - `test_live_groups.py::test_get_group`：群名、人数与客户端一致。
 - `test_live_groups.py::test_get_bot_state`：`member_role` 与机器人在群里的身份一致。
@@ -127,6 +128,7 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 - `test_live_groups.py::test_blacklist_add_only_works_for_users_outside_the_group`（`TEST_GROUP_MEMBER_OPENID`）：黑名单不变；看是部分失败还是整个请求报错。
 - `test_live_groups.py::test_remove_member_and_blacklist`（`TEST_GROUP_REMOVABLE_OPENID`）：成员被移出并拉黑，再移出黑名单；移出群无法撤销。
 - `test_live_groups.py::test_decline_a_join_request`（`TEST_GROUP_APPLICANT_OPENID`）：申请人收到拒绝，理由「pyqbot 实测」，没有被拉黑。
+- `test_live_groups.py::test_at_everyone`（`LIVE_AT_EVERYONE`）：群成员收到 @全体成员 的提醒；每个群每天只能发一次。
 - `test_live_groups.py::test_join_strategy_lifecycle`：建一个策略（机器人全局，`LIVE_STRATEGY_ENABLED=1` 时启用），改动、白名单、执行后删除。
 
 频道目前不能实测，条件见 `docs/errata.md`「频道：测试条件」。

@@ -301,10 +301,29 @@ async def test_join_strategy_lifecycle(client: pyqbot.Client, write_allowed: str
 async def test_proactive_group_message(client: pyqbot.Client, group: str) -> None:
     """不带 `msg_id` 往测试群发一条主动消息「pyqbot：群主动消息实测」。
 
-    机器人状态里 `allow_proactive_msg` 是 false，预计被拒；结果与错误码记进日志。
+    `allow_proactive_msg` 为 false 时被拒（2026-11-16，40034105）；群里打开主动消息后应被接受。
     """
+    note("allow_proactive_msg", (await client.groups.get_bot_state(group)).allow_proactive_msg)
     try:
         sent = await client.groups.send_message(group, "pyqbot：群主动消息实测")
         note("群主动消息：被接受", sent.id)
     except pyqbot.APIError as error:
         note("群主动消息：被拒", (error.err_code, error.message))
+
+
+async def test_at_everyone(client: pyqbot.Client, write_allowed: str) -> None:
+    """须用户单独同意，另要 `LIVE_AT_EVERYONE=1`：会提醒群里所有人，每个群每天只能发一次。
+
+    主动发一条文本「pyqbot 实测：<qqbot-at-everyone />」。应看到：群成员收到 @全体成员 的提醒；
+    文档要求机器人是管理员，当天已经发过时报 304019。
+    """
+    if os.environ.get("LIVE_AT_EVERYONE") != "1":
+        pytest.skip("会提醒群里所有人：须用户单独同意后设 LIVE_AT_EVERYONE=1")
+    try:
+        sent = await client.groups.send_message(
+            write_allowed, "pyqbot 实测：<qqbot-at-everyone /> 每个群每天只能发一次"
+        )
+        note("@全体成员：被接受", sent.id)
+    except pyqbot.APIError as error:
+        note("@全体成员：被拒", (error.err_code, error.message))
+        raise
