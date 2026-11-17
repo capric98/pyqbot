@@ -11,6 +11,7 @@
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -933,3 +934,69 @@ async def test_group_all_messages(
     await run_until_closed(bot, wait_seconds, outcome)
 
     note("group_all_messages", outcome)
+
+
+async def test_long_connection(app_id: str, app_secret: str) -> None:
+    """挂着网关 `LIVE_LONG_SECONDS` 秒（默认 3 小时），只看不回，适合在后台跑。
+
+    SDK 自己的日志（断线原因、Identify / Resume、跳过的帧）写进 `.cache/live/long_connection.log`；
+    单聊与群消息只在内存里记 `id` 与 `msg_idx`，结束时统计各事件条数与重复推送，不落盘消息内容。
+    """
+    if os.environ.get("LIVE_GATEWAY") != "1":
+        pytest.skip("需要显式设置 LIVE_GATEWAY=1")
+    seconds = float(os.environ.get("LIVE_LONG_SECONDS", "10800"))
+    log_file = OUTPUT.parent / "long_connection.log"
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler(log_file, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    sdk_logger = logging.getLogger("pyqbot")
+    previous_level = sdk_logger.level
+    sdk_logger.setLevel(logging.DEBUG)
+    sdk_logger.addHandler(handler)
+
+    ids: dict[str, int] = {}
+    indexes: dict[str, int] = {}
+    counts: dict[str, int] = {}
+    bot = pyqbot.Bot(app_id, app_secret)
+
+    def remember(kind: str, message: pyqbot.C2CMessage | pyqbot.GroupMessage) -> None:
+        counts[kind] = counts.get(kind, 0) + 1
+        ids[message.id] = ids.get(message.id, 0) + 1
+        for item in message.message_scene.ext if message.message_scene else ():
+            if item.startswith("msg_idx="):
+                indexes[item] = indexes.get(item, 0) + 1
+
+    @bot.on_c2c_message
+    async def c2c(message: pyqbot.C2CMessage) -> None:
+        remember("C2C_MESSAGE_CREATE", message)
+
+    @bot.on_group_message
+    async def group_all(message: pyqbot.GroupMessage) -> None:
+        remember("GROUP_MESSAGE_CREATE", message)
+
+    @bot.on_group_at_message
+    async def group_at(message: pyqbot.GroupAtMessage) -> None:
+        remember("GROUP_AT_MESSAGE_CREATE", message)
+
+    try:
+        async with bot:
+            with contextlib.suppress(TimeoutError):
+                async with asyncio.timeout(seconds):
+                    await bot.start()
+    finally:
+        sdk_logger.removeHandler(handler)
+        sdk_logger.setLevel(previous_level)
+        handler.close()
+
+    log = log_file.read_text(encoding="utf-8")
+    outcome = {
+        "seconds": seconds,
+        "counts": counts,
+        "duplicate_ids": sum(1 for n in ids.values() if n > 1),
+        "duplicate_msg_idx": sum(1 for n in indexes.values() if n > 1),
+        "disconnects": log.count("网关连接断开"),
+        "identify": log.count("发送 Identify"),
+        "resume": log.count("发送 Resume"),
+        "skipped_frames": log.count("跳过"),
+    }
+    note("long_connection", outcome)

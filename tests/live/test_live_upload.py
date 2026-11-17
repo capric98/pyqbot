@@ -429,3 +429,66 @@ async def test_large_video_in_parts(
             result = ("被拒", error.err_code, error.message)
 
     _logger.warning("视频 %d 字节；预上传 %s；结果 %s", video.stat().st_size, prepared, result)
+
+
+async def test_group_media_formats(app_id: str, app_secret: str, tmp_path: Path) -> None:
+    """测试群里有人 @机器人 两次：第一次回复 gif、webp、bmp、jpg 四张图，第二次回复 wav、mp3、ogg 语音与
+    mp4 视频（后三种由 ffmpeg 生成，没有 ffmpeg 就只有 wav）。
+
+    要 `LIVE_GATEWAY` 与 `TEST_GROUP_OPENID`；每种格式被拒就记下错误码。一条消息只回四条，免得超过被动回复次数。
+    """
+    if os.environ.get("LIVE_GATEWAY") != "1":
+        pytest.skip("需要显式设置 LIVE_GATEWAY=1：每个用例消耗一次网关连接")
+    group = os.environ.get("TEST_GROUP_OPENID")
+    if not group:
+        pytest.skip("缺少环境变量 TEST_GROUP_OPENID")
+    wait_seconds = float(os.environ.get("LIVE_WAIT_SECONDS", "180"))
+    images = [
+        ("gif", GIF_64),
+        ("webp", WEBP_1),
+        ("bmp", bmp(64, 64, b"\x00\xc0\x00")),
+        ("jpg", JPEG_64),
+    ]
+    media: list[tuple[str, bytes]] = [("wav", wav())]
+    if os.environ.get("FFMPEG") or shutil.which("ffmpeg"):
+        for path in (
+            await render(tmp_path, "pyqbot.mp3", *TONE, "-c:a", "libmp3lame"),
+            await render(tmp_path, "pyqbot.ogg", *TONE, "-c:a", "libvorbis"),
+            await render(
+                tmp_path,
+                "pyqbot.mp4",
+                *("-f", "lavfi", "-i", "testsrc2=size=640x360:rate=25:duration=5"),
+                *("-f", "lavfi", "-i", "sine=frequency=440:duration=5"),
+                *("-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest"),
+            ),
+        ):
+            media.append((path.suffix.lstrip("."), path.read_bytes()))
+    batches = [images, media]
+    results: dict[str, object] = {}
+    bot = pyqbot.Bot(app_id, app_secret)
+
+    @bot.on_group_message
+    @bot.on_group_at_message
+    async def mentioned(message: pyqbot.GroupMessage) -> None:
+        if message.group_openid != group or not message.mentions_me or not batches:
+            return
+        for ext, data in batches.pop(0):
+            try:
+                uploaded = await message.upload(data=data, file_name=f"pyqbot.{ext}")
+                label = f"pyqbot：群 {ext}" if (ext, data) in images else None
+                await message.reply(label, media=uploaded)
+                results[ext] = "被接受"
+            except pyqbot.APIError as error:
+                results[ext] = ("被拒", error.err_code, error.message)
+        if not batches:
+            await bot.close()
+
+    async with bot:
+        try:
+            async with asyncio.timeout(wait_seconds):
+                await bot.start()
+        except TimeoutError:
+            results["timeout"] = f"{wait_seconds} 秒内没有等到两次 @"
+
+    _logger.warning("群里的格式：%s", results)
+    assert results, results
