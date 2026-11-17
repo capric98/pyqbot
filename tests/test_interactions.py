@@ -2,7 +2,8 @@
 
 import asyncio
 import json
-from collections.abc import AsyncGenerator, Mapping
+import logging
+from collections.abc import AsyncGenerator, Callable, Mapping
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -508,9 +509,12 @@ async def test_reply_on_an_unbound_interaction_raises() -> None:
 
 
 async def dispatch_click(
-    data: Mapping[str, object], *, auto_ack: bool = True, handlers: int = 1
+    data: Mapping[str, object],
+    *,
+    auto_ack: bool | Callable[[pyqbot.Interaction], bool] = True,
+    handlers: int = 1,
 ) -> list[tuple[str, str, object]]:
-    """经 `Bot` 分发一次互动，处理函数只回复；返回平台收到的请求。"""
+    """经 `Bot` 分发一次互动，处理函数回复；SDK 不替它回应时先回应「无权限」。返回平台收到的请求。"""
     platform = Platform()
     replied = asyncio.Event()
     calls = 0
@@ -522,7 +526,7 @@ async def dispatch_click(
 
         async def clicked(event: pyqbot.Interaction) -> None:
             nonlocal calls
-            if not auto_ack:
+            if auto_ack is False or (callable(auto_ack) and not auto_ack(event)):
                 await event.ack(code=pyqbot.InteractionResult.NO_PERMISSION)
             await event.reply(f"你点了 {event.button_data}")
             calls += 1
@@ -585,3 +589,50 @@ async def test_without_auto_ack_the_handler_chooses_the_result() -> None:
         {"code": pyqbot.InteractionResult.NO_PERMISSION},
     )
     assert [method for method, _, _ in requests] == ["PUT", "POST"]
+
+
+async def test_auto_ack_can_leave_chosen_interactions_to_the_handler() -> None:
+    handled = await dispatch_click(C2C_CLICK, auto_ack=lambda i: i.button_data != "confirm:once")
+    automatic = await dispatch_click(C2C_CLICK, auto_ack=lambda i: True)
+
+    acks = [body for method, _, body in handled if method == "PUT"]
+    assert acks == [{"code": pyqbot.InteractionResult.NO_PERMISSION}]  # 只有处理函数的那一次
+    assert [(method, body) for method, _, body in automatic if method == "PUT"] == [
+        ("PUT", {"code": 0})
+    ]
+
+
+async def test_auto_ack_does_not_ack_when_the_predicate_raises(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def broken(interaction: pyqbot.Interaction) -> bool:
+        raise LookupError("判断出错")
+
+    platform = Platform()
+    replied = asyncio.Event()
+
+    async with (
+        httpx2.AsyncClient(transport=httpx2.MockTransport(platform.handle)) as http_client,
+        pyqbot.Bot("app-id", APP_SECRET, http_client=http_client, auto_ack=broken) as bot,
+    ):
+
+        @bot.on_interaction
+        async def clicked(event: pyqbot.Interaction) -> None:
+            await event.reply("收到")
+            replied.set()
+
+        frame = {
+            "op": 0,
+            "s": 1,
+            "t": "INTERACTION_CREATE",
+            "id": "INTERACTION_CREATE:o",
+            "d": C2C_CLICK,
+        }
+        with caplog.at_level(logging.ERROR, logger="pyqbot"):
+            bot._dispatcher.dispatch(decode_payload(json.dumps(frame)), bot)  # pyright: ignore[reportPrivateUsage]  代替 Bot.start()
+            async with asyncio.timeout(HANG_GUARD):
+                await replied.wait()
+                await bot._dispatcher.aclose()  # pyright: ignore[reportPrivateUsage]
+
+    assert [method for method, _, _ in platform.requests] == ["POST"]
+    assert "判断出错" in caplog.text

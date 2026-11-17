@@ -277,17 +277,18 @@ async def clicked(interaction: pyqbot.Interaction) -> None:
         await interaction.reply("谢谢支持")  # 单聊、群聊、频道自动分派
 ```
 
-要回应别的结果（如没有权限），构造时关掉自动回应，自己尽快 `ack()`，耗时的事放在回应之后：
+要对某些按钮回应别的结果（如没有权限），给 `auto_ack` 传一个判断函数：返回 `True` 的照常由 SDK 回应，
+其余由处理函数自己尽快 `ack()`，耗时的事放在回应之后。传 `auto_ack=False` 则全部自己回应。
 
 ```python
 ADMINS = {"MEMBER_OPENID"}
-strict_bot = pyqbot.Bot("APP_ID", "APP_SECRET", auto_ack=False)
+strict_bot = pyqbot.Bot("APP_ID", "APP_SECRET", auto_ack=lambda i: i.button_data != "admin")
 
 
 @strict_bot.on_interaction
 async def admin_only(interaction: pyqbot.Interaction) -> None:
-    if interaction.type != pyqbot.InteractionType.INLINE_KEYBOARD:
-        return
+    if interaction.button_data != "admin":
+        return  # 已由 SDK 回应
     if interaction.group_member_openid not in ADMINS:
         await interaction.ack(code=pyqbot.InteractionResult.ADMIN_ONLY)
         return

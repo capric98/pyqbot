@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+from collections.abc import Callable
 
 import httpx2
 
@@ -84,7 +85,8 @@ class Bot(Client):
     Args:
         intents: 要订阅的事件类别。默认按已注册的处理函数推导，一般不用传；传入则以它为准。
         auto_ack: 收到回调按钮与快捷菜单的互动时，先替你回应「成功」再调用处理函数（客户端只等约 1 秒）。
-            要回应别的结果（如 `InteractionResult.NO_PERMISSION`）就传 `False`，并在处理函数里尽快 `ack()`。
+            也可以传一个函数逐个决定：返回 `True` 的由 SDK 回应，其余由处理函数自己尽快 `ack()`，比如要回应
+            `InteractionResult.NO_PERMISSION` 的按钮；函数抛异常时不回应。传 `False` 时全部自己回应。
 
     Example:
         ```python
@@ -109,13 +111,14 @@ class Bot(Client):
         timeout: float = DEFAULT_TIMEOUT,
         http_client: httpx2.AsyncClient | None = None,
         intents: Intents | None = None,
-        auto_ack: bool = True,
+        auto_ack: bool | Callable[[Interaction], bool] = True,
     ) -> None:
         super().__init__(
             app_id, app_secret, base_url=base_url, timeout=timeout, http_client=http_client
         )
         self._intents = intents
         self._auto_ack = auto_ack
+        self._auto_ack_added = False
         self._dispatcher = Dispatcher(redact=self._redact_secrets)
         self._connection: GatewayConnection | None = None
 
@@ -275,14 +278,14 @@ class Bot(Client):
     def on_interaction[F: Handler[Interaction]](self, handler: F) -> F:
         """注册互动事件（`INTERACTION_CREATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
 
-        回调按钮与快捷菜单默认由 SDK 先回应（见 `auto_ack`），处理函数里不必再 `ack()`。
+        回调按钮与快捷菜单默认由 SDK 先回应，处理函数里不必再 `ack()`；哪些自己回应见 `Bot` 的 `auto_ack`。
 
         Raises:
             TypeError: 处理函数不是 `async def` 定义的。
         """
-        if self._auto_ack:
-            self._auto_ack = False  # 只插一次；排在第一个，任务最先启动
-            self._dispatcher.add_handler(Interaction, _ack_callbacks)
+        if self._auto_ack is not False and not self._auto_ack_added:
+            self._auto_ack_added = True  # 只插一次；排在第一个，任务最先启动
+            self._dispatcher.add_handler(Interaction, _ack_callbacks(self._auto_ack))
         self._dispatcher.add_handler(Interaction, handler)
         return handler
 
@@ -767,7 +770,11 @@ class Bot(Client):
 _NEEDS_ACK = frozenset({InteractionType.INLINE_KEYBOARD, InteractionType.CALLBACK_COMMAND})
 
 
-async def _ack_callbacks(interaction: Interaction) -> None:
+def _ack_callbacks(choose: bool | Callable[[Interaction], bool]) -> Handler[Interaction]:
     """`auto_ack` 的内部处理函数：只回应需要回应的两类互动，失败由分发器记日志。"""
-    if interaction.type in _NEEDS_ACK:
-        await interaction.ack()
+
+    async def ack_callbacks(interaction: Interaction) -> None:
+        if interaction.type in _NEEDS_ACK and (not callable(choose) or choose(interaction)):
+            await interaction.ack()
+
+    return ack_callbacks
