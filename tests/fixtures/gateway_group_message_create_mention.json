@@ -1,0 +1,43 @@
+{
+  "op": 0,
+  "id": "GROUP_MESSAGE_CREATE:fakegroupmessageevent",
+  "s": 2,
+  "t": "GROUP_MESSAGE_CREATE",
+  "d": {
+    "author": {
+      "avatar": "https://example.invalid/avatar.png",
+      "bot": false,
+      "id": "0123456789ABCDEF0123456789ABCDEF",
+      "member_nickname": "测试群名片",
+      "member_openid": "0123456789ABCDEF0123456789ABCDEF",
+      "member_role": "admin",
+      "union_openid": "",
+      "username": "测试用户"
+    },
+    "content": "<@B0B0B0B0B0B0B0B0B0B0B0B0B0B0B0B0> 测试一下at",
+    "group_id": "FEDCBA9876543210FEDCBA9876543210",
+    "group_openid": "FEDCBA9876543210FEDCBA9876543210",
+    "id": "ROBOT1.0_fake-group-message-with-mention",
+    "mentions": [
+      {
+        "bot": true,
+        "id": "B0B0B0B0B0B0B0B0B0B0B0B0B0B0B0B0",
+        "is_you": true,
+        "member_nickname": "测试机器人",
+        "member_openid": "B0B0B0B0B0B0B0B0B0B0B0B0B0B0B0B0",
+        "member_role": "admin",
+        "scope": "single",
+        "username": "测试机器人"
+      }
+    ],
+    "message_scene": {
+      "ext": [
+        "msg_idx=REFIDX_fake",
+        "auth_token=fake"
+      ],
+      "source": "default"
+    },
+    "message_type": 0,
+    "timestamp": "2026-11-17T08:11:29+08:00"
+  }
+}

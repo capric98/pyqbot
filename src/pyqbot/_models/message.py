@@ -112,11 +112,15 @@ class GroupMessageMember(_UserBase):
         member_nickname: 群昵称（群名片）；文档没有列出，实测消息的发送者带它。
         username: QQ 昵称，可能为空串。
         bot: 是否为机器人。
+        is_you: 被 @ 的是不是本机器人；文档没有列出，实测只在 `mentions` 里有。
+        scope: @ 的范围，实测单独 @ 某人时为 `"single"`；文档没有列出。
     """
 
     member_openid: str | None = None
     member_role: GroupMemberRole | None = None
     member_nickname: str | None = None
+    is_you: bool | None = None
+    scope: str | None = None
 
 
 class MessageElementAuthor(_UserBase):
@@ -340,7 +344,9 @@ class C2CMessage(_ChatMessage, C2CReplyTarget):
 class GroupMessage(_ChatMessage, GroupReplyTarget):
     """群里的任意一条消息（不限于 @机器人），对应事件 `GROUP_MESSAGE_CREATE`。
 
-    机器人开启了「接收所有消息」才会收到。`GroupAtMessage`（@机器人 的消息）是它的子类，
+    群设置里把机器人可获取的消息设为「获取群内全部消息」才会收到；这时 @机器人 的消息也只推这个事件，
+    不再推 `GROUP_AT_MESSAGE_CREATE`，`content` 带着 `<@机器人的 member_openid>` 前缀，用 `mentions_me` 判断
+    （实测，见 `docs/errata.md`）。`GroupAtMessage`（@机器人 的消息）是它的子类，
     所以一个标注为 `GroupMessage` 的处理函数可以同时注册到 `@bot.on_group_message` 与
     `@bot.on_group_at_message`；反过来不行。平台可能重复推送同一条消息（`id` 相同），需要时自行去重。
 
@@ -367,6 +373,11 @@ class GroupMessage(_ChatMessage, GroupReplyTarget):
     group_openid: str
     author: GroupMessageMember = msgspec.field(default_factory=GroupMessageMember)
     mentions: tuple[GroupMessageMember, ...] = ()
+
+    @property
+    def mentions_me(self) -> bool:
+        """这条消息是否 @ 了本机器人（`mentions` 里有 `is_you` 为真的成员）。"""
+        return any(member.is_you for member in self.mentions)
 
     @property
     def member_openid(self) -> str | None:
@@ -464,3 +475,8 @@ class GroupAtMessage(GroupMessage):
     """
 
     event_name = "GROUP_AT_MESSAGE_CREATE"
+
+    @property
+    def mentions_me(self) -> bool:
+        """恒为 `True`：这个事件就是 @机器人 的消息（`mentions` 里不含机器人自己）。"""
+        return True

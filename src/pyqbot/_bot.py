@@ -133,7 +133,8 @@ class Bot(Client):
     def on_group_at_message[F: Handler[GroupAtMessage]](self, handler: F) -> F:
         """注册群里 @机器人 的消息（`GROUP_AT_MESSAGE_CREATE`）的处理函数，原样返回它。
 
-        处理函数必须是 `async def`，只收一个 `GroupAtMessage`；同一事件可以注册多个。
+        处理函数必须是 `async def`，只收一个 `GroupAtMessage`；同一事件可以注册多个。群设置为「获取群内全部
+        消息」时平台不推这个事件，@ 消息改走 `on_group_message`（见 `GroupMessage.mentions_me`）。
 
         Raises:
             TypeError: 处理函数不是 `async def` 定义的。
@@ -144,7 +145,8 @@ class Bot(Client):
     def on_group_message[F: Handler[GroupMessage]](self, handler: F) -> F:
         """注册群里的全部消息（`GROUP_MESSAGE_CREATE`）的处理函数，原样返回它；要求同 `on_c2c_message`。
 
-        机器人须开启「接收所有消息」。只收 @机器人 的消息用 `on_group_at_message`，两者互不转发。
+        群设置须为「获取群内全部消息」，这时 @机器人 的消息也从这里来（`message.mentions_me` 为真），
+        `on_group_at_message` 收不到；只收 @ 消息的设置下用 `on_group_at_message`。两者互不转发。
 
         Raises:
             TypeError: 处理函数不是 `async def` 定义的。

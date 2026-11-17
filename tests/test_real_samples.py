@@ -233,3 +233,23 @@ def test_group_member_events_carry_an_empty_union_openid() -> None:
     assert (added.union_openid, removed.union_openid) == ("", "")
     assert removed.user_openid is None
     assert added.event_id == "GROUP_MEMBER_ADD:00000000-0000-0000-0000-000000000006"
+
+
+def test_all_mode_mention_arrives_as_a_plain_group_message() -> None:
+    message = event_from("gateway_group_message_create_mention.json", pyqbot.GroupMessage)
+
+    assert type(message) is pyqbot.GroupMessage  # 全量模式下 @ 消息不是 GroupAtMessage
+    assert message.content == "<@B0B0B0B0B0B0B0B0B0B0B0B0B0B0B0B0> 测试一下at"
+    assert message.mentions_me
+    [mention] = message.mentions
+    assert (mention.is_you, mention.bot, mention.scope) == (True, True, "single")
+    assert reply_fields(message)["msg_id"] == "ROBOT1.0_fake-group-message-with-mention"
+
+
+def test_mentions_me_is_false_without_is_you_and_always_true_for_at_messages() -> None:
+    plain = pyqbot.GroupMessage(
+        id="m", group_openid="g", mentions=(pyqbot.GroupMessageMember(member_openid="x"),)
+    )
+    at = pyqbot.GroupAtMessage(id="m", group_openid="g")
+
+    assert (plain.mentions_me, at.mentions_me) == (False, True)
