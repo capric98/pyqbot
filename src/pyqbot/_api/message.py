@@ -27,8 +27,9 @@ def message_body(
     """按传了哪些内容推断 `msg_type`，拼出请求体（不含被动回复的字段）。
 
     Raises:
-        ValueError: 没有任何内容，或内容参数的组合不合法。
+        ValueError: 没有任何内容（空串的 `content` 算没传），或内容参数的组合不合法。
     """
+    content = content or None  # 空串当作没传，免得把空文本发出去（如原样复读一条纯图片消息）
     candidates = (("markdown", markdown), ("media", media), ("card", card))
     kinds = [name for name, value in candidates if value is not None]
     if len(kinds) > 1:

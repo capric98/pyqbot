@@ -193,6 +193,7 @@ def test_embed_without_optional_parts_has_only_its_title() -> None:
     ("arguments", "match"),
     [
         ({}, "没有要发送的内容"),
+        ({"content": ""}, "没有要发送的内容"),
         (
             {"content": "x", "image": "https://a", "image_data": b"x"},
             "image、image_data 只能传一个",

@@ -33,10 +33,11 @@ async def guild_message_request(
     """检查参数并拼出请求体（不含被动回复的字段），另返回要随 multipart 上传的图片。
 
     Raises:
-        ValueError: 没有任何内容；`image`、`image_path`、`image_data` 传了不止一个；
+        ValueError: 没有任何内容（空串的 `content` 算没传）；`image`、`image_path`、`image_data` 传了不止一个；
             `keyboard` 没有随 `markdown`；`quote` 是空的消息 ID。
         OSError: 读取 `image_path` 失败。
     """
+    content = content or None  # 同 `message_body()`
     images = [
         name
         for name, value in (

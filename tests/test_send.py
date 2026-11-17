@@ -194,10 +194,21 @@ async def test_markdown_template_is_encoded_with_its_params() -> None:
     assert pyqbot.Markdown.from_template("tpl") == pyqbot.Markdown(custom_template_id="tpl")
 
 
+async def test_empty_content_counts_as_not_given() -> None:
+    # 原样复读一条纯图片消息时 content 是空串，不该把空文本发出去。
+    platform = Platform()
+
+    async with client_for(platform) as client:
+        await client.users.send_message("u", "", media=pyqbot.Media(file_info="F"))
+
+    assert "content" not in platform.bodies()[0]
+
+
 @pytest.mark.parametrize(
     ("arguments", "match"),
     [
         ({}, "没有要发送的内容"),
+        ({"content": ""}, "没有要发送的内容"),
         ({"markdown": "a", "media": pyqbot.Media(file_info="F")}, "markdown、media 只能传一个"),
         ({"media": pyqbot.Media(file_info="F"), "card": CARD}, "media、card 只能传一个"),
         ({"content": "a", "markdown": "b"}, "不能再传 content"),
