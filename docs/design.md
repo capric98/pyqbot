@@ -4,24 +4,7 @@
 
 ## 目标用户代码
 
-```python
-import pyqbot
-
-# 只调接口的脚本：Client 可以单独使用
-async with pyqbot.Client(APP_ID, APP_SECRET) as client:
-    await client.users.send_message(user_openid, "你好")
-
-# 事件驱动：Bot 继承 Client，接口用法完全相同
-bot = pyqbot.Bot(APP_ID, APP_SECRET)
-
-
-@bot.on_c2c_message
-async def reply(message: pyqbot.C2CMessage) -> None:
-    await message.reply("收到")
-
-
-bot.run()  # 同步入口，阻塞到退出
-```
+面向使用者的示例在根目录 `README.md` 与 `docs/guide.md`，这里不重复。新接口仍按 `AGENTS.md`「接口设计」先写出期望的用户代码，再实现。
 
 ## 入口与初始化
 
