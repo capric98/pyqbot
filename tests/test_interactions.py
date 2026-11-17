@@ -636,3 +636,44 @@ async def test_auto_ack_does_not_ack_when_the_predicate_raises(
 
     assert [method for method, _, _ in platform.requests] == ["POST"]
     assert "判断出错" in caplog.text
+
+
+async def test_recall_uses_the_interaction_scene() -> None:
+    platform = Platform()
+    private = interaction(C2C_CLICK)
+    group = interaction(GROUP_CLICK)
+    guild = interaction({"id": "i", "scene": "guild", "guild_id": "g", "channel_id": "c"})
+
+    async with client_for(platform) as client:
+        for event in (private, group, guild):
+            bind_client(event, client)
+        await private.recall(pyqbot.SentMessage(id="s1"))
+        await group.recall("s2")
+        await guild.recall(pyqbot.GuildMessage(id="s3", channel_id="c", guild_id="g"))
+
+    assert [(method, path.split("?")[0]) for method, path, _ in platform.requests] == [
+        ("DELETE", "/v2/users/A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4/messages/s1"),
+        ("DELETE", "/v2/groups/B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5/messages/s2"),
+        ("DELETE", "/channels/c/messages/s3"),
+    ]
+
+
+async def test_recall_rejects_a_message_from_another_scene_before_sending() -> None:
+    platform = Platform()
+    private = interaction(C2C_CLICK)
+    guild = interaction({"id": "i", "scene": "guild", "guild_id": "g", "channel_id": "c"})
+
+    async with client_for(platform) as client:
+        for event in (private, guild):
+            bind_client(event, client)
+        with pytest.raises(ValueError, match="消息不属于这个场景"):
+            await private.recall(pyqbot.GuildMessage(id="s", channel_id="c", guild_id="g"))
+        with pytest.raises(ValueError, match="消息不属于这个场景"):
+            await guild.recall(pyqbot.SentMessage(id="s"))
+
+    assert platform.requests == []
+
+
+async def test_recall_on_an_unbound_interaction_raises() -> None:
+    with pytest.raises(RuntimeError, match="没有绑定 Client"):
+        await interaction(C2C_CLICK).recall("s")

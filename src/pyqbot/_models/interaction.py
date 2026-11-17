@@ -275,10 +275,7 @@ class Interaction(C2CReplyTarget, GroupReplyTarget, ChannelReplyTarget):
             RuntimeError: 事件不是 `Bot` 分发来的（没有绑定客户端），或客户端已关闭。
         """
         client = self._bound_client()
-        chat_type = self.chat_type
-        if chat_type is None and self.scene is not None:
-            chat_type = _SCENES.get(self.scene)
-        match chat_type:
+        match self._resolved_chat_type():
             case ChatType.C2C if self.user_openid is not None:
                 return await client.users.send_message(
                     self.user_openid,
@@ -318,12 +315,53 @@ class Interaction(C2CReplyTarget, GroupReplyTarget, ChannelReplyTarget):
                     reply_to=self,
                 )
             case _:
-                # 不带 scene 原文：平台给的字符串进异常前要脱敏（约定 7），整数的 chat_type 不用。
-                chat_type_value = None if self.chat_type is None else int(self.chat_type)
-                raise ValueError(
-                    f"无法回复这次互动（chat_type={chat_type_value}）：认不出场景，"
-                    "或缺少该场景的 user_openid / group_openid / channel_id"
-                )
+                raise self._unusable_scene("回复这次互动")
+
+    async def recall(self, message: str | SentMessage | GuildMessage) -> None:
+        """撤回 `reply()` 发出的消息，按互动所在的场景选接口，不必先判断 `reply()` 返回的是哪种消息。
+
+        `message` 是 `reply()` 的返回值，或它的消息 ID。
+
+        对应官方接口 `DELETE /v2/users/{user_openid}/messages/{message_id}`、
+        `DELETE /v2/groups/{group_openid}/messages/{message_id}` 或
+        `DELETE /channels/{channel_id}/messages/{message_id}`。
+
+        Raises:
+            APIError: 平台拒绝，例如超过了撤回时限。
+            NetworkError: 没有拿到平台的响应。
+            ValueError: 认不出场景、缺少该场景的 openid / 子频道 ID，或消息不属于这个场景
+                （如单聊里传了 `GuildMessage`）。
+            RuntimeError: 事件不是 `Bot` 分发来的（没有绑定客户端），或客户端已关闭。
+        """
+        client = self._bound_client()
+        match self._resolved_chat_type():
+            case ChatType.C2C if self.user_openid is not None and not isinstance(
+                message, GuildMessage
+            ):
+                await client.users.recall_message(self.user_openid, message)
+            case ChatType.GROUP if self.group_openid is not None and not isinstance(
+                message, GuildMessage
+            ):
+                await client.groups.recall_message(self.group_openid, message)
+            case ChatType.GUILD if self.channel_id is not None and not isinstance(
+                message, SentMessage
+            ):
+                await client.channels.recall_message(self.channel_id, message)
+            case _:
+                raise self._unusable_scene("撤回这次互动的回复", "，或消息不属于这个场景")
+
+    def _resolved_chat_type(self) -> ChatType | None:
+        if self.chat_type is None and self.scene is not None:
+            return _SCENES.get(self.scene)
+        return self.chat_type
+
+    def _unusable_scene(self, action: str, extra: str = "") -> ValueError:
+        # 不带 scene 原文：平台给的字符串进异常前要脱敏（约定 7），整数的 chat_type 不用。
+        chat_type_value = None if self.chat_type is None else int(self.chat_type)
+        return ValueError(
+            f"无法{action}（chat_type={chat_type_value}）：认不出场景，"
+            f"或缺少该场景的 user_openid / group_openid / channel_id{extra}"
+        )
 
 
 def _chat_quote(

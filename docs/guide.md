@@ -298,7 +298,8 @@ async def admin_only(interaction: pyqbot.Interaction) -> None:
 
 - 回应晚了或重复回应，接口都不报错，只是用户那边的提示不对，所以本地看不出来。
 - 回应用的 `interaction.id` 与被动回复用的 `event_id` 不是同一个值，两者都由 SDK 处理。
-- `interaction.reply()` 按发生的场景选接口，返回 `SentMessage`（单聊、群聊）或 `GuildMessage`（频道）。
+- `interaction.reply()` 按发生的场景选接口，返回 `SentMessage`（单聊、群聊）或 `GuildMessage`（频道）；
+  要撤回它就把返回值交给 `interaction.recall()`，同样按场景选接口，不用先判断类型。
 - 用户在资料卡切换主动消息开关时，推的是 `type` 为 `USER_AUTHORIZE` 的互动，开关状态看
   `interaction.data.resolved.authorize_data.switch`。
 - SDK 自建的 HTTP 客户端把空闲连接保留 60 秒，免得回应时重新握手；自备 `http_client` 时建议同样调长 `keepalive_expiry`。
