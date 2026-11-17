@@ -32,14 +32,16 @@ from pyqbot._api.upload import INLINE_LIMIT
 pytestmark = pytest.mark.live
 _logger = logging.getLogger("pyqbot.live")
 TIME_KEYS = frozenset({"ttl", "created_at", "expires_at"})
-# 64×64 纯绿的 gif 与 jpg（macOS 的 sips 从 PNG 转出），以及一个 1×1 的无损 webp。
+# 64×64 纯绿的 gif、jpg（macOS 的 sips 从 PNG 转出）与 webp。
 GIF_64 = base64.b64decode(
     "R0lGODdhQABAAJEAAAAAAADAAP///wAAACH5BAQAAAAALAAAAABAAEAAAAJFjI+py+0Po5y02ouz3rz7D4biSJbmiabqyrbuC8fyTNf2jef6zvf+DwwKh8Si8YhMKpfMpvMJjUqn1Kr1is1qt9yuN1AAADs="
 )
 JPEG_64 = base64.b64decode(
     "/9j/4AAQSkZJRgABAQAASABIAAD/4QBMRXhpZgAATU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAQKADAAQAAAABAAAAQAAAAAD/7QA4UGhvdG9zaG9wIDMuMAA4QklNBAQAAAAAAAA4QklNBCUAAAAAABDUHYzZjwCyBOmACZjs+EJ+/8AAEQgAQABAAwEiAAIRAQMRAf/EAB8AAAEFAQEBAQEBAAAAAAAAAAABAgMEBQYHCAkKC//EALUQAAIBAwMCBAMFBQQEAAABfQECAwAEEQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+v/EAB8BAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKC//EALURAAIBAgQEAwQHBQQEAAECdwABAgMRBAUhMQYSQVEHYXETIjKBCBRCkaGxwQkjM1LwFWJy0QoWJDThJfEXGBkaJicoKSo1Njc4OTpDREVGR0hJSlNUVVZXWFlaY2RlZmdoaWpzdHV2d3h5eoKDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uLj5OXm5+jp6vLz9PX29/j5+v/bAEMAAgICAgICAwICAwUDAwMFBgUFBQUGCAYGBgYGCAoICAgICAgKCgoKCgoKCgwMDAwMDA4ODg4ODw8PDw8PDw8PD//bAEMBAgICBAQEBwQEBxALCQsQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEP/dAAQABP/aAAwDAQACEQMRAD8A4Oiiiv8AP8/y/CiiigAooooAKKKKAP/Q4Oiiiv8AP8/y/CiiigAooooAKKKKAP/R4Oiiiv8AP8/y/CiiigAooooAKKKKAP/S4Oiiiv8AP8/y/CiiigAooooAKKKKAP/Z"
 )
-WEBP_1 = base64.b64decode("UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==")
+WEBP_64 = base64.b64decode(
+    "UklGRiIAAABXRUJQVlA4TBUAAAAvP8APAAfQ4Ij+B4CE8P+9FtH/1A8A"
+)  # ffmpeg 的 libwebp，无损
 
 # 官方文档快照里引用的图片（server-inter/message/rich-media.md），公网可访问。
 IMAGE_URL = "https://qq-ai.cdn-go.cn/web/bot-docs/-/v1.49.0/assets/img/image-send.35813305.jpg"
@@ -242,13 +244,13 @@ async def test_media_image_library(client: pyqbot.Client, openid: str) -> None:
 
 
 async def test_image_and_voice_formats(client: pyqbot.Client, openid: str) -> None:
-    """应看到：四张绿色小图，文字分别是 gif、webp、bmp、jpg（webp 只有 1×1）；再一条约 2 秒的 wav 语音。
+    """应看到：四张绿色小图，文字分别是 gif、webp、bmp、jpg；再一条约 2 秒的 wav 语音。
 
     文档各页列的格式不一致；被拒的格式与错误码记进日志。mp3、ogg 本机生成不了，没有测。
     """
     samples = [
         ("gif", GIF_64),
-        ("webp", WEBP_1),
+        ("webp", WEBP_64),
         ("bmp", bmp(64, 64, b"\x00\xc0\x00")),
         ("jpg", JPEG_64),
         ("wav", wav()),
@@ -445,7 +447,7 @@ async def test_group_media_formats(app_id: str, app_secret: str, tmp_path: Path)
     wait_seconds = float(os.environ.get("LIVE_WAIT_SECONDS", "180"))
     images = [
         ("gif", GIF_64),
-        ("webp", WEBP_1),
+        ("webp", WEBP_64),
         ("bmp", bmp(64, 64, b"\x00\xc0\x00")),
         ("jpg", JPEG_64),
     ]
