@@ -34,12 +34,12 @@
 - **已知**：客户端以 1000 正常关闭后重连并 Resume 可以恢复会话（已确认，见下）。
 - **当前做法**：其它 4000~4999 按「其他错误，请重新发起 identify」Identify；其余尝试 Resume，会话已失效时网关会再以 4006 或 OpCode 9 告知。
 
-### OpCode 7、OpCode 9：之后该怎么做
+### OpCode 9：之后该怎么做
 
 - **位置**：`dev-prepare/event-emit/payload.md`「OpCode 含义」。
-- **含糊**：只说 7「通知客户端重新连接」、9「identify 或 resume 的时候参数有错」。没说收到 7 之后该 Resume 还是 Identify，也没说 9 的 `d` 是什么。
-- **当前做法**：7 重连并 Resume；9 不看 `d`，清掉会话重新 Identify，连续 3 次放弃。
-- **不主动实测**：两者都无法主动触发，实际遇到时把 `d` 记到这里。
+- **含糊**：只说 9「identify 或 resume 的时候参数有错」，没说 `d` 是什么。OpCode 7 已确认，见「已确认」。
+- **当前做法**：不看 `d`，清掉会话重新 Identify，连续 3 次放弃。
+- **不主动实测**：无法主动触发，实际遇到时把 `d` 记到这里。
 
 ### 网关：WebSocket Ping、单帧大小与二进制帧
 
@@ -51,7 +51,8 @@
   - 手机上一次选多张图发出时，拆成每张一条消息，每条的 `d` 约 1.2 KB（`test_resume_replays_backlog`）。
   - 电脑上一次发 4 张图加一行文字，是一条消息带 4 个附件，`d` 约 2.3 KB（`test_multi_image_message`）。
   - 图片只以链接出现，帧都很小；没有见到二进制帧。
-- **怎么测**：长时间挂着连接，看 WebSocket 层的 Ping 与断线。
+- **已知**（`test_long_connection`，2026-11-16 起挂了 6 小时，只有 OpCode 1 心跳）：除了每小时一次的 OpCode 7，连接没有断过；没有收到二进制帧。
+- **仍不清楚**：单帧上限。见过最大的 `d` 约 2.3 KB，离 1 MiB 很远。
 
 ### Intents：尚未确认的两处
 
@@ -66,6 +67,7 @@
 - **位置**：`autogen/event/c2c_message_create.md` 页首；`autogen/event/group_at_message_create.md` 页首。
 - **矛盾**：都说「相同 msg_id 可能重复推送」，一处要「结合 msg_seq 做去重」，单聊页紧接着又说「结合 message_scene.ext 中的 msg_idx 做去重」。事件体里没有 `msg_seq`（它是发消息时的参数）。
 - **当前做法**：SDK 不去重，同一条消息重复推送时处理函数会被调用多次；`message_scene.ext` 原样提供（含 `msg_idx`）。
+- **已知**（`test_long_connection`，6 小时，重连并 Resume 5 次）：收到 32 条 `GROUP_MESSAGE_CREATE`，`id` 与 `msg_idx` 都没有重复，还没见过重复推送。
 - **怎么测**：观察重复推送时 `id` 与 `msg_idx` 是否都相同，再决定 SDK 是否按 `id` 去重。
 
 ### `msg_type` 的取值各页不一致
@@ -579,6 +581,15 @@
   - Resume 后，积压的 5 条 `C2C_MESSAGE_CREATE`（序号 3～7）先补发，然后才是 `RESUMED`（序号 8）。
   - 收到第一条补发事件就发心跳被接受；心跳应答排在 `RESUMED` 之后。
 - **实现**：不变，SDK 正是收到第一条 Dispatch 就发心跳。
+
+### 网关：每条连接整 1 小时收到 OpCode 7，Resume 即可
+
+- **位置**：`dev-prepare/event-emit/payload.md`「OpCode 含义」只说 7「通知客户端重新连接」，没说之后该 Resume 还是 Identify。
+- **结论**（`test_long_connection`，2026-11-16 18:24 起挂了 6 小时）：
+  - 每条连接在 `READY` 或 `RESUMED` 之后整 60 分钟（误差不到 1 秒）收到 OpCode 7，6 小时共 5 次，此外没有断线。
+  - 每次重连后发 Resume 都恢复成功，全程只 Identify 了 1 次。从收到 7 到 `RESUMED` 约 3.5～5 秒。
+  - OpCode 7 的 `d` 没有记录。
+- **实现**：不变，SDK 收到 7 后退避不到 1 秒就重连并 Resume。
 
 ### 键盘：单聊发送成功，`enter` 在群里只填进输入框
 
