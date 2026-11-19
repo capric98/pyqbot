@@ -80,8 +80,9 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 - `test_live_quote.py::test_quote_indices_and_two_streams`：测试用户发「开始」，收到普通消息 A 与流式消息 B、C；
   依次引用 A、B、C 和自己的「开始」，每次机器人回一句对上了哪条；发「结束」后 C 被撤回。看 `quote.txt` 里
   `ref_msg_idx`、`msg_elements[].msg_idx` 与各分片 `ref_idx` 的对应关系，以及第二条流式消息、撤回是否被接受。
-- `test_live_quote.py::test_stream_recall_window`：测试用户发「撤回时限」，收到持续约 100 秒的流式消息 D，
-  第一片发出约 130 秒后机器人撤回它；看 `quote.txt` 里撤回是否被接受（时限从哪一片算起）。
+- `test_live_quote.py::test_waiting_bubble_and_stream_recall`：测试用户先发「静默」（机器人不回），看底部是否出现
+  跳动三个点的空气泡、多久消失，再发「消失了」或「没出现」；然后发「撤回」，收到流式消息 D，机器人先后用
+  `stream_msg_id`、`ref_idx` 撤回它。看空气泡在哪一步出现、D 有没有被撤回，结果在 `quote.txt`。
 - `test_live_events.py::test_friend_del_then_add`：删好友再加回（在 QQ 里打开 `test_generate_share_link` 生成的链接），收到「pyqbot：欢迎回来」。
 - `test_live_events.py::test_c2c_reply_limit_and_plain_stream`：先后发两条单聊；第一条收到「正在输入」与最多 4 条回复，第二条收到纯文本流式回复（`**` 不加粗）。
 - `test_live_events.py::test_c2c_reply_after_10_and_55_minutes`：发一条单聊后约 10、55 分钟各收到一条被动回复（被拒的收不到）；约 56 分钟，在后台跑。

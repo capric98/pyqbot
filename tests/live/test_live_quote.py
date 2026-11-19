@@ -6,7 +6,8 @@
   `msg_idx`（用户的消息）或发送结果的 `ext_info.ref_idx`（机器人的消息）；`msg_elements[].msg_idx` 给不给、
   与 `ref_msg_idx` 是否一致。
 - 流式消息的哪些分片响应带 `ext_info.ref_idx`，引用流式消息时 `ref_msg_idx` 对应哪一个。
-- 同一条用户消息能否先后被动回复两条流式消息；流式消息能否用 `stream_msg_id` 撤回，2 分钟的撤回时限从哪一片算起。
+- 同一条用户消息能否先后被动回复两条流式消息；流式消息能否撤回，用 `stream_msg_id` 还是 `ref_idx`。
+- 机器人不回复某条消息时，客户端底部那个跳动三个点的空气泡是客户端自己的等待态，还是撤回流式消息引起的。
 
 运行前提见 `AGENTS.md`「实测」：每次都要先取得用户同意；每个用例消耗一次网关连接，所以还要 `LIVE_GATEWAY=1`。
 `LIVE_WAIT_SECONDS`（默认 600）是连上网关后等测试用户操作完的秒数。运行方式：
@@ -30,7 +31,6 @@ pytestmark = pytest.mark.live
 
 OUTPUT = Path(__file__).parents[2] / ".cache" / "live" / "quote.txt"
 RAW_DIR = OUTPUT.parent / "raw"
-RECALL_WINDOW = 120  # 秒：文档说的撤回时限
 _logger = logging.getLogger("pyqbot.live")
 
 
@@ -210,47 +210,78 @@ async def test_quote_indices_and_two_streams(
     assert quotes, outcome
 
 
-async def test_stream_recall_window(
+async def test_waiting_bubble_and_stream_recall(
     app_id: str, app_secret: str, openid: str, wait_seconds: float
 ) -> None:
-    """测试用户发「撤回时限」，机器人用一条流式消息 D 回复，持续约 100 秒（每 20 秒一片）。
+    """分两步，区分「结束」后那个跳动三个点的空气泡从哪来，并试流式消息能不能撤回。
 
-    第一片发出约 130 秒后（已过 2 分钟，离最后一片才约 30 秒）用 `stream_msg_id` 撤回 D：被接受说明时限
-    从最后一片或结束分片算起，被拒说明从第一片算起（错误码记进 `quote.txt`）。共约 2 分半钟。
-    应看到：D 逐段出现、结束，然后（撤回被接受时）消失。
+    1. 测试用户发「静默」，机器人不回复。看底部有没有出现空气泡：出现了就等它消失后发「消失了」（机器人记下
+       用了多久），约 30 秒都没出现就发「没出现」。两种都会收到一句回复。
+    2. 测试用户发「撤回」，机器人回一条流式消息 D；结束后约 10 秒用 `stream_msg_id` 撤回 D，再过约 15 秒改用
+       `ref_idx` 撤回，又过约 15 秒发一句结果。看空气泡在哪一步出现（D 结束后、第一次撤回后、第二次撤回后），
+       以及 D 有没有被撤回。
     """
     bot = pyqbot.Bot(app_id, app_secret)
     outcome: dict[str, object] = {}
     loop = asyncio.get_running_loop()
+    silent_at: list[float] = []
 
     @bot.on_c2c_message
     async def on_message(message: pyqbot.C2CMessage) -> None:
-        if message.user_openid != openid or message.content.strip() != "撤回时限":
+        if message.user_openid != openid:
             return
+        match message.content.strip():
+            case "静默":
+                silent_at.append(loop.time())
+                note("silent", "收到「静默」，不回复")
+            case "消失了" | "没出现" as seen if silent_at:
+                elapsed = round(loop.time() - silent_at[-1], 1)
+                outcome["bubble"] = {"seen": seen, "seconds_since_silent": elapsed}
+                note("bubble", outcome["bubble"])
+                await message.reply(
+                    f"pyqbot：记下了（{seen}，距「静默」{elapsed} 秒）。下一步请发「撤回」"
+                )
+            case "撤回":
+                await recall_stages(message)
+                await bot.close()
+            case _:
+                pass
+
+    async def recall_stages(message: pyqbot.C2CMessage) -> None:
         stream = message.reply_stream(coalesce=False)
         async with stream:
-            await stream.append("D：撤回时限实测，")
-            first = loop.time()
-            for second in range(20, 101, 20):
-                await asyncio.sleep(first + second - loop.time())
-                await stream.append(f"第 {second} 秒，")
-            await stream.append("结束。")
-        last = loop.time()
-        await asyncio.sleep(first + RECALL_WINDOW + 10 - loop.time())
-        timing = {
-            "since_first_chunk": round(loop.time() - first, 1),
-            "since_last_chunk": round(loop.time() - last, 1),
-        }
-        assert stream.stream_msg_id is not None
-        try:
-            await bot.users.recall_message(openid, stream.stream_msg_id)
-            outcome["recall"] = timing | {"result": "被接受"}
-        except pyqbot.QQBotError as error:
-            outcome["recall"] = timing | {"err_code": error.err_code, "message": error.message}
-        note("recall_window", outcome["recall"])
-        await bot.close()
+            for piece in ("D：流式消息，", "结束后会被", "试着撤回两次。"):
+                await stream.append(piece)
+                await asyncio.sleep(0.5)
+        ended = loop.time()
+        results: dict[str, dict[str, object]] = {}
+        for name, message_id, delay in (
+            ("stream_msg_id", stream.stream_msg_id, 10),
+            ("ref_idx", stream.ref_idx, 15),
+        ):
+            await asyncio.sleep(delay)
+            result: dict[str, object] = {"since_end": round(loop.time() - ended, 1)}
+            if message_id is None:
+                result["result"] = "没有这个 ID"
+            else:
+                try:
+                    await bot.users.recall_message(openid, message_id)
+                    result["result"] = "被接受"
+                except pyqbot.QQBotError as error:
+                    result |= {"err_code": error.err_code, "message": error.message}
+            results[name] = result
+            note(f"recall_by_{name}", result)
+        outcome["recall"] = results
+        await asyncio.sleep(15)
+        summary = "；".join(
+            f"{name} {result.get('result') or result.get('err_code')}"
+            for name, result in results.items()
+        )
+        await message.reply(
+            f"pyqbot：撤回 D 的结果：{summary}。请看 D 还在不在、空气泡在哪一步出现"
+        )
 
     await run_until_closed(bot, wait_seconds, outcome)
 
-    note("stream_recall_window", outcome)
+    note("waiting_bubble_and_stream_recall", outcome)
     assert "recall" in outcome, outcome
