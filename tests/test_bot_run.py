@@ -126,6 +126,57 @@ async def test_handler_can_shut_the_bot_down() -> None:
     assert asyncio.all_tasks() == {asyncio.current_task()}
 
 
+async def test_stop_lets_running_handlers_finish_and_keeps_http_usable() -> None:
+    platform = Platform()
+    received, release = asyncio.Event(), asyncio.Event()
+
+    async with asyncio.timeout(HANG_GUARD), bot_on(platform) as bot:
+
+        @bot.on_c2c_message
+        async def slow(message: pyqbot.C2CMessage) -> None:
+            received.set()
+            await release.wait()
+            await message.reply("答完了")  # 网关已经断开，接口照常可用
+
+        running = asyncio.create_task(bot.start())
+        await received.wait()
+        stopping = asyncio.create_task(bot.stop())
+        await running  # 网关断开后 start() 正常返回
+        assert not stopping.done()  # 还在等处理函数，没有取消它
+        release.set()
+        await stopping
+        assert not bot.is_closed
+        assert [sent["content"] for sent in platform.sent] == ["答完了"]
+        with pytest.raises(RuntimeError, match="只能调用一次"):
+            await bot.start()
+
+    assert asyncio.all_tasks() == {asyncio.current_task()}
+
+
+async def test_handler_can_stop_the_bot_without_waiting_for_itself() -> None:
+    platform = Platform()
+
+    async with asyncio.timeout(HANG_GUARD), bot_on(platform) as bot:
+
+        @bot.on_c2c_message
+        async def last_words(message: pyqbot.C2CMessage) -> None:
+            await bot.stop()
+            await message.reply("最后一条")
+
+        await bot.start()
+        await bot.stop()  # 可以重复调用；在外面调用时等处理函数做完
+
+        assert [sent["content"] for sent in platform.sent] == ["最后一条"]
+
+
+async def test_start_after_stop_is_rejected() -> None:
+    async with pyqbot.Bot("app-id", "app-secret") as bot:
+        bot.on_c2c_message(ignore)
+        await bot.stop()  # 还没启动：没有网关要断开
+        with pytest.raises(RuntimeError, match="已停止"):
+            await bot.start()
+
+
 async def test_unrecoverable_close_code_ends_start_with_gateway_error() -> None:
     platform = Platform(close_code=4915)
 

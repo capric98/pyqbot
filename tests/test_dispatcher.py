@@ -361,6 +361,52 @@ async def test_aclose_cancels_running_handlers_and_leaves_no_tasks(client: pyqbo
     await dispatcher.aclose()  # 可以重复调用
 
 
+async def test_wait_idle_waits_without_cancelling_including_later_events(
+    client: pyqbot.Client,
+) -> None:
+    dispatcher = new_dispatcher()
+    started, release = asyncio.Event(), asyncio.Event()
+    finished: list[int] = []
+
+    async def slow(event: Ping) -> None:
+        started.set()
+        await release.wait()
+        if event.n == 1:  # 等待期间又来了一条：它也要等
+            dispatcher.dispatch(frame("PING", {"n": 2}), client)
+        finished.append(event.n)
+
+    dispatcher.add_handler(Ping, slow)
+    dispatcher.dispatch(frame("PING", {"n": 1}), client)
+    async with asyncio.timeout(HANG_GUARD):
+        await started.wait()
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(0):  # 限时只结束等待，不取消处理函数
+                await dispatcher.wait_idle()
+        assert len(handler_tasks()) == 1
+        release.set()
+        await dispatcher.wait_idle()
+
+    assert finished == [1, 2]
+    assert handler_tasks() == []
+
+
+async def test_wait_idle_from_inside_a_handler_returns_at_once(client: pyqbot.Client) -> None:
+    dispatcher = new_dispatcher()
+    returned = asyncio.Event()
+
+    async def waits_for_itself(event: Ping) -> None:
+        await dispatcher.wait_idle()
+        returned.set()
+
+    dispatcher.add_handler(Ping, waits_for_itself)
+    dispatcher.dispatch(frame("PING", {"n": 1}), client)
+    async with asyncio.timeout(HANG_GUARD):
+        await returned.wait()
+        await dispatcher.wait_idle()
+
+    assert handler_tasks() == []
+
+
 async def test_aclose_from_inside_a_handler_only_requests_the_stop(
     client: pyqbot.Client,
 ) -> None:

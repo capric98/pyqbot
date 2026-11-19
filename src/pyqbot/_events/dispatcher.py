@@ -99,6 +99,13 @@ class Dispatcher:
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
 
+    async def wait_idle(self) -> None:
+        """等正在运行的处理函数自然结束，不取消；在处理函数里调用时立即返回，免得等到自己。"""
+        if asyncio.current_task() in self._tasks:
+            return
+        while self._tasks:  # 等待期间分发的事件也要等
+            await asyncio.wait(set(self._tasks))
+
     async def aclose(self, *, grace_period: float = CLOSE_GRACE_PERIOD) -> None:
         """不再分发，取消并等待处理函数，最多等 `grace_period` 秒；时序上的语义见 `docs/design.md`「事件」。"""
         current = asyncio.current_task()

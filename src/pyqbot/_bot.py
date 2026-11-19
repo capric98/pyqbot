@@ -121,6 +121,7 @@ class Bot(Client):
         self._auto_ack_added = False
         self._dispatcher = Dispatcher(redact=self._redact_secrets)
         self._connection: GatewayConnection | None = None
+        self._stopped = False
 
     def on_c2c_message[F: Handler[C2CMessage]](self, handler: F) -> F:
         """注册单聊消息（`C2C_MESSAGE_CREATE`）的处理函数，原样返回它。
@@ -705,14 +706,14 @@ class Bot(Client):
         return self._dispatcher.intents if self._intents is None else self._intents
 
     async def start(self) -> None:
-        """连接网关，把事件分发给已注册的处理函数，直到 `close()` 被调用才返回。
+        """连接网关，把事件分发给已注册的处理函数，直到 `stop()` 或 `close()` 被调用才返回。
 
         断线会自动重连并恢复会话。处理函数要在调用之前注册好；只能调用一次。
 
         Raises:
             GatewayError: 网关连接无法恢复，例如机器人被封禁，或没有所订阅事件的权限。
             APIError: 平台拒绝签发 access_token 或网关地址，例如 AppID、AppSecret 不正确。
-            RuntimeError: 没有注册任何处理函数、重复调用，或已关闭。
+            RuntimeError: 没有注册任何处理函数、重复调用，或已停止、已关闭。
 
         Example:
             ```python
@@ -722,6 +723,8 @@ class Bot(Client):
         """
         if self.is_closed:
             raise RuntimeError("Bot 已关闭，不能再启动，请新建一个 Bot")
+        if self._stopped and self._connection is None:
+            raise RuntimeError("Bot 已停止，不能再启动，请新建一个 Bot")
         if self._connection is not None:
             raise RuntimeError("Bot.start() 只能调用一次")
         intents = self._resolve_intents()
@@ -753,6 +756,24 @@ class Bot(Client):
         # Ctrl+C 时 asyncio.run 会先取消 main()、走完 async with 的清理，再抛 KeyboardInterrupt。
         with contextlib.suppress(KeyboardInterrupt):
             asyncio.run(main())
+
+    async def stop(self) -> None:
+        """断开网关、不再接收新事件，然后等正在运行的处理函数自然结束；`start()` 随之正常返回。
+
+        与 `close()` 不同，不取消处理函数，HTTP 连接也照常可用：比如等回答发完、记好账，再调用 `close()`。
+        要限时就在外面套 `asyncio.timeout()`，超时只结束等待，不取消处理函数。在处理函数里调用时只断开网关、
+        不等待（否则会等到自己）。可以重复调用；之后不能再 `start()`。
+
+        Example:
+            ```python
+            await bot.stop()  # 不再收新消息，等在途的处理函数做完
+            await bot.close()
+            ```
+        """
+        self._stopped = True
+        if self._connection is not None:
+            await self._connection.close()
+        await self._dispatcher.wait_idle()
 
     async def close(self) -> None:
         """断开网关，取消还在运行的处理函数，然后关闭连接；`start()` 随之返回。

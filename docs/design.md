@@ -21,7 +21,7 @@
 - **`httpx2.AsyncClient` 的归属**：不传 `http_client` 时由 `Client` 自建、`close()` 时关闭；传入的归调用方，SDK 只用不关。经 `client.http_client` 取回。
 - **生命周期**：推荐 `async with`；也可直接构造，用完 `await client.close()`（可重复调用）。关闭后不可复用。
 - **access_token**：`await client.get_access_token()` 返回当前有效的 token（不带 `QQBot ` 前缀），首次调用才取，之后按需刷新；关闭后调用抛 `RuntimeError`。请求层在 `Client` 内部，直接用 `_credentials.AccessTokenManager`。
-- **`Bot` 的运行入口**：`await bot.start()` 连接网关并分发事件，直到 `close()`（正常返回）或不可恢复的错误（抛 `GatewayError`）；没有要订阅的事件、重复调用或已关闭时抛 `RuntimeError`。`bot.run()` 是它的同步包装：`asyncio.run` 里 `async with self: await self.start()`，Ctrl+C 时干净退出、不打印 traceback。`async with bot` 只管资源，不连网关。`close()` 的顺序是断开网关、取消处理函数、关 HTTP 连接。细节见「网关连接」与「事件」。
+- **`Bot` 的运行入口**：`await bot.start()` 连接网关并分发事件，直到 `close()`（正常返回）或不可恢复的错误（抛 `GatewayError`）；没有要订阅的事件、重复调用或已关闭时抛 `RuntimeError`。`bot.run()` 是它的同步包装：`asyncio.run` 里 `async with self: await self.start()`，Ctrl+C 时干净退出、不打印 traceback。`async with bot` 只管资源，不连网关。`close()` 的顺序是断开网关、取消处理函数、关 HTTP 连接。`await bot.stop()` 只做第一步，再等处理函数自然结束（不取消，见「事件」的「关闭」），`start()` 正常返回，HTTP 连接照常可用，供调用方收尾后再 `close()`；之后不能再 `start()`。细节见「网关连接」与「事件」。
 - **接口挂在哪**：一层命名空间，`client.groups.send_message(...)`，不扁平地挂在 `Client` 上，也不多层嵌套。按用户心目中的资源分组（如 `users`、`groups`），不按文档章节。最常用的操作另在模型对象上提供快捷方法（如 `message.reply()`）。属于客户端自身的方法（如 `get_access_token()`）仍直接挂在 `Client` 上。
 
 ## 包结构与依赖方向
@@ -194,7 +194,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 - **Intents**：默认按已注册的处理函数推导（`Bot._resolve_intents()`），`Bot(..., intents=...)` 传入则以它为准。`Bot.start()` 用它 Identify，所以 `start()` 之后再注册的处理函数不会改变订阅。
 - **分发器**（`_events/dispatcher.py`）：`dispatch(payload, client)` 同步、立刻返回，`payload` 只需有 `t` 与 `decode_data()`（`GatewayPayload` 满足），所以不依赖网关。没有处理函数的事件与未知事件直接忽略、不解码，解码失败（`PayloadError`）记 WARNING 后丢弃；每个处理函数一个任务（`eager_start=False`，装了 eager 任务工厂也不在 `dispatch()` 里开跑），异常记 ERROR，不影响其它处理函数。
 - **日志不带凭证**：处理函数名取函数自身的 `__qualname__`（`partial` 逐层取被包的函数，可调用对象取类名），不用 `repr()`，因为 `partial` 的 repr 带着绑定的参数；任务名、日志与注册时的 `TypeError` 都用它。处理函数的异常链先格式化成文本，经 `Bot` 注入的 `Client._redact_secrets` 脱敏（约定 7）再写日志，不交给 `logger.exception`。
-- **关闭**（`await aclose(grace_period=5)`）：可以重复、并发调用，一定返回。只有第一次调用标记关闭并取消处理函数，每个任务只取消一次，之后的调用只等待，不打断处理函数的清理。在处理函数里调用（`bot.close()` 也一样）只请求停止、立刻返回，不等任何处理函数，所以处理函数之间不会互相等待。在外面调用时最多等 `grace_period` 秒，还没结束的（吞掉了取消）记一条 WARNING 后不再等。`Bot.close()` 依次断开网关、调它、关 HTTP 连接。
+- **关闭**（`await aclose(grace_period=5)`）：可以重复、并发调用，一定返回。只有第一次调用标记关闭并取消处理函数，每个任务只取消一次，之后的调用只等待，不打断处理函数的清理。在处理函数里调用（`bot.close()` 也一样）只请求停止、立刻返回，不等任何处理函数，所以处理函数之间不会互相等待。在外面调用时最多等 `grace_period` 秒，还没结束的（吞掉了取消）记一条 WARNING 后不再等。`Bot.close()` 依次断开网关、调它、关 HTTP 连接。`wait_idle()` 给 `Bot.stop()` 用：等处理函数自然结束，不取消，等待期间新分发的也等；在处理函数里调用时立即返回。
 - **加一种事件**：在 `_models/` 按官方文档定义模型（声明 `event_name`、`intent`，只把 SDK 要用的字段写成必填，需要的话加 `reply()`），从顶层导出；在 `Bot` 上照 `on_c2c_message` 加一个装饰器。分发器与 Intents 推导不用改。
 - **加一种可以被动回复的事件**：在上一条之外，让模型继承发消息接口文档里它所属场景的标记类（`event_id` 支持的事件列在 `event_id` 一行），如 `class FriendAdd(C2CReplyTarget)`。`send_message` 的签名、`msg_seq` 与 `event_id` 的填写都不用改。需要快捷方法时照 `C2CMessage.reply()` 写 `reply()`，`reply_to=self`。
 - **单聊、群聊的通知类事件**（`_models/notice.py`、`_models/interaction.py`）：类名照事件名去掉下划线（`FRIEND_ADD` → `FriendAdd`，`C2C_MSG_REJECT` → `C2CMsgReject`），装饰器是 `on_` 加事件名的小写（`on_friend_add`、`on_group_member_add`）；`INTERACTION_CREATE` 是 `Interaction` / `on_interaction`。可用 `event_id` 回复的是 `FriendAdd`、`C2CMsgReceive`、`GroupAddRobot`、`GroupMsgReceive` 与 `Interaction`，都有 `reply()`，参数同所属场景的 `send_message`。除 SDK 要用的 openid 之外，事件的主体（如 `GroupMemberAdd.member_openid`、`GroupJoinRequest.join_request_id`，以及审批接口要用的 `GroupJoinRequest.member_openid`）也是必填，缺了这条事件就没有意义。

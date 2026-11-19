@@ -56,6 +56,8 @@ asyncio.run(main())
 - `start()` 只能调用一次，要在它之前注册好处理函数：一个都没有时抛 `RuntimeError`，之后再注册的不改变订阅。
   断线由 SDK 自动重连并恢复会话，只有无法恢复时才抛 `GatewayError`。
 - `close()` 依次断开网关、取消还在运行的处理函数（最多等 5 秒）、关闭 HTTP 连接；可以在处理函数里调用。
+- 要先停收事件、让在途的处理函数做完再关：`await bot.stop()` 只断开网关（`start()` 随之返回），等处理函数自然结束、
+  不取消它们，HTTP 连接照常可用；之后再 `close()`。要限时就套 `asyncio.timeout()`。
 - 要走代理或自定义证书时传 `http_client=httpx2.AsyncClient(...)`，它由你负责关闭。
 - 调用 SDK 还没封装的接口：`await client.get_access_token()` 取 token，经 `client.http_client` 发请求。
 
