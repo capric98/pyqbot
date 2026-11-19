@@ -1,5 +1,6 @@
 """客户端配置：凭证、API 地址、超时、代理。"""
 
+from base64 import b64encode
 from dataclasses import dataclass, field
 
 import httpx2
@@ -60,12 +61,11 @@ def _is_proxy_url(value: str) -> bool:
 
 
 def proxy_secrets(proxy: str | None) -> tuple[str, ...]:
-    """代理地址里要脱敏的部分：账号与密码（转义前后两种写法）；只有账号时它多半是令牌，也算。"""
-    if proxy is None:
+    """代理地址里要脱敏的部分：账号、密码各自转义前后两种写法，以及 HTTP 代理鉴权头里的 Base64 形式。"""
+    url = httpx2.URL(proxy) if proxy is not None else None
+    if url is None or not url.userinfo:
         return ()
-    url = httpx2.URL(proxy)
     userinfo = url.userinfo.decode("ascii")
     raw_username, _, raw_password = userinfo.partition(":")
-    if raw_password:
-        return (userinfo, raw_password, url.password)
-    return (raw_username, url.username)
+    basic = b64encode(f"{url.username}:{url.password}".encode()).decode("ascii")
+    return (userinfo, raw_username, url.username, raw_password, url.password, basic)

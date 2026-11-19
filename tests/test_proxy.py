@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from base64 import b64encode
 from collections.abc import Callable
 
 import httpx2
@@ -12,6 +13,7 @@ import pyqbot
 HANG_GUARD = 5  # 秒：回归时应失败而不是挂起
 PASSWORD = "hunter2-proxy-password"
 PROXY = f"socks5h://alice:{PASSWORD}@proxy.test:1080"
+BASIC = b64encode(f"alice:{PASSWORD}".encode()).decode()  # Proxy-Authorization: Basic …
 TOKEN = "token-value-never-shown"
 
 
@@ -150,11 +152,19 @@ async def test_proxy_credentials_in_transport_errors_are_redacted(
     [
         # 只有账号时它多半是令牌
         ("http://tok-123456@proxy.test:7890", "tok-123456", ["tok-123456"]),
-        # 密码里有要转义的字符：转义前后两种写法都要藏
-        ("http://alice:p%40ss%3Aword@proxy.test", "p%40ss%3Aword / p@ss:word", ["p%40ss", "p@ss"]),
+        # 拒绝 CONNECT 时只回显账号
+        (PROXY, "alice 认证失败", ["alice"]),
+        # 有要转义的字符：转义前后两种写法都要藏
+        (
+            "http://al%40ce:p%40ss%3Aword@proxy.test",
+            "al%40ce / al@ce / p%40ss%3Aword / p@ss:word",
+            ["al%40ce", "al@ce", "p%40ss", "p@ss"],
+        ),
+        # 回显的是 HTTP 代理的鉴权头
+        (PROXY, f"{BASIC} 无效", [BASIC]),
     ],
 )
-async def test_both_spellings_of_proxy_credentials_are_redacted(
+async def test_every_spelling_of_proxy_credentials_is_redacted(
     monkeypatch: pytest.MonkeyPatch, proxy: str, echoed: str, secrets: list[str]
 ) -> None:
     transports = Transports(monkeypatch)
