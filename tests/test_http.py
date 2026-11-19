@@ -310,11 +310,27 @@ FAILURES = {
         None,
         "无法解析",
     ),
+    # 自定义的 base_url 背后可能是网关：受理之后以重定向作答
+    "3xx-see-other": (
+        httpx2.Response(303, headers={"Location": "/v2/result"}),
+        303,
+        None,
+        None,
+        "HTTP 303",
+    ),
+    "3xx-with-err_code": (
+        httpx2.Response(302, json={"err_code": 11255, "message": "invalid request"}),
+        302,
+        11255,
+        None,
+        "invalid request",
+    ),
 }
 
 
-# 平台可能已经执行了请求的失败：5xx，以及 2xx 却没有错误码的。
+# 平台可能已经执行了请求的失败：5xx，以及 2xx、3xx 却没有错误码的。
 OUTCOME_UNKNOWN = {
+    "3xx-see-other",
     "5xx-without-json",
     "5xx-empty-body",
     "2xx-without-json",

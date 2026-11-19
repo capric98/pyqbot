@@ -470,7 +470,7 @@ async def notify() -> None:
   分发来的却调用 `reply()` 等 `RuntimeError`；读不了本地文件 `OSError`；处理函数不是 `async def` 时注册抛 `TypeError`。
 - `str(error)` 已带上 `err_code` 与 `trace_id`。响应里同时有 `code` 与 `err_code` 时取 `err_code`（现行的错误码）。
 - `error.outcome_unknown` 为真时，请求可能已经生效（如消息其实发出去了）：请求发出后超时或断开、HTTP 5xx、
-  2xx 却确认不了成功。为假时请求没有生效（连不上、平台带错误码或以 4xx 拒绝），可以放心改发别的内容或重试。
+  2xx 或 3xx 却确认不了成功。为假时请求没有生效（连不上、平台带错误码或以 4xx 拒绝），可以放心改发别的内容或重试。
 - SDK 不自动重试普通请求（分片上传的分片除外），也不做限频退避。网关断线会自动重连，只有无法恢复时 `start()` 才抛 `GatewayError`。
 - 处理函数里没接住的异常只记 ERROR 日志，机器人继续运行；要给用户反馈就自己 `try`。
 - AppSecret 与 access_token 不会出现在异常文案、异常链、日志和 `repr`（如 `client.config`）里，可以放心记录和上报。

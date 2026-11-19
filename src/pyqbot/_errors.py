@@ -11,7 +11,7 @@ class QQBotError(Exception):
         err_code: 平台返回的错误码；错误不是平台返回的（如网络故障）时为 `None`。
         trace_id: 平台的链路追踪 ID，找平台协助排查时提供；拿不到时为 `None`。
         outcome_unknown: 请求可能已经生效（如消息其实发出去了），只是没能确认：请求发出后超时或断开、
-            HTTP 5xx、HTTP 2xx 却没有错误码也确认不了成功（如响应无法识别）。为 `False` 时请求没有生效
+            HTTP 5xx、HTTP 2xx 或 3xx 却没有错误码也确认不了成功（如响应无法识别）。为 `False` 时请求没有生效
             （连不上、平台带错误码或以 4xx 拒绝、获取 access_token 失败等），`PartialFailureError`、
             `AuditPendingError` 除外，见各自的说明。
     """

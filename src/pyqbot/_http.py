@@ -235,8 +235,8 @@ def _network_error(
 
 
 def _outcome_unknown(status_code: int, *, rejected: bool = False) -> bool:
-    """平台可能已经执行了请求：5xx，或 2xx 却没有带错误码明确拒绝（如响应无法识别）。"""
-    return status_code >= 500 or (200 <= status_code < 300 and not rejected)
+    """平台可能已经执行了请求：5xx，或 2xx、3xx 却没有带错误码明确拒绝（如响应无法识别、POST 后 303）。"""
+    return status_code >= 500 or (status_code < 400 and not rejected)
 
 
 class _MessageAudit(Model):
