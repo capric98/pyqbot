@@ -184,7 +184,9 @@ await client.groups.send_message(group_openid, "大家好")
   `card` 图文卡片。`markdown`、`media`、`card` 只能选一个，`markdown` 不能再带 `content`，`content` 可以随 `media`、
   `card` 一起发。组合不合法时在本地抛 `ValueError`，不发请求。`msg_type` 由 SDK 推断，不用传。
 - **引用**：`quote` 接受发出的消息、收到的消息或 `REFIDX_` 开头的引用索引。收到的消息引用了别的消息时，
-  被引用消息的索引是 `message.ref_msg_idx`，内容在 `message.msg_elements`。
+  被引用消息的索引是 `message.ref_msg_idx`（引用机器人的消息时等于发送结果的 `ext_info.ref_idx` 或流式消息的
+  `stream.ref_idx`），内容在 `message.msg_elements`。
+- 用户每发一条单聊消息，客户端都先显示一个跳动三个点的空气泡，等机器人的回复来替换；不回复的话它约 1 分钟后才消失。
 - **按钮**：`Button.callback()` 回调（见第 6 节）、`Button.link()` 跳转、`Button.command()` 指令。`enter=True` 的指令按钮
   在群里只会填进输入框，不会直接发出。
 - **主动消息的前提**：群里要有主动消息权限，实测 `get_bot_state()` 的 `allow_proactive_msg` 为假时被拒（`err_code` 40034105）。
@@ -262,6 +264,7 @@ async def chat(message: pyqbot.C2CMessage) -> None:
 - `stream.sent_text` 是平台已经确认收下的全文（用户看到的内容），某一片失败后停在失败之前；
   `stream.ref_idx` 是引用这条消息时要用的索引，平台还没给出时为 `None`。
 - `reply_stream(markdown=False)` 按纯文本显示。整条流式消息只占用一个 `msg_seq`。
+- 流式消息撤回不了（平台拒绝 `stream_msg_id` 和 `ref_idx`）；对同一条消息可以先后回复两条流式消息。
 - 不在处理函数里时用 `client.users.stream_message(user_openid, reply_to=message)`。
 
 **细节去哪看**
@@ -270,7 +273,7 @@ async def chat(message: pyqbot.C2CMessage) -> None:
   `client.users.stream_message`（`src/pyqbot/_api/users.py`）。
 - [`design.md`](design.md)「请求层与接口分组」的「流式消息」。
 - [`errata.md`](errata.md)「流式消息：每片要等上一片的往返，逐片发送很慢」「流式消息：路径用 `user_openid`，空的结束分片可用」
-  「流式消息：`content_type=text` 时按原文显示」。
+  「流式消息：`content_type=text` 时按原文显示」「流式消息撤回不了」。
 
 ## 6. 互动：按钮回调
 

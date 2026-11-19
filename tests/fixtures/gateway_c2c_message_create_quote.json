@@ -1,0 +1,33 @@
+{
+  "op": 0,
+  "s": 5,
+  "t": "C2C_MESSAGE_CREATE",
+  "d": {
+    "author": {
+      "avatar": "https://example.invalid/avatar.png",
+      "bot": false,
+      "id": "0123456789ABCDEF0123456789ABCDEF",
+      "union_openid": "",
+      "user_openid": "0123456789ABCDEF0123456789ABCDEF",
+      "username": "测试用户"
+    },
+    "content": "引用B",
+    "id": "ROBOT1.0_fake-quote-message-id",
+    "message_scene": {
+      "ext": [
+        "ref_msg_idx=REFIDX_fake-quoted+stream/B==",
+        "msg_idx=REFIDX_fake-quote+message=="
+      ],
+      "source": "default"
+    },
+    "message_type": 103,
+    "msg_elements": [
+      {
+        "content": "B：流式消息，分三片发出，请引用我（B）。",
+        "message_type": 103,
+        "msg_idx": "REFIDX_fake-quoted+stream/B=="
+      }
+    ],
+    "timestamp": "2026-11-20T04:02:41+08:00"
+  }
+}

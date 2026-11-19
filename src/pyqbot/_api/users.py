@@ -114,6 +114,8 @@ class Users:
     async def recall_message(self, user_openid: str, message: str | SentMessage) -> None:
         """撤回机器人发给用户的一条消息。发出超过 2 分钟的消息不能撤回。
 
+        流式消息撤回不了：传 `stream_msg_id` 平台报 40061001，传 `ref_idx` 报 40011002（`docs/errata.md`）。
+
         对应官方接口 `DELETE /v2/users/{user_openid}/messages/{message_id}`。
 
         Args:

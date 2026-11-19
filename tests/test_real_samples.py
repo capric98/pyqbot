@@ -204,6 +204,19 @@ def test_group_add_robot_replies_with_the_outer_id() -> None:
     assert reply_fields(event)["event_id"] == "GROUP_ADD_ROBOT:00000000-0000-0000-0000-000000000004"
 
 
+def test_quote_of_a_stream_message_points_at_it_twice() -> None:
+    message = event_from("gateway_c2c_message_create_quote.json", pyqbot.C2CMessage)
+
+    assert message.message_type == pyqbot.ReceivedMessageType.QUOTE
+    assert message.ref_msg_idx == "REFIDX_fake-quoted+stream/B=="
+    assert message.msg_idx == "REFIDX_fake-quote+message=="
+    [quoted] = message.msg_elements
+    assert quoted.msg_idx == message.ref_msg_idx
+    assert quoted.message_type == pyqbot.ReceivedMessageType.QUOTE  # 被引用的是纯文本也是 103
+    assert quoted.content == "B：流式消息，分三片发出，请引用我（B）。"
+    assert quoted.author is None
+
+
 def test_group_at_message_keeps_the_leading_space_and_the_group_nickname() -> None:
     message = event_from("gateway_group_at_message_create.json", pyqbot.GroupAtMessage)
 

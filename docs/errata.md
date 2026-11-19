@@ -610,6 +610,15 @@
   - `msg_type` 为 7（富媒体）、8（卡片）时带 `content` 被接受，文字随消息显示（`test_text_with_media_and_card`）。
 - **实现**：不变。
 
+### 收到的引用消息：`ref_msg_idx` 与 `msg_elements`
+
+- **位置**：`autogen/event/c2c_message_create.md` 的 `message_type`、`msg_elements` 与示例 3；流式消息接口页的 `MessageExtInfo.ref_idx`（「对应消息事件 ext 里的 msg_idx 与 ref_msg_idx」）。
+- **结论**（2026-11-20，`test_quote_indices_and_two_streams`，测试用户在单聊里依次引用四条消息）：
+  - 引用消息的 `message_type` 是 103，`message_scene.ext` 依次是 `ref_msg_idx`、`msg_idx`。
+  - `ref_msg_idx` 就是被引用消息的索引，四次全部对上：机器人的普通消息是发送结果的 `ext_info.ref_idx`，流式消息是分片响应的 `ext_info.ref_idx`，用户自己的消息是它的 `msg_idx`。
+  - `msg_elements` 只有一项，就是被引用的消息：`msg_idx` 与 `ref_msg_idx` 相同，`message_type` 也是 103（被引用的是纯文本也一样），`content` 是完整正文；没有 `author`（用例记下的是 SDK 解码后的结果，分不出是缺了还是 `null`）。
+- **实现**：不变，`ref_msg_idx` 读 `message_scene.ext`。真实样本见 `tests/fixtures/gateway_c2c_message_create_quote.json`。
+
 ### 正在输入与被动回复的次数
 
 - **位置**：单聊发消息页的 `InputNotify`、「输入状态通知」示例与被动回复次数的说明（每条消息 4 次）。
@@ -652,6 +661,30 @@
 - **位置**：流式消息接口页的 `content_type` 与 `content_raw`。
 - **结论**：`reply_stream(markdown=False)` 发的 `**这几个字不应加粗**` 被接受，客户端按原文显示星号（`test_c2c_reply_limit_and_plain_stream`）。
 - **实现**：不变。
+
+### 流式消息：每个分片的响应都带同一个 `id` 与 `ref_idx`，同一条消息可以回两条
+
+- **位置**：流式消息接口页的响应（「首条返回 stream_msg_id」）与示例。
+- **结论**（2026-11-20，`test_quote_indices_and_two_streams`，`coalesce=False` 逐片发 3 片加结束分片）：
+  - 每个分片的响应（含结束分片）`id` 都是 `stream_msg_id`，`ext_info.ref_idx` 也都相同；引用这条流式消息时 `ref_msg_idx` 就是它。
+  - 对同一条用户消息先后被动回复两条流式消息都被接受，各自正常显示、正常结束。
+- **实现**：不变，`stream.ref_idx` 取第一次给出的值。
+
+### 流式消息撤回不了
+
+- **位置**：撤回单聊消息页只说「消息 ID」，流式消息页没提撤回。
+- **结论**（2026-11-20）：用单聊的撤回接口撤回两分钟内结束的流式消息，传 `stream_msg_id` 报 40061001「请求参数无效」（两个用例各一次，最近的一次在结束后 10 秒），传 `ref_idx` 报 40011002「不支持的调用」（`test_waiting_bubble_and_stream_recall`）。分片响应里没有别的 ID。
+- **实现**：`client.users.recall_message()` 的 docstring 与 `guide.md` 写明；不在本地拦，留给平台判断。
+
+### 单聊：用户发消息后客户端先显示等待气泡，没有回复时约 1 分钟后消失
+
+- **位置**：文档没有提。
+- **结论**（2026-11-20，`test_waiting_bubble_and_stream_recall`）：
+  - 测试用户每发一条单聊消息，底部都先出现一个跳动三个点的空气泡；机器人回复时它就变成回复的文字或流式输出。
+  - 机器人不回复时它一直在，重新进入聊天也在，约 1 分钟后消失（测试用户看到消失后发下一条，距前一条 61 秒）。上一个用例发「结束」后看到的就是它：机器人收到「结束」没有回复。
+  - 撤回流式消息被拒不会引起它，被拒后流式消息照常显示。
+- **没有测**：是否只在用过流式消息或某种机器人配置下才出现。
+- **实现**：不变；`guide.md` 提醒不回复的消息会让用户看到这个气泡约 1 分钟。
 
 ### 自定义菜单：`set([])` 能清空
 
