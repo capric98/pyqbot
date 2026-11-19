@@ -78,7 +78,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
   | 响应体不是 JSON | `APIError`（「无法解析响应」） |
   | 2xx、没有错误码，但解不成 `type_` | `APIError`（「响应无法识别」） |
 
-  `outcome_unknown`（请求可能已经生效、只是没能确认）由请求层判定，为真的只有：5xx；2xx、3xx 却没有带错误码拒绝（响应无法识别、`DecodedResponse.failure()`、自定义 `base_url` 背后的网关受理后以 303 作答）；`NetworkError` 里请求发出之后的错误（建连失败、建连或连接池超时、`ProxyError`、`UnsupportedProtocol` 之外的）。获取 access_token 的失败一律为假：要发的请求还没发出。`PartialFailureError`、`AuditPendingError` 为假，结果由异常本身说明。
+  `outcome_unknown` 为假时可以确定请求没有生效，为真表示可能已经（部分）生效。由请求层判定，为真的只有：5xx；2xx、3xx 却没有带错误码拒绝（响应无法识别、`DecodedResponse.failure()`、自定义 `base_url` 背后的网关受理后以 303 作答）；`NetworkError` 里请求发出之后的错误（建连失败、建连或连接池超时、`ProxyError`、`UnsupportedProtocol` 之外的）。获取 access_token 的失败一律为假：要发的请求还没发出。`PartialFailureError`（其余已生效）、`AuditPendingError`（审核通过后会发出）一律为真：调用方拿「为假」当作可以重试或改发，这两类都不能这样处理。
 
 - **接口分组**：`_api/users.py`、`_api/groups.py` 各一个小类，挂成 `client.users`、`client.groups`；第一个参数分别叫 `user_openid`、`group_openid`（与模型字段同名，不用含糊的 `openid`）。频道的见下文「频道管理」与「频道消息与内容」。单聊与群聊共用 `_api/message.py` 拼请求体。`_api/interactions.py` 挂成 `client.interactions`，只有回应互动的 `ack()`。
 - **发消息**：`send_message(user_openid, content=None, *, markdown, keyboard, media, card, quote, reply_to)`，单聊另有 `wakeup`；返回 `pyqbot.SentMessage`。正文 `content` 可以按位置传（约定 5 里的唯一例外）；新的内容类型照样追加仅限关键字的参数，不改已有签名。

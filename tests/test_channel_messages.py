@@ -441,6 +441,7 @@ async def test_audit_pending_carries_the_audit_id() -> None:
         "trace",
     )
     assert str(error).startswith("POST /channels/c/messages 已受理，等待审核：push message")
+    assert error.outcome_unknown  # 审核通过后会发出，不能当作没有生效
 
 
 async def test_audit_pending_without_data_and_with_echoed_credentials() -> None:

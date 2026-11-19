@@ -10,10 +10,10 @@ class QQBotError(Exception):
         message: 错误描述，只用于人工排查；判断错误类型请用异常类型和 `err_code`。
         err_code: 平台返回的错误码；错误不是平台返回的（如网络故障）时为 `None`。
         trace_id: 平台的链路追踪 ID，找平台协助排查时提供；拿不到时为 `None`。
-        outcome_unknown: 请求可能已经生效（如消息其实发出去了），只是没能确认：请求发出后超时或断开、
-            HTTP 5xx、HTTP 2xx 或 3xx 却没有错误码也确认不了成功（如响应无法识别）。为 `False` 时请求没有生效
-            （连不上、平台带错误码或以 4xx 拒绝、获取 access_token 失败等），`PartialFailureError`、
-            `AuditPendingError` 除外，见各自的说明。
+        outcome_unknown: 为 `False` 时可以确定请求没有生效（连不上、平台带错误码或以 4xx 拒绝、
+            获取 access_token 失败等），可以放心重试或改发。为 `True` 时请求可能已经（部分）生效：请求发出后
+            超时或断开、HTTP 5xx、HTTP 2xx 或 3xx 却没有错误码也确认不了成功（如响应无法识别），以及
+            `PartialFailureError`（其余已生效）、`AuditPendingError`（审核通过后会发出）。
     """
 
     def __init__(
@@ -77,7 +77,13 @@ class PartialFailureError(APIError):
         err_code: int | None = None,
         trace_id: str | None = None,
     ) -> None:
-        super().__init__(message, status_code=status_code, err_code=err_code, trace_id=trace_id)
+        super().__init__(
+            message,
+            status_code=status_code,
+            err_code=err_code,
+            trace_id=trace_id,
+            outcome_unknown=True,
+        )
         self._failed_ids = failed_ids
 
     @property
@@ -104,7 +110,13 @@ class AuditPendingError(APIError):
         trace_id: str | None = None,
         audit_id: str | None = None,
     ) -> None:
-        super().__init__(message, status_code=status_code, err_code=err_code, trace_id=trace_id)
+        super().__init__(
+            message,
+            status_code=status_code,
+            err_code=err_code,
+            trace_id=trace_id,
+            outcome_unknown=True,
+        )
         self.audit_id = audit_id
 
 

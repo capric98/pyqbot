@@ -251,7 +251,7 @@ async def test_blacklist_failures_after_removal_are_a_partial_failure() -> None:
     assert isinstance(error, pyqbot.APIError)
     assert error.failed_ids == ("m2",)
     assert (error.status_code, error.err_code, error.trace_id) == (200, None, "trace-1")
-    assert not error.outcome_unknown  # 结果已知：除了 failed_ids 都生效了
+    assert error.outcome_unknown  # 除了 failed_ids 都生效了，不能当作没有生效
     assert error.message == (
         f"POST /v2/groups/{GROUP}/batch_remove_members 部分失败："
         "成员已移出，但 1 个未能加入黑名单：m2"

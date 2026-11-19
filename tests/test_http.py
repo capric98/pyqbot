@@ -328,8 +328,9 @@ FAILURES = {
 }
 
 
-# 平台可能已经执行了请求的失败：5xx，以及 2xx、3xx 却没有错误码的。
+# 平台可能已经执行了请求的失败：5xx，2xx、3xx 却没有错误码的，以及等待审核的。
 OUTCOME_UNKNOWN = {
+    "202-async-with-error-body",
     "3xx-see-other",
     "5xx-without-json",
     "5xx-empty-body",
