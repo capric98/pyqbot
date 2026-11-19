@@ -15,12 +15,12 @@ from ._api.join_strategies import JoinStrategies
 from ._api.menu import CustomMenu
 from ._api.panels import Panels
 from ._api.users import Users
-from ._config import DEFAULT_BASE_URL, DEFAULT_TIMEOUT, Config
+from ._config import DEFAULT_BASE_URL, DEFAULT_TIMEOUT, Config, proxy_secrets
 from ._credentials import AccessTokenManager
 from ._http import HTTP
 from ._models.bot import BotInfo, ShareLinkResponse
 from ._models.gateway import Gateway
-from ._redact import redact
+from ._redact import hide_socks_auth, redact
 
 KEEPALIVE_EXPIRY = 60.0
 """SDK 自建的 HTTP 客户端保留空闲连接的秒数（httpx2 默认 5 秒）。"""
@@ -228,4 +228,6 @@ def _default_http_client(proxy: str | None) -> httpx2.AsyncClient:
     limits = httpx2.Limits(
         max_connections=100, max_keepalive_connections=20, keepalive_expiry=KEEPALIVE_EXPIRY
     )  # 前两项同 httpx2 的默认值
+    if proxy is not None and httpx2.URL(proxy).scheme.startswith("socks") and proxy_secrets(proxy):
+        hide_socks_auth()
     return httpx2.AsyncClient(limits=limits, proxy=proxy)

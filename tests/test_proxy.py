@@ -5,6 +5,7 @@ import logging
 from base64 import b64encode
 from collections.abc import Callable
 
+import httpcore2
 import httpx2
 import pytest
 
@@ -232,3 +233,35 @@ async def test_gateway_goes_through_the_proxy_and_its_logs_are_redacted(
     assert {proxy for _, proxy in transports.routes} == {"proxy.test"}
     assert_hidden(caplog.text)
     assert "SOCKS5 认证失败" in caplog.text
+
+
+async def test_socks_credentials_stay_out_of_httpcore2_debug_logs(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    socks_logger = logging.getLogger("httpcore2.socks")
+    monkeypatch.setattr(socks_logger, "filters", [])  # 前面的用例可能已经挂上了
+    caplog.set_level(logging.DEBUG, logger="httpcore2.socks")
+    for _ in range(2):
+        async with pyqbot.Client("app-id", "app-secret", proxy=PROXY):
+            pass
+    assert len(socks_logger.filters) == 1
+
+    # httpcore2 真实的 SOCKS5 握手、替身网络：它的日志格式变了时这里会失败
+    network = httpcore2.AsyncMockBackend(
+        [
+            b"\x05\x02",  # 选用账号密码认证
+            b"\x01\x00",  # 认证通过
+            b"\x05\x00\x00\x01\x7f\x00\x00\x01\x00\x50",  # 已连上目标
+            b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n",
+        ]
+    )
+    async with httpcore2.AsyncSOCKSProxy(
+        proxy_url="socks5://proxy.test:1080",
+        proxy_auth=("alice", PASSWORD),
+        network_backend=network,
+    ) as proxy:
+        await proxy.request("GET", "http://api.test/")
+
+    assert "setup_socks5_connection.started" in caplog.text
+    assert "auth=***" in caplog.text
+    assert_hidden(caplog.text)

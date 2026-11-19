@@ -228,7 +228,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
    - 可选参数一律仅限关键字；唯一的例外是发消息类方法（`send_message()`、`reply()` 等）的正文 `content`，可以按位置传。
    - 同一件事各组用同一个名字：资源详情叫 `get`，只改传入字段叫 `update`，整体覆盖叫 `set`；批量操作成员叫 `*_members`；拉黑选项叫 `add_to_blacklist`。ID 参数用模型里的字段名（`user_openid`、`group_openid`、`guild_id`），不用含糊的 `openid`。
 6. **模块之间靠注入，不互相认识**：网关连接不依赖 `Client` 和事件模型，分发器不依赖网关连接，各自需要的能力由 `Bot` 在启动时传进去。这样每一块都能单独测试，Webhook 以后也能接到同一个分发器上。
-7. **凭证不落日志**：`app_secret`、access_token 与代理地址里的账号密码不得出现在 `repr`、日志和异常文案里。代理的账号密码由 `_config.proxy_secrets()` 取出（账号、密码各自转义前后两种写法，加上 HTTP 代理鉴权头里的 Base64 形式），并入 `AccessTokenManager.known_secrets()`，网关经注入的 `known_secrets` 一并脱敏；`proxy` 不合法时 `ValueError` 不回显地址。
+7. **凭证不落日志**：`app_secret`、access_token 与代理地址里的账号密码不得出现在 `repr`、日志和异常文案里。代理的账号密码由 `_config.proxy_secrets()` 取出（账号、密码各自转义前后两种写法，加上 HTTP 代理鉴权头里的 Base64 形式），并入 `AccessTokenManager.known_secrets()`，网关经注入的 `known_secrets` 一并脱敏；`proxy` 不合法时 `ValueError` 不回显地址。httpcore2 的 `httpcore2.socks` 开到 DEBUG 时会把 SOCKS 代理的账号密码原样打进日志，`Client` 自建客户端、代理是带账号的 SOCKS 时给这个 logger 挂 `_redact._SocksAuthFilter`（进程内一次），从 `auth=` 起截掉；自备的 `http_client` 管不到，在 `guide.md` 里提醒。
    - 平台返回的文案和底层库的异常文案，进入异常或日志前一律经 `_redact.redact(text, *secrets)`，传入 `app_secret` 与手头所有已知的 access_token。
    - 包装底层异常时写 `raise ... from _redact.safe_cause(exc, *secrets)`：traceback 会连异常链一起打印，链上出现凭证时整条链丢掉。
    - 持有凭证的 `Model` 在类体里写 `_secret_fields = frozenset({"token"})`，这些字段在 `repr()` 与 `__rich_repr__()` 里显示为 `***`（字段名写错会在类创建时报错）；dataclass 用 `field(repr=False)`。

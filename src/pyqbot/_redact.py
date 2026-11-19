@@ -1,5 +1,6 @@
 """凭证脱敏：凭证（`app_secret`、access_token）进入异常文案、日志之前都经过这里。"""
 
+import logging
 import traceback
 
 REDACTED = "***"
@@ -23,3 +24,20 @@ def safe_cause[E: BaseException](exc: E, *secrets: str | None) -> E | None:
     # traceback 会连同 __cause__ / __context__ 一起打印，光给新异常的文案脱敏不够。
     shown = "".join(traceback.format_exception(exc))
     return exc if redact(shown, *secrets) == shown else None
+
+
+class _SocksAuthFilter(logging.Filter):
+    """httpcore2 的 DEBUG 日志把 SOCKS 代理的账号密码原样打成 `auth=(b'…', b'…')`：从 `auth=` 起截掉。"""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        head, found, _ = record.getMessage().partition("auth=")
+        if found:
+            record.msg, record.args = f"{head}auth={REDACTED}", None
+        return True
+
+
+def hide_socks_auth() -> None:
+    """给 httpcore2 的 SOCKS 日志挂上过滤器，进程内只挂一次。"""
+    logger = logging.getLogger("httpcore2.socks")
+    if not any(isinstance(item, _SocksAuthFilter) for item in logger.filters):
+        logger.addFilter(_SocksAuthFilter())

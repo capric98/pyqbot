@@ -61,6 +61,7 @@ asyncio.run(main())
 - 走代理时传 `proxy="socks5h://user:pass@host:1080"`（也支持 http、https、socks5）：接口请求、网关连接和经
   `client.http_client` 下载附件都走它，账号密码不会出现在 `repr`、日志和异常里。不传时照常读取 `HTTPS_PROXY` 等环境变量。
 - 要自定义证书、连接池等时传 `http_client=httpx2.AsyncClient(...)`，它由你负责关闭，不能再传 `proxy`（代理配在它上面）。
+  这时 SDK 不知道代理的账号密码：SOCKS 代理带账号时，别把 `httpcore2.socks` 的日志开到 DEBUG，它会原样打印账号密码。
 - 调用 SDK 还没封装的接口：`await client.get_access_token()` 取 token，经 `client.http_client` 发请求。
 
 接口按资源分组挂在客户端上，机器人自身的 `get_me()`、`generate_share_link()` 直接挂在客户端上：
