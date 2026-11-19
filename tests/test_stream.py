@@ -459,6 +459,68 @@ async def test_replace_absorbs_the_pending_text() -> None:
     ]
 
 
+async def test_sent_text_only_counts_chunks_the_platform_accepted() -> None:
+    platform = BlockingPlatform(block_at=0)
+
+    async with blocking_client(platform) as client:
+        stream = client.users.stream_message("u", reply_to=c2c())
+        await stream.append("草稿")
+        await platform.arrived.wait()
+        await stream.append("，继续")
+        assert stream.sent_text == ""  # 第一片还在路上
+        platform.release.set()
+        await stream.finish()
+        assert stream.sent_text == "草稿，继续"
+
+        plain = client.users.stream_message("u", reply_to=c2c(), coalesce=False)
+        await plain.append("正在")
+        await plain.replace("已经生成")
+        await plain.append("。")
+        await plain.finish()
+        assert plain.sent_text == "已经生成。"
+
+
+async def test_sent_text_stops_at_the_last_accepted_chunk() -> None:
+    platform = Platform()
+    platform.responses = [
+        httpx2.Response(200, json=CHUNK),
+        httpx2.Response(400, json={"err_code": 40007, "message": "已下发内容前缀不可修改"}),
+    ]
+
+    async with client_for(platform) as client:
+        stream = client.users.stream_message("u", reply_to=c2c(), coalesce=False)
+        await stream.append("a")
+        with pytest.raises(pyqbot.APIError):
+            await stream.replace("b")
+
+    assert stream.sent_text == "a"
+
+
+async def test_ref_idx_is_the_first_one_the_platform_gives() -> None:
+    platform = Platform()
+    without = {"id": "stream-1"}
+    platform.responses = [
+        httpx2.Response(200, json=without),
+        httpx2.Response(200, json=without | {"ext_info": {}}),
+        httpx2.Response(200, json=CHUNK),
+        httpx2.Response(200, json=CHUNK | {"ext_info": {"ref_idx": "REFIDX_2"}}),
+    ]
+
+    async with client_for(platform) as client:
+        stream = client.users.stream_message("u", reply_to=c2c(), coalesce=False)
+        await stream.append("a")
+        await stream.append("b")
+        assert stream.ref_idx is None
+        await stream.append("c")
+        assert stream.ref_idx == "REFIDX_1"
+        await stream.finish()
+
+    assert stream.ref_idx == "REFIDX_1"
+    assert stream.last_sent is not None
+    assert stream.last_sent.ext_info is not None
+    assert stream.last_sent.ext_info.ref_idx == "REFIDX_2"
+
+
 async def test_a_failed_chunk_is_raised_once_by_the_next_call() -> None:
     platform = Platform()
     platform.responses = [httpx2.Response(400, json={"err_code": 40007, "message": "前缀不可修改"})]

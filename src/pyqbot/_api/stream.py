@@ -54,6 +54,8 @@ class StreamMessage:
         self._index = 0
         self._stream_msg_id: str | None = None
         self._last_sent: SentStreamChunk | None = None
+        self._sent_text = ""
+        self._ref_idx: str | None = None
         self._finished = False
         self._failed = False
         self._lock = asyncio.Lock()
@@ -71,6 +73,19 @@ class StreamMessage:
     def last_sent(self) -> SentStreamChunk | None:
         """最近一个分片的发送结果（含 `remain_msg_len`），还没发过时为 `None`。"""
         return self._last_sent
+
+    @property
+    def sent_text(self) -> str:
+        """平台已经确认收下的全文，即用户能看到的内容；不含还在攒着或发送中的部分。
+
+        某一片发送失败后不再变化：那一片平台收没收到无从得知。
+        """
+        return self._sent_text
+
+    @property
+    def ref_idx(self) -> str | None:
+        """引用这条流式消息时要用的索引，取自平台第一次在分片响应里给出的 `ext_info.ref_idx`；还没有时为 `None`。"""
+        return self._ref_idx
 
     @property
     def finished(self) -> bool:
@@ -215,4 +230,7 @@ class StreamMessage:
                 raise
             if self._stream_msg_id is None:
                 self._stream_msg_id = sent.id
+            if self._ref_idx is None and sent.ext_info is not None:
+                self._ref_idx = sent.ext_info.ref_idx
+            self._sent_text = text if mode == StreamInputMode.REPLACE else self._sent_text + text
             self._last_sent = sent

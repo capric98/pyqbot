@@ -254,6 +254,8 @@ async def chat(message: pyqbot.C2CMessage) -> None:
 - `replace(full_text)` 用全文替换正文，必须以用户已经看到的内容开头；可以与 `append()` 混用。
 - 正常退出 `async with` 时发出结束分片；体内抛异常时也会先发结束分片再原样抛出。不用 `async with` 时自己调用 `finish()`。
 - 某一片发送失败后这条流就终止了，之后 `append()` 抛 `RuntimeError`。
+- `stream.sent_text` 是平台已经确认收下的全文（用户看到的内容），某一片失败后停在失败之前；
+  `stream.ref_idx` 是引用这条消息时要用的索引，平台还没给出时为 `None`。
 - `reply_stream(markdown=False)` 按纯文本显示。整条流式消息只占用一个 `msg_seq`。
 - 不在处理函数里时用 `client.users.stream_message(user_openid, reply_to=message)`。
 
