@@ -36,6 +36,9 @@ class Client:
         app_secret: 机器人的 AppSecret，在开放平台管理端获得。
         base_url: 开放平台 API 的地址，默认是官方地址，一般不用改。
         timeout: 单次请求的超时时间，单位秒。
+        proxy: 代理地址，支持 http、https、socks5、socks5h（由代理解析域名），如 `"socks5h://user:pass@host:1080"`。
+            接口请求、网关连接和经 `http_client` 发出的其它请求（如下载附件）都走它；账号密码不会出现在
+            `repr`、日志和异常文案里。不传时照常读取 `HTTPS_PROXY` 等环境变量。不能与 `http_client` 同传。
         http_client: 自备的 `httpx2.AsyncClient`，用于配置代理、证书、连接池等，由调用方负责关闭；
             它自身的 `base_url` 和 `timeout` 不会被使用。不传则由客户端自建并负责关闭。
 
@@ -53,7 +56,8 @@ class Client:
         dms: 频道私信接口，如 `client.dms.send_message(...)`。
 
     Raises:
-        ValueError: 凭证为空、`base_url` 不是完整的 http(s) 地址，或 `timeout` 不是正数。
+        ValueError: 凭证为空、`base_url` 不是完整的 http(s) 地址、`timeout` 不是正数、`proxy` 不是支持的
+            代理地址，或 `proxy` 与 `http_client` 同传。
 
     Example:
         ```python
@@ -69,6 +73,7 @@ class Client:
         *,
         base_url: str = DEFAULT_BASE_URL,
         timeout: float = DEFAULT_TIMEOUT,
+        proxy: str | None = None,
         http_client: httpx2.AsyncClient | None = None,
     ) -> None:
         self._config = Config(
@@ -76,9 +81,12 @@ class Client:
             app_secret=app_secret,
             base_url=base_url,
             timeout=timeout,
+            proxy=proxy,
         )
+        if proxy is not None and http_client is not None:
+            raise ValueError("proxy 与 http_client 只能传一个：自备的 http_client 请自己配置代理")
         self._owns_http_client = http_client is None
-        self._http_client = _default_http_client() if http_client is None else http_client
+        self._http_client = _default_http_client(proxy) if http_client is None else http_client
         self._access_token = AccessTokenManager(self._config, self._http_client)
         self._closed = False
         self._http = HTTP(
@@ -215,9 +223,9 @@ class Client:
         await self.close()
 
 
-def _default_http_client() -> httpx2.AsyncClient:
+def _default_http_client(proxy: str | None) -> httpx2.AsyncClient:
     # 回应互动只有约 1 秒，空闲断开后重新握手就可能超时（`docs/design.md`「`Interaction` 的两个 ID」）。
     limits = httpx2.Limits(
         max_connections=100, max_keepalive_connections=20, keepalive_expiry=KEEPALIVE_EXPIRY
     )  # 前两项同 httpx2 的默认值
-    return httpx2.AsyncClient(limits=limits)
+    return httpx2.AsyncClient(limits=limits, proxy=proxy)

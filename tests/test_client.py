@@ -47,9 +47,9 @@ async def test_own_http_client_keeps_idle_connections_for_a_minute(
     created: list[httpx2.Limits] = []
     real = httpx2.AsyncClient
 
-    def recording(*, limits: httpx2.Limits) -> httpx2.AsyncClient:
+    def recording(*, limits: httpx2.Limits, proxy: str | None) -> httpx2.AsyncClient:
         created.append(limits)
-        return real(limits=limits)
+        return real(limits=limits, proxy=proxy)
 
     monkeypatch.setattr(httpx2, "AsyncClient", recording)
     async with pyqbot.Client("app-id", "app-secret"):

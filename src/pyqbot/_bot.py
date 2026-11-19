@@ -109,12 +109,18 @@ class Bot(Client):
         *,
         base_url: str = DEFAULT_BASE_URL,
         timeout: float = DEFAULT_TIMEOUT,
+        proxy: str | None = None,
         http_client: httpx2.AsyncClient | None = None,
         intents: Intents | None = None,
         auto_ack: bool | Callable[[Interaction], bool] = True,
     ) -> None:
         super().__init__(
-            app_id, app_secret, base_url=base_url, timeout=timeout, http_client=http_client
+            app_id,
+            app_secret,
+            base_url=base_url,
+            timeout=timeout,
+            proxy=proxy,
+            http_client=http_client,
         )
         self._intents = intents
         self._auto_ack = auto_ack
@@ -738,6 +744,7 @@ class Bot(Client):
             get_token=self.get_access_token,
             intents=intents,
             on_dispatch=lambda payload: self._dispatcher.dispatch(payload, self),
+            known_secrets=self._access_token.known_secrets,
             connect_timeout=self.config.timeout,
         )
         await connection.run()

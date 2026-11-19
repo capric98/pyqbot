@@ -18,7 +18,7 @@ from time import time as wall_time
 import httpx2
 import msgspec
 
-from ._config import Config
+from ._config import Config, proxy_secrets
 from ._errors import APIError, NetworkError, QQBotError
 from ._model import Model, decode
 from ._redact import redact, redact_optional, safe_cause
@@ -33,6 +33,7 @@ class AccessTokenManager:
 
     def __init__(self, config: Config, http_client: httpx2.AsyncClient) -> None:
         self._config = config
+        self._proxy_secrets = proxy_secrets(config.proxy)
         self._http_client = http_client
         self._token: _CachedToken | None = None
         self._replaced_token: str | None = None
@@ -122,10 +123,10 @@ class AccessTokenManager:
         return token
 
     def known_secrets(self) -> tuple[str | None, ...]:
-        """`app_secret`、当前的 access_token 和刚被换掉的那个（没有时为 `None`），供脱敏使用。"""
+        """`app_secret`、代理的账号密码、当前的 access_token 和刚被换掉的那个（没有时为 `None`），供脱敏使用。"""
         # 刚被换掉的 token 平台还会再认 60 秒，仍可能被回显。
         current = self._token.value if self._token else None
-        return (self._config.app_secret, current, self._replaced_token)
+        return (self._config.app_secret, *self._proxy_secrets, current, self._replaced_token)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

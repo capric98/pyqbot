@@ -8,7 +8,7 @@ import contextlib
 import logging
 import math
 import random
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from typing import Never, cast
 
 import httpx2
@@ -96,6 +96,7 @@ class GatewayConnection:
         get_token: Callable[[], Awaitable[str]],
         intents: Intents,
         on_dispatch: Callable[[GatewayPayload], None],
+        known_secrets: Callable[[], Iterable[str | None]] = tuple,
         shard: tuple[int, int] = (0, 1),
         connect_timeout: float = 30.0,
         handshake_timeout: float = 30.0,
@@ -132,6 +133,7 @@ class GatewayConnection:
         self._get_token = get_token
         self._intents = intents
         self._on_dispatch = on_dispatch
+        self._known_secrets = known_secrets
         self._shard = shard
         self._connect_timeout = connect_timeout
         self._handshake_timeout = handshake_timeout
@@ -397,7 +399,7 @@ class GatewayConnection:
                 "on_dispatch 处理 %s 时出错：%s",
                 self._redact(str(payload.t)),
                 self._redact(repr(exc)),
-                exc_info=safe_cause(exc, *self._tokens),
+                exc_info=safe_cause(exc, *self._secrets()),
             )
         if payload.s is not None:
             self._seq = payload.s
@@ -426,11 +428,14 @@ class GatewayConnection:
     def _gateway_error(self, message: str, outcome: _DisconnectError) -> GatewayError:
         error = GatewayError(message, err_code=outcome.code)
         cause = outcome.__cause__
-        error.__cause__ = None if cause is None else safe_cause(cause, *self._tokens)
+        error.__cause__ = None if cause is None else safe_cause(cause, *self._secrets())
         return error
 
+    def _secrets(self) -> tuple[str | None, ...]:
+        return (*self._known_secrets(), *self._tokens)
+
     def _redact(self, text: str) -> str:
-        return redact(text, *self._tokens)
+        return redact(text, *self._secrets())
 
 
 def _leaves(exc: Exception) -> list[Exception]:

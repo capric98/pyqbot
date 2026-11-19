@@ -14,7 +14,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "httpx2[ws]>=2.16.0",
+    "httpx2[socks,ws]>=2.16.0",
     "msgspec>=0.22.0",
 ]
 

@@ -15,10 +15,11 @@
 | `app_id`、`app_secret` | 位置参数。`app_id` 接受 `str` 或 `int` |
 | `base_url=` | 默认 `https://api.bot.qq.com`，可覆盖；末尾的 `/` 会去掉 |
 | `timeout=` | 单次请求超时（秒），默认 30 |
+| `proxy=` | 代理地址（http、https、socks5、socks5h），用于自建的 `httpx2.AsyncClient`；与 `http_client` 同传抛 `ValueError` |
 | `http_client=` | 自备的 `httpx2.AsyncClient`（代理、证书、连接池；测试替身也从这里进） |
 
-- **配置**：参数收拢成只读的 `pyqbot.Config`，经 `client.config` 读取；`repr` 不含 `app_secret`。各模块都从它取凭证、地址、超时，不各存一份。
-- **`httpx2.AsyncClient` 的归属**：不传 `http_client` 时由 `Client` 自建、`close()` 时关闭；传入的归调用方，SDK 只用不关。经 `client.http_client` 取回。
+- **配置**：参数收拢成只读的 `pyqbot.Config`，经 `client.config` 读取；`repr` 不含 `app_secret` 与 `proxy`。各模块都从它取凭证、地址、超时，不各存一份。
+- **`httpx2.AsyncClient` 的归属**：不传 `http_client` 时由 `Client` 自建（带上 `proxy`；没给 `proxy` 时 httpx2 照常读代理环境变量）、`close()` 时关闭；传入的归调用方，SDK 只用不关。经 `client.http_client` 取回。网关的 WebSocket 也经它建立，所以代理对接口、网关和调用方经它下载的附件同样生效。SOCKS 要 `socksio`，作为 `httpx2[socks]` 必装。
 - **生命周期**：推荐 `async with`；也可直接构造，用完 `await client.close()`（可重复调用）。关闭后不可复用。
 - **access_token**：`await client.get_access_token()` 返回当前有效的 token（不带 `QQBot ` 前缀），首次调用才取，之后按需刷新；关闭后调用抛 `RuntimeError`。请求层在 `Client` 内部，直接用 `_credentials.AccessTokenManager`。
 - **`Bot` 的运行入口**：`await bot.start()` 连接网关并分发事件，直到 `close()`（正常返回）或不可恢复的错误（抛 `GatewayError`）；没有要订阅的事件、重复调用或已关闭时抛 `RuntimeError`。`bot.run()` 是它的同步包装：`asyncio.run` 里 `async with self: await self.start()`，Ctrl+C 时干净退出、不打印 traceback。`async with bot` 只管资源，不连网关。`close()` 的顺序是断开网关、取消处理函数、关 HTTP 连接。`await bot.stop()` 只做第一步，再等处理函数自然结束（不取消，见「事件」的「关闭」），`start()` 正常返回，HTTP 连接照常可用，供调用方收尾后再 `close()`；之后不能再 `start()`。细节见「网关连接」与「事件」。
@@ -159,6 +160,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 | `get_token` | `() -> Awaitable[str]` | 取 access_token，每次建连前调用，所以 token 过期不用单独处理 |
 | `intents` | `Intents` | Identify 时订阅的事件类别 |
 | `on_dispatch` | `(GatewayPayload) -> None` | 每条 Dispatch（含 READY、RESUMED）调用一次。同步、必须立刻返回；抛出的异常记日志，不影响连接 |
+| `known_secrets` | `() -> Iterable[str \| None]` | 除这条连接取到的 token 之外要脱敏的凭证（`app_secret`、代理的账号密码等），默认没有 |
 
 另有 `shard`（原样用于 Identify）、`connect_timeout`（WebSocket 握手超时，传 `config.timeout`，见约定 2）和下文的各个时间参数，默认值就是生产取值。`shard` 不合法、期限参数（各个 `*_timeout`）不是有限正数等配置错误，构造即抛 `ValueError`。
 
@@ -226,7 +228,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
    - 可选参数一律仅限关键字；唯一的例外是发消息类方法（`send_message()`、`reply()` 等）的正文 `content`，可以按位置传。
    - 同一件事各组用同一个名字：资源详情叫 `get`，只改传入字段叫 `update`，整体覆盖叫 `set`；批量操作成员叫 `*_members`；拉黑选项叫 `add_to_blacklist`。ID 参数用模型里的字段名（`user_openid`、`group_openid`、`guild_id`），不用含糊的 `openid`。
 6. **模块之间靠注入，不互相认识**：网关连接不依赖 `Client` 和事件模型，分发器不依赖网关连接，各自需要的能力由 `Bot` 在启动时传进去。这样每一块都能单独测试，Webhook 以后也能接到同一个分发器上。
-7. **凭证不落日志**：`app_secret`、access_token 不得出现在 `repr`、日志和异常文案里。
+7. **凭证不落日志**：`app_secret`、access_token 与代理地址里的账号密码不得出现在 `repr`、日志和异常文案里。代理的账号密码由 `_config.proxy_secrets()` 取出（转义前后两种写法；只有账号时账号也算），并入 `AccessTokenManager.known_secrets()`，网关经注入的 `known_secrets` 一并脱敏；`proxy` 不合法时 `ValueError` 不回显地址。
    - 平台返回的文案和底层库的异常文案，进入异常或日志前一律经 `_redact.redact(text, *secrets)`，传入 `app_secret` 与手头所有已知的 access_token。
    - 包装底层异常时写 `raise ... from _redact.safe_cause(exc, *secrets)`：traceback 会连异常链一起打印，链上出现凭证时整条链丢掉。
    - 持有凭证的 `Model` 在类体里写 `_secret_fields = frozenset({"token"})`，这些字段在 `repr()` 与 `__rich_repr__()` 里显示为 `***`（字段名写错会在类创建时报错）；dataclass 用 `field(repr=False)`。
