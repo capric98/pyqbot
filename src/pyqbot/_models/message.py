@@ -185,7 +185,11 @@ class ArkData(Model):
 
 
 class MessageElement(Model):
-    """消息元素，如引用消息里被引用的内容；可以嵌套。"""
+    """消息元素，如引用消息里被引用的内容；可以嵌套。
+
+    Attributes:
+        msg_idx: 这个元素对应的消息的引用索引。
+    """
 
     msg_idx: str | None = None
     author: MessageElementAuthor | None = None
@@ -209,10 +213,21 @@ class _ChatMessage(ReceivedMessage):
     @property
     def msg_idx(self) -> str | None:
         """这条消息的引用索引（`message_scene.ext` 里的 `msg_idx`），引用它时要用；没有时为 `None`。"""
+        return self._scene_ext("msg_idx")
+
+    @property
+    def ref_msg_idx(self) -> str | None:
+        """这条消息引用的那条消息的索引（`message_scene.ext` 里的 `ref_msg_idx`）；没有引用时为 `None`。
+
+        引用的是机器人发的消息时，它对应发送结果的 `ext_info.ref_idx`。
+        """
+        return self._scene_ext("ref_msg_idx")
+
+    def _scene_ext(self, name: str) -> str | None:
         if self.message_scene is not None:
             for item in self.message_scene.ext:
                 key, sep, value = item.partition("=")
-                if sep and key == "msg_idx":
+                if sep and key == name:
                     return value
         return None
 

@@ -355,6 +355,36 @@ def test_msg_idx_is_read_from_the_message_scene() -> None:
     assert no_index.msg_idx is None
 
 
+def test_ref_msg_idx_is_read_from_the_message_scene() -> None:
+    # autogen/event/c2c_message_create.md 示例 3（节选）。
+    quote = {
+        "id": "ROBOT1.0_z",
+        "author": {"id": "C", "user_openid": "C"},
+        "content": "这个建议很有帮助，谢谢你！",
+        "message_type": 103,
+        "msg_elements": [{"msg_idx": "REFIDX_aaaaaaaaaaaaaaa==", "message_type": 103}],
+        "message_scene": {
+            "source": "default",
+            "ext": ["ref_msg_idx=REFIDX_aaaaaaaaaaaaaaa==", "msg_idx=REFIDX_zzzzzzzzzzzzzzz=="],
+        },
+    }
+    message = dispatch_of("C2C_MESSAGE_CREATE", quote).decode_data(pyqbot.C2CMessage)
+    group = pyqbot.GroupMessage(
+        id="m",
+        group_openid="g",
+        author=pyqbot.GroupMessageAuthor(member_openid="a"),
+        message_scene=pyqbot.MessageScene(ext=("ref_msg_idx=TMP_x",)),
+    )
+
+    assert message.ref_msg_idx == "REFIDX_aaaaaaaaaaaaaaa=="
+    assert message.msg_idx == "REFIDX_zzzzzzzzzzzzzzz=="
+    element: pyqbot.MessageElement = message.msg_elements[0]
+    assert element.msg_idx == message.ref_msg_idx
+    assert (group.ref_msg_idx, group.msg_idx) == ("TMP_x", None)
+    assert c2c_sample().decode_data(pyqbot.C2CMessage).ref_msg_idx is None
+    assert c2c().ref_msg_idx is None
+
+
 def test_c2c_ark_and_quote_examples_decode() -> None:
     # autogen/event/c2c_message_create.md 的示例 2、3（节选）。
     ark = {

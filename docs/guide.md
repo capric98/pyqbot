@@ -178,7 +178,8 @@ await client.groups.send_message(group_openid, "大家好")
 - **内容**：`content` 文本；`markdown` 传字符串或 `pyqbot.Markdown`；`keyboard` 只能随 `markdown`；`media`（见第 4 节）；
   `card` 图文卡片。`markdown`、`media`、`card` 只能选一个，`markdown` 不能再带 `content`，`content` 可以随 `media`、
   `card` 一起发。组合不合法时在本地抛 `ValueError`，不发请求。`msg_type` 由 SDK 推断，不用传。
-- **引用**：`quote` 接受发出的消息、收到的消息或 `REFIDX_` 开头的引用索引。
+- **引用**：`quote` 接受发出的消息、收到的消息或 `REFIDX_` 开头的引用索引。收到的消息引用了别的消息时，
+  被引用消息的索引是 `message.ref_msg_idx`，内容在 `message.msg_elements`。
 - **按钮**：`Button.callback()` 回调（见第 6 节）、`Button.link()` 跳转、`Button.command()` 指令。`enter=True` 的指令按钮
   在群里只会填进输入框，不会直接发出。
 - **主动消息的前提**：群里要有主动消息权限，实测 `get_bot_state()` 的 `allow_proactive_msg` 为假时被拒（`err_code` 40034105）。

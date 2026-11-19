@@ -169,6 +169,7 @@ from ._models.interaction import (
 )
 from ._models.menu import CurrentMenu, Menu, MenuItem, MenuItemType, MenuSwitch, SubMenuItem
 from ._models.message import (
+    ArkData,
     C2CMessage,
     C2CUser,
     GroupAtMessage,
@@ -177,6 +178,9 @@ from ._models.message import (
     GroupMessageAuthor,
     GroupMessageMember,
     MessageAttachment,
+    MessageElement,
+    MessageElementAuthor,
+    MessageScene,
     ReceivedMessageType,
     SentMessage,
 )
@@ -246,6 +250,7 @@ __all__ = [
     "Announcement",
     "AnnouncementType",
     "Ark",
+    "ArkData",
     "ArkKv",
     "ArkObj",
     "ArkObjKv",
@@ -407,8 +412,11 @@ __all__ = [
     "MessageAuditPass",
     "MessageAuditReject",
     "MessageDelete",
+    "MessageElement",
+    "MessageElementAuthor",
     "MessageReactionAdd",
     "MessageReactionRemove",
+    "MessageScene",
     "MessageSetting",
     "MuteRecurringRule",
     "MuteScheduleRule",
