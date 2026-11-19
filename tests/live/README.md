@@ -19,7 +19,7 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 | `APP_ID`、`APP_SECRET` | 机器人凭证，所有真实接口用例都要 |
 | `TEST_USER_OPENID` | 测试用户的单聊 openid；只能给他发消息 |
 | `LIVE_GATEWAY` | 连网关的用例（每个消耗一次连接次数） |
-| `LIVE_WAIT_SECONDS` | 连上网关后等测试用户操作的秒数；`test_live.py`、`test_live_bot.py` 默认 0，其余默认 180 |
+| `LIVE_WAIT_SECONDS` | 连上网关后等测试用户操作的秒数；`test_live.py`、`test_live_bot.py` 默认 0，`test_live_quote.py` 默认 600，其余默认 180 |
 | `LIVE_WRONG_SECRET` | 用错误的密钥鉴权一次 |
 | `LIVE_TOKEN_WINDOW` | 观察 token 换发，最长两个多小时 |
 | `LIVE_GLOBAL_CONFIG` | 改菜单、增删面板（影响所有用户） |
@@ -77,6 +77,11 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 - `test_live.py::test_gateway_identify_wait_for_message_then_resume`：等待期间可发一条单聊；看 `report.txt` 里 Resume 是否成功。
 - `test_live_bot.py::test_stream_reply`：测试用户发一条单聊，回复分段出现，最后不再显示「生成中」。
 - `test_live_bot.py::test_markdown_showcase_stream`：发「开始」后流式收到一段覆盖各种 Markdown 语法的内容（`LIVE_MARKDOWN_COMPARE=1` 时再收到普通版），看各语法的渲染；`LIVE_STREAM_COALESCE=0` 时逐片发送，对比速度。
+- `test_live_quote.py::test_quote_indices_and_two_streams`：测试用户发「开始」，收到普通消息 A 与流式消息 B、C；
+  依次引用 A、B、C 和自己的「开始」，每次机器人回一句对上了哪条；发「结束」后 C 被撤回。看 `quote.txt` 里
+  `ref_msg_idx`、`msg_elements[].msg_idx` 与各分片 `ref_idx` 的对应关系，以及第二条流式消息、撤回是否被接受。
+- `test_live_quote.py::test_stream_recall_window`：测试用户发「撤回时限」，收到持续约 100 秒的流式消息 D，
+  第一片发出约 130 秒后机器人撤回它；看 `quote.txt` 里撤回是否被接受（时限从哪一片算起）。
 - `test_live_events.py::test_friend_del_then_add`：删好友再加回（在 QQ 里打开 `test_generate_share_link` 生成的链接），收到「pyqbot：欢迎回来」。
 - `test_live_events.py::test_c2c_reply_limit_and_plain_stream`：先后发两条单聊；第一条收到「正在输入」与最多 4 条回复，第二条收到纯文本流式回复（`**` 不加粗）。
 - `test_live_events.py::test_c2c_reply_after_10_and_55_minutes`：发一条单聊后约 10、55 分钟各收到一条被动回复（被拒的收不到）；约 56 分钟，在后台跑。
