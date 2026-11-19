@@ -10,6 +10,10 @@ class QQBotError(Exception):
         message: 错误描述，只用于人工排查；判断错误类型请用异常类型和 `err_code`。
         err_code: 平台返回的错误码；错误不是平台返回的（如网络故障）时为 `None`。
         trace_id: 平台的链路追踪 ID，找平台协助排查时提供；拿不到时为 `None`。
+        outcome_unknown: 请求可能已经生效（如消息其实发出去了），只是没能确认：请求发出后超时或断开、
+            HTTP 5xx、HTTP 2xx 却没有错误码也确认不了成功（如响应无法识别）。为 `False` 时请求没有生效
+            （连不上、平台带错误码或以 4xx 拒绝、获取 access_token 失败等），`PartialFailureError`、
+            `AuditPendingError` 除外，见各自的说明。
     """
 
     def __init__(
@@ -18,11 +22,13 @@ class QQBotError(Exception):
         *,
         err_code: int | None = None,
         trace_id: str | None = None,
+        outcome_unknown: bool = False,
     ) -> None:
         super().__init__(message)
         self.message = message
         self.err_code = err_code
         self.trace_id = trace_id
+        self.outcome_unknown = outcome_unknown
 
     def __str__(self) -> str:
         details = [
@@ -47,8 +53,11 @@ class APIError(QQBotError):
         status_code: int,
         err_code: int | None = None,
         trace_id: str | None = None,
+        outcome_unknown: bool = False,
     ) -> None:
-        super().__init__(message, err_code=err_code, trace_id=trace_id)
+        super().__init__(
+            message, err_code=err_code, trace_id=trace_id, outcome_unknown=outcome_unknown
+        )
         self.status_code = status_code
 
 

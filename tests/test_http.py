@@ -313,18 +313,21 @@ FAILURES = {
 }
 
 
-@pytest.mark.parametrize(
-    ("response", "status_code", "err_code", "trace_id", "message"),
-    FAILURES.values(),
-    ids=FAILURES.keys(),
-)
-async def test_failures_become_api_errors(
-    response: httpx2.Response,
-    status_code: int,
-    err_code: int | None,
-    trace_id: str | None,
-    message: str,
-) -> None:
+# 平台可能已经执行了请求的失败：5xx，以及 2xx 却没有错误码的。
+OUTCOME_UNKNOWN = {
+    "5xx-without-json",
+    "5xx-empty-body",
+    "2xx-without-json",
+    "2xx-wrong-shape",
+    "2xx-empty-body",
+    "2xx-without-message-id",
+    "2xx-deeply-nested",
+}
+
+
+@pytest.mark.parametrize("case", FAILURES.keys())
+async def test_failures_become_api_errors(case: str) -> None:
+    response, status_code, err_code, trace_id, message = FAILURES[case]
     platform = Platform()
     platform.respond = responding(response)
 
@@ -335,6 +338,7 @@ async def test_failures_become_api_errors(
     assert (error.status_code, error.err_code, error.trace_id) == (status_code, err_code, trace_id)
     assert message in error.message
     assert f"POST /v2/users/{OPENID}/messages" in error.message
+    assert error.outcome_unknown is (case in OUTCOME_UNKNOWN)
 
 
 async def test_trace_id_header_wins_over_body() -> None:
@@ -354,14 +358,22 @@ async def test_trace_id_header_wins_over_body() -> None:
 
 
 @pytest.mark.parametrize(
-    ("error", "message"),
+    ("error", "message", "outcome_unknown"),
     [
-        (httpx2.ConnectError("connection refused"), "connection refused"),
-        (httpx2.ReadTimeout("timed out"), "请求超时"),
-        (httpx2.RemoteProtocolError(""), "RemoteProtocolError"),
+        (httpx2.ConnectError("connection refused"), "connection refused", False),
+        (httpx2.ConnectTimeout("timed out"), "请求超时", False),
+        (httpx2.PoolTimeout("timed out"), "请求超时", False),
+        (httpx2.ProxyError("407 Proxy Authentication Required"), "407", False),
+        (httpx2.UnsupportedProtocol("ftp"), "ftp", False),
+        (httpx2.ReadTimeout("timed out"), "请求超时", True),
+        (httpx2.WriteTimeout("timed out"), "请求超时", True),
+        (httpx2.WriteError("broken pipe"), "broken pipe", True),
+        (httpx2.RemoteProtocolError(""), "RemoteProtocolError", True),
     ],
 )
-async def test_transport_failures_become_network_errors(error: Exception, message: str) -> None:
+async def test_transport_failures_become_network_errors(
+    error: Exception, message: str, outcome_unknown: bool
+) -> None:
     platform = Platform()
     platform.respond = raising(error)
 
@@ -369,6 +381,35 @@ async def test_transport_failures_become_network_errors(error: Exception, messag
         await send(platform)
 
     assert caught.value.__cause__ is error
+    assert caught.value.outcome_unknown is outcome_unknown
+
+
+@pytest.mark.parametrize(
+    "respond",
+    [
+        responding(httpx2.Response(500, json={"code": 500000, "message": "internal"})),
+        raising(httpx2.ReadTimeout("timed out")),
+    ],
+    ids=["5xx", "read-timeout"],
+)
+async def test_token_failure_means_the_request_was_not_sent(respond: Respond) -> None:
+    sent: list[httpx2.Request] = []
+
+    def handle(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path == "/app/getAppAccessToken":
+            return respond(request)
+        sent.append(request)
+        return httpx2.Response(200, json=SENT)
+
+    async with (
+        httpx2.AsyncClient(transport=httpx2.MockTransport(handle)) as http_client,
+        pyqbot.Client("app-id", APP_SECRET, http_client=http_client) as client,
+    ):
+        with pytest.raises(pyqbot.QQBotError) as caught:
+            await client.users.send_message(OPENID, "x")
+
+    assert caught.value.outcome_unknown is False
+    assert sent == []
 
 
 def assert_hidden(error: BaseException, *secrets: str) -> None:

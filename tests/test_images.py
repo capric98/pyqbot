@@ -204,8 +204,20 @@ async def test_rejected_put_is_an_api_error_without_the_signature() -> None:
         str(caught.value) == "PUT https://cos.test/robot_upload/k.png 失败：HTTP 403 AccessDenied"
     )
     assert caught.value.status_code == 403
+    assert not caught.value.outcome_unknown
     assert_hidden(caught.value, SIGNATURE)
     assert [r.url.path for r in platform.calls] == ["/v2/media-images/prepare"]
+
+
+async def test_put_with_a_server_error_may_have_been_stored() -> None:
+    platform = Platform()
+    platform.put = lambda request: httpx2.Response(503)
+
+    async with client_for(platform) as client:
+        with pytest.raises(pyqbot.APIError) as caught:
+            await client.images.upload(data=PNG, file_name="a.png")
+
+    assert caught.value.outcome_unknown
 
 
 async def test_put_transport_error_echoing_the_url_is_redacted() -> None:

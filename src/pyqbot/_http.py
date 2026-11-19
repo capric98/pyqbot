@@ -180,7 +180,9 @@ class HTTP:
             code = _COS_ERROR_CODE.search(response.text)
             reason = f"HTTP {response.status_code}" + (f" {code[1]}" if code else "")
             raise APIError(
-                f"{action} 失败：{redact(reason, *secrets)}", status_code=response.status_code
+                f"{action} 失败：{redact(reason, *secrets)}",
+                status_code=response.status_code,
+                outcome_unknown=_outcome_unknown(response.status_code),
             )
         return response
 
@@ -211,6 +213,16 @@ def _signature_parts(url: str, target: httpx2.URL) -> set[str]:
     return {part for part in parts if len(part) >= _MIN_SIGNATURE_PART}
 
 
+# 这些错误发生在请求发出之前；其余的（发出后超时、断开等）平台可能已经执行了请求。
+_NOT_SENT = (
+    httpx2.ConnectError,
+    httpx2.ConnectTimeout,
+    httpx2.PoolTimeout,
+    httpx2.ProxyError,
+    httpx2.UnsupportedProtocol,
+)
+
+
 def _network_error(
     action: str, exc: httpx2.RequestError, secrets: Iterable[str | None]
 ) -> NetworkError:
@@ -219,7 +231,12 @@ def _network_error(
         if isinstance(exc, httpx2.TimeoutException)
         else redact(str(exc) or type(exc).__name__, *secrets)
     )
-    return NetworkError(f"{action} 失败：{reason}")
+    return NetworkError(f"{action} 失败：{reason}", outcome_unknown=not isinstance(exc, _NOT_SENT))
+
+
+def _outcome_unknown(status_code: int, *, rejected: bool = False) -> bool:
+    """平台可能已经执行了请求：5xx，或 2xx 却没有带错误码明确拒绝（如响应无法识别）。"""
+    return status_code >= 500 or (200 <= status_code < 300 and not rejected)
 
 
 class _MessageAudit(Model):
@@ -292,12 +309,15 @@ def _api_error(
     secrets: tuple[str | None, ...],
     reason: str,
     err_code: int | None = None,
+    *,
+    rejected: bool = False,
 ) -> APIError:
     return APIError(
         f"{action} 失败：{redact(reason, *secrets)}",
         status_code=status_code,
         err_code=err_code,
         trace_id=redact_optional(trace_id, *secrets),
+        outcome_unknown=_outcome_unknown(status_code, rejected=rejected),
     )
 
 
@@ -325,7 +345,9 @@ def _check_response(
         _raise_if_audit_pending(response, body, err_code, trace_id, action, secrets)
         if failed or not response.is_success:
             reason = body.message or f"HTTP {status_code}"
-            raise _api_error(action, status_code, trace_id, secrets, reason, err_code)
+            raise _api_error(
+                action, status_code, trace_id, secrets, reason, err_code, rejected=failed
+            )
     elif not response.is_success:
         raise _api_error(action, status_code, trace_id, secrets, f"HTTP {status_code}")
     return trace_id
