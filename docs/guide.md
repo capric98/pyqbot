@@ -263,7 +263,12 @@ async def chat(message: pyqbot.C2CMessage) -> None:
 - 某一片发送失败后这条流就终止了，之后 `append()` 抛 `RuntimeError`。
 - `stream.sent_text` 是平台已经确认收下的全文（用户看到的内容），某一片失败后停在失败之前；
   `stream.ref_idx` 是引用这条消息时要用的索引，平台还没给出时为 `None`。
-- `reply_stream(markdown=False)` 按纯文本显示。整条流式消息只占用一个 `msg_seq`。
+- **超长会被拆成几条**：平台把超过约 15000 字节（Markdown 原文按 UTF-8 计，中文约 5000 字）的流式消息拆成几条气泡，
+  硬切在两片之间，不看段落。切到代码块、表格、列表项中间时，后一条显示错乱（代码块还会连带之后的正文）。
+  想在合适的位置分条，就在接近上限时在段落之间 `finish()`，再对同一条消息开一条新的流式消息；留些余量，实测有一次
+  不到 14400 字节就拆了。拆出的每条有自己的引用索引，在 `stream.ref_idxs` 里（新的要晚 0～2 片才出现）。
+- `reply_stream(markdown=False)` 按纯文本显示。没被拆开的流式消息只占用一个 `msg_seq`，拆成几条就占几个；
+  之后再被动回复同一条消息时平台报 `msg_seq` 已被占用（40054005），SDK 会自动换下一个重发。
 - 流式消息撤回不了（平台拒绝 `stream_msg_id` 和 `ref_idx`）；对同一条消息可以先后回复两条流式消息。
 - 不在处理函数里时用 `client.users.stream_message(user_openid, reply_to=message)`。
 
@@ -273,7 +278,7 @@ async def chat(message: pyqbot.C2CMessage) -> None:
   `client.users.stream_message`（`src/pyqbot/_api/users.py`）。
 - [`design.md`](design.md)「请求层与接口分组」的「流式消息」。
 - [`errata.md`](errata.md)「流式消息：每片要等上一片的往返，逐片发送很慢」「流式消息：路径用 `user_openid`，空的结束分片可用」
-  「流式消息：`content_type=text` 时按原文显示」「流式消息撤回不了」。
+  「流式消息：`content_type=text` 时按原文显示」「流式消息撤回不了」「流式消息：超过约 15000 字节被拆成几条气泡，多出的每条占一个 `msg_seq`」。
 
 ## 6. 互动：按钮回调
 
