@@ -11,7 +11,14 @@ import json
 import logging
 import math
 import traceback
-from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator, MutableMapping
+from collections.abc import (
+    AsyncGenerator,
+    Awaitable,
+    Callable,
+    Generator,
+    Iterator,
+    MutableMapping,
+)
 from contextlib import asynccontextmanager
 from typing import Any, cast
 
@@ -38,6 +45,7 @@ QUIET = 60_000  # 毫秒：不想让心跳干扰的用例用这个周期
 TIMEOUT = 5  # 秒：每个用例的兜底超时
 INTENTS = pyqbot.Intents.GROUP_AND_C2C_EVENT
 C2C = "C2C_MESSAGE_CREATE"
+UP, DOWN = "<连上>", "<断开>"  # on_connection_change 在 Injected.timeline 里的记号
 
 
 class ClientGoneError(Exception):
@@ -172,6 +180,8 @@ class Injected:
         self.url_calls = 0
         self.tokens: list[str] = []
         self.dispatched: list[GatewayPayload] = []
+        self.timeline: list[str | None] = []  # 事件名与连接状态的变化，按发生顺序
+        self.went_down = asyncio.Event()
         self.fail_on: set[int] = set()  # 这些 s 的事件让 on_dispatch 抛异常
         self.peek_seq: Callable[[], object] = lambda: None
         self.seq_during_dispatch: list[object] = []  # 每次回调执行时连接记着的 seq
@@ -194,11 +204,17 @@ class Injected:
 
     def on_dispatch(self, payload: GatewayPayload) -> None:
         self.dispatched.append(payload)
+        self.timeline.append(payload.t)
         self.seq_during_dispatch.append(self.peek_seq())
         if payload.s in self.fail_on:
             raise RuntimeError(f"处理失败，当时的 token 是 {self.tokens[-1]}")
         if payload.t == self._finish_on:
             self._gateway.finish()
+
+    def on_connection_change(self, connected: bool) -> None:
+        self.timeline.append(UP if connected else DOWN)
+        if not connected:
+            self.went_down.set()
 
     def events(self) -> list[str | None]:
         return [payload.t for payload in self.dispatched]
@@ -233,11 +249,13 @@ class StreamFault:
         *,
         block_text_from: int | None = None,
         block_close: bool = False,
+        hold_on_cancel: bool = False,
         read_error: Exception | None = None,
         aclose_error: Exception | None = None,
     ) -> None:
         self.block_text_from = block_text_from  # 从客户端发的第几个文本帧（从 1 数）起卡住
         self.block_close = block_close  # 卡住客户端的关闭帧
+        self.hold_on_cancel = hold_on_cancel  # 卡住的写入被取消后仍等到放行才结束
         self.read_error = read_error  # fail_reads 置位之后，下一次读抛出它
         self.fail_reads = asyncio.Event()
         self.aclose_error = aclose_error
@@ -270,7 +288,12 @@ class FaultyStream:
     async def write(self, buffer: bytes, timeout: float | None = None) -> None:  # noqa: ASYNC109
         if self._fault.blocks(buffer):
             self._fault.blocked.set()
-            await self._fault.release.wait()
+            try:
+                await self._fault.release.wait()
+            except asyncio.CancelledError:
+                if self._fault.hold_on_cancel:
+                    await self._fault.release.wait()
+                raise
         await self._inner.write(buffer, timeout)
 
     async def aclose(self) -> None:
@@ -334,6 +357,7 @@ def make_connection(
         get_token=get_token or injected.get_token,
         intents=INTENTS,
         on_dispatch=injected.on_dispatch,
+        on_connection_change=injected.on_connection_change,
         handshake_timeout=handshake_timeout,
         send_timeout=send_timeout,
         close_timeout=close_timeout,
@@ -392,6 +416,17 @@ def reconnect_logged() -> Iterator[LogWaiter]:
     logger.removeHandler(waiter)
 
 
+@contextlib.contextmanager
+def task_factory(*, eager: bool) -> Generator[None]:
+    """`eager=True` 时让本循环的新任务立刻同步开跑（`asyncio.eager_task_factory`），SDK 要两种都对。"""
+    loop = asyncio.get_running_loop()
+    loop.set_task_factory(asyncio.eager_task_factory if eager else None)
+    try:
+        yield
+    finally:
+        loop.set_task_factory(None)
+
+
 def reconnect_delays(caplog: pytest.LogCaptureFixture) -> list[float]:
     records = [record for record in caplog.records if "秒后重连" in record.msg]
     return [cast(float, cast(tuple[object, ...], record.args)[-1]) for record in records]
@@ -433,6 +468,85 @@ async def test_identifies_first_then_resumes_with_latest_seq_and_fresh_token() -
     assert injected.events() == ["READY", C2C, C2C, "RESUMED"]
     assert injected.url_calls == 2
     assert len(injected.tokens) == 2
+
+
+# 连接状态：本连接认证成功与断开成对报告
+
+
+async def test_connection_change_is_reported_around_each_authenticated_connection() -> None:
+    async def first(side: GatewaySide) -> None:
+        await start_session(side, s=1)
+        await side.dispatch(C2C, {"id": "m1"}, 2)
+        await side.close(4009)
+
+    async def second(side: GatewaySide) -> None:
+        await resume_session(side, s=3)
+        await side.serve()
+
+    gateway = FakeGateway(first, second)
+    injected = Injected(gateway, finish_on="RESUMED")
+    async with asyncio.timeout(TIMEOUT), open_client(gateway) as client:
+        await run_until_done(make_connection(client, injected), gateway)
+
+    # 连上先于交出第一条事件；第二条连接由 close() 断开，同样报告。
+    assert injected.timeline == [UP, "READY", C2C, DOWN, UP, "RESUMED", DOWN]
+
+
+async def test_connection_closed_before_authenticating_is_not_reported() -> None:
+    async def closed_before_ready(side: GatewaySide) -> None:
+        await side.hello()
+        await side.login()
+        await side.close(4009)
+
+    async def accepted(side: GatewaySide) -> None:
+        await start_session(side)
+        await side.serve()
+
+    gateway = FakeGateway(closed_before_ready, accepted)
+    injected = Injected(gateway, finish_on="READY")
+    async with asyncio.timeout(TIMEOUT), open_client(gateway) as client:
+        await run_until_done(make_connection(client, injected), gateway)
+
+    assert injected.timeline == [UP, "READY", DOWN]
+
+
+async def test_disconnection_is_reported_without_waiting_for_the_heartbeat_to_wind_down() -> None:
+    fault = StreamFault(block_text_from=2, hold_on_cancel=True)  # 第 2 帧起是心跳
+
+    async def first(side: GatewaySide) -> None:
+        await start_session(side)
+        await fault.blocked.wait()
+        await side.send(7)
+        await side.serve()
+
+    async def second(side: GatewaySide) -> None:  # 放行后可能来得及重连；不发 Hello
+        await side.serve()
+
+    gateway = FakeGateway(first, second)
+    injected = Injected(gateway)
+    async with asyncio.timeout(TIMEOUT), open_client(gateway, {0: fault}) as client:
+        connection = make_connection(client, injected)
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(connection.run())
+            await injected.went_down.wait()  # 心跳的写入此时还卡在取消之后
+            fault.release.set()
+            await connection.close()
+
+    assert injected.timeline == [UP, "READY", DOWN]
+
+
+async def test_disconnection_is_reported_before_giving_up() -> None:
+    async def banned(side: GatewaySide) -> None:
+        await start_session(side)
+        await side.close(4915)
+
+    gateway = FakeGateway(banned)
+    injected = Injected(gateway)
+    async with asyncio.timeout(TIMEOUT), open_client(gateway) as client:
+        with pytest.raises(pyqbot.GatewayError):
+            await make_connection(client, injected).run()
+
+    assert injected.timeline == [UP, "READY", DOWN]
 
 
 # 断开后怎么办：收到关闭码
@@ -719,7 +833,9 @@ async def test_heartbeat_is_sent_every_interval_with_current_seq() -> None:
     assert all(gap >= interval * 0.5 for gap in gaps), gaps
 
 
-async def test_server_heartbeat_request_is_answered_at_once() -> None:
+# eager 任务工厂下心跳任务一创建就发出第一次心跳，用周期 60 秒的这个用例检查它带的 seq。
+@pytest.mark.parametrize("eager", [False, True], ids=["lazy-tasks", "eager-tasks"])
+async def test_server_heartbeat_request_is_answered_at_once(eager: bool) -> None:
     async def script(side: GatewaySide) -> None:
         await start_session(side, s=3)
         await side.expect(1)  # 认证成功后的第一次心跳
@@ -730,8 +846,9 @@ async def test_server_heartbeat_request_is_answered_at_once() -> None:
         await side.serve()
 
     gateway = FakeGateway(script)
-    async with asyncio.timeout(TIMEOUT), open_client(gateway) as client:
-        await run_until_done(make_connection(client, Injected(gateway)), gateway)
+    with task_factory(eager=eager):
+        async with asyncio.timeout(TIMEOUT), open_client(gateway) as client:
+            await run_until_done(make_connection(client, Injected(gateway)), gateway)
 
     assert [frame["d"] for frame in gateway.sides[0].heartbeats()] == [3, 3]
 

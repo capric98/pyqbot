@@ -23,6 +23,8 @@
 - **生命周期**：推荐 `async with`；也可直接构造，用完 `await client.close()`（可重复调用）。关闭后不可复用。
 - **access_token**：`await client.get_access_token()` 返回当前有效的 token（不带 `QQBot ` 前缀），首次调用才取，之后按需刷新；关闭后调用抛 `RuntimeError`。请求层在 `Client` 内部，直接用 `_credentials.AccessTokenManager`。
 - **`Bot` 的运行入口**：`await bot.start()` 连接网关并分发事件，直到 `close()`（正常返回）或不可恢复的错误（抛 `GatewayError`）；没有要订阅的事件、重复调用或已关闭时抛 `RuntimeError`。`bot.run()` 是它的同步包装：`asyncio.run` 里 `async with self: await self.start()`，Ctrl+C 时干净退出、不打印 traceback。`async with bot` 只管资源，不连网关。`close()` 的顺序是断开网关、取消处理函数、关 HTTP 连接。`await bot.stop()` 只做第一步，再等处理函数自然结束（不取消，见「事件」的「关闭」），`start()` 正常返回，HTTP 连接照常可用，供调用方收尾后再 `close()`；之后不能再 `start()`。细节见「网关连接」与「事件」。
+- **网关状态**：`bot.gateway_status` 返回只读快照 `GatewayStatus`，供调用方轮询（断线告警、健康检查），不提供回调；各阶段的定义写在 `GatewayState` 的 docstring 里。状态与时刻由 `Bot` 记录，网关连接只经注入的 `on_connection_change` 报告连上与断开，不碰时钟。几个取舍：首次连上之前也算没连上，从 `start()` 起计时，一直连不上同样会告警；`stop()` / `close()` 一调用就进入终态 `STOPPED`、不等收尾，所以收尾时连接报告的断开不会把它改回 `DISCONNECTED`，有意停止也不被当成断线；`start()` 因无法恢复而结束后同样进入 `STOPPED`、重新计时，不另设状态，原因由 `start()` 的异常给出；调用方据此怎么判断写在 `gateway_status` 的 docstring 里。状态与两个时刻放在一个元组里整体替换，别的线程读到的快照不会半新半旧。
+  - **时间基准**：`since` 同其它公共时间，是带时区的 UTC `datetime`（`params.utc_now()`），可以直接显示。`elapsed` 只按单调时钟（`time.monotonic`，属性可能在别的线程读取，不用 `loop.time()`）计：调用方拿它和告警阈值比较，要的是不受校时影响、不会倒退。不像 access_token 那样与系统时钟取大者：token 的有效期是平台那边的真实时间，而这里两个时钟取大者在校时后会让 `elapsed` 先跳长再变短，睡眠叠加往回校时还会偏短。代价是不含机器睡眠的时间，睡眠时机器人本来也不在运行。
 - **接口挂在哪**：一层命名空间，`client.groups.send_message(...)`，不扁平地挂在 `Client` 上，也不多层嵌套。按用户心目中的资源分组（如 `users`、`groups`），不按文档章节。最常用的操作另在模型对象上提供快捷方法（如 `message.reply()`）。属于客户端自身的方法（如 `get_access_token()`）仍直接挂在 `Client` 上。
 
 ## 包结构与依赖方向
@@ -160,6 +162,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 | `get_token` | `() -> Awaitable[str]` | 取 access_token，每次建连前调用，所以 token 过期不用单独处理 |
 | `intents` | `Intents` | Identify 时订阅的事件类别 |
 | `on_dispatch` | `(GatewayPayload) -> None` | 每条 Dispatch（含 READY、RESUMED）调用一次。同步、必须立刻返回；抛出的异常记日志，不影响连接 |
+| `on_connection_change` | `(bool) -> None` | 本连接认证成功（收到第一条 Dispatch，先于把它交给 `on_dispatch`）时以 `True` 调用；这条连接的读循环结束（拿到断开原因、`close()`、放弃）时立即以 `False` 调用、不等心跳任务收尾，与前者成对，没认证成功的连接两者都不调。同步、必须立刻返回、不得抛异常；默认什么也不做 |
 | `known_secrets` | `() -> Iterable[str \| None]` | 除这条连接取到的 token 之外要脱敏的凭证（`app_secret`、代理的账号密码等），默认没有 |
 
 另有 `shard`（原样用于 Identify）、`connect_timeout`（WebSocket 握手超时，传 `config.timeout`，见约定 2）和下文的各个时间参数，默认值就是生产取值。`shard` 不合法、期限参数（各个 `*_timeout`）不是有限正数等配置错误，构造即抛 `ValueError`。
@@ -241,7 +244,7 @@ Webhook（未确认）：若做，是接到同一个分发器上的另一个事�
 - HTTP：`httpx2.AsyncClient(transport=httpx2.MockTransport(handler))`。
 - WebSocket：在同一个客户端上加 `mounts={"wss://": ASGIWebSocketTransport(app)}`，`app` 是扮演网关的 ASGI 应用。这个客户端必须在测试函数体内用 `async with` 打开：不进入会缺少内部任务组而报 `AttributeError`，放进 yield fixture 则在清理时报 cancel scope 跨任务退出（两种都实测过）。
 - `tests/conftest.py` 有一个 autouse 兜底：凡是走到真实传输层的请求都直接失败。
-- 不真实等待：token 过期、心跳间隔等用 monkeypatch 控制时间。等待并发结果的测试套一层 `asyncio.timeout`，回归时失败而不是挂起。
+- 不真实等待：token 过期、心跳间隔等用 monkeypatch 控制时间；系统时钟替换 `pyqbot._api.params.utc_now`，网关状态的单调时钟替换 `pyqbot._bot.monotonic`。等待并发结果的测试套一层 `asyncio.timeout`，回归时失败而不是挂起。
 - 测试优先只用 `pyqbot` 的公共接口；地基自身的测试可以直接导入内部模块（如 `pyqbot._model`）。
 
 ## 后续模块

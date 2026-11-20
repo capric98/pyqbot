@@ -3,14 +3,18 @@
 import asyncio
 import contextlib
 from collections.abc import Callable
+from datetime import timedelta
+from time import monotonic
 
 import httpx2
 
+from ._api import params
 from ._client import Client
 from ._config import DEFAULT_BASE_URL, DEFAULT_TIMEOUT
 from ._events.dispatcher import Dispatcher, Handler
 from ._gateway.connection import GatewayConnection
 from ._gateway.intents import Intents
+from ._gateway.status import GatewayState, GatewayStatus
 from ._models.audio import (
     AudioFinish,
     AudioOffMic,
@@ -128,6 +132,8 @@ class Bot(Client):
         self._dispatcher = Dispatcher(redact=self._redact_secrets)
         self._connection: GatewayConnection | None = None
         self._stopped = False
+        # (状态, 系统时钟, 单调时钟)，整体替换：别的线程读到的不会半新半旧。
+        self._gateway = (GatewayState.NOT_STARTED, params.utc_now(), monotonic())
 
     def on_c2c_message[F: Handler[C2CMessage]](self, handler: F) -> F:
         """注册单聊消息（`C2C_MESSAGE_CREATE`）的处理函数，原样返回它。
@@ -707,6 +713,24 @@ class Bot(Client):
         self._dispatcher.add_handler(AudioOrLiveChannelMemberExit, handler)
         return handler
 
+    @property
+    def gateway_status(self) -> GatewayStatus:
+        """网关连接的当前状态，供轮询（断线告警、健康检查等）；只读本地状态，不发请求。
+
+        各阶段见 `GatewayState`。判断网关是否正常：`CONNECTED` 正常；`STOPPED` 不正常，`start()` 因无法
+        恢复而结束时也是它，且 `elapsed` 从那时重新计，不能拿来等阈值；`NOT_STARTED`、`DISCONNECTED`
+        看 `elapsed` 是否超过你能容忍的时长。
+        """
+        state, since, since_monotonic = self._gateway
+        elapsed = timedelta(seconds=monotonic() - since_monotonic)
+        return GatewayStatus(state=state, since=since, elapsed=elapsed)
+
+    def _set_gateway_state(self, state: GatewayState) -> None:
+        """切换网关状态并记下时刻；`STOPPED` 是终态。"""
+        if self._gateway[0] in (state, GatewayState.STOPPED):
+            return
+        self._gateway = (state, params.utc_now(), monotonic())
+
     def _resolve_intents(self) -> Intents:
         """连接网关时要订阅的 Intents：构造时传入的，或按已注册的处理函数推导。"""
         return self._dispatcher.intents if self._intents is None else self._intents
@@ -744,10 +768,17 @@ class Bot(Client):
             get_token=self.get_access_token,
             intents=intents,
             on_dispatch=lambda payload: self._dispatcher.dispatch(payload, self),
+            on_connection_change=lambda connected: self._set_gateway_state(
+                GatewayState.CONNECTED if connected else GatewayState.DISCONNECTED
+            ),
             known_secrets=self._access_token.known_secrets,
             connect_timeout=self.config.timeout,
         )
-        await connection.run()
+        self._set_gateway_state(GatewayState.DISCONNECTED)
+        try:
+            await connection.run()
+        finally:
+            self._set_gateway_state(GatewayState.STOPPED)
 
     def run(self) -> None:
         """同步入口：连接网关并一直运行，按 Ctrl+C 退出。
@@ -778,6 +809,7 @@ class Bot(Client):
             ```
         """
         self._stopped = True
+        self._set_gateway_state(GatewayState.STOPPED)
         if self._connection is not None:
             await self._connection.close()
         await self._dispatcher.wait_idle()
@@ -788,6 +820,7 @@ class Bot(Client):
         可以重复、并发调用，也可以在处理函数里调用（这时不等其它处理函数结束）。
         处理函数最多等 5 秒，到期仍不结束的记一条警告后不再等。构造时传入的 `http_client` 不会被关闭。
         """
+        self._set_gateway_state(GatewayState.STOPPED)
         # 顺序不能换：先断开网关就不再有新事件，再取消处理函数，最后才能关 HTTP 连接。
         if self._connection is not None:
             await self._connection.close()

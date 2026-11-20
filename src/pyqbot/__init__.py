@@ -16,6 +16,7 @@ from ._errors import (
 )
 from ._events.dispatcher import Handler
 from ._gateway.intents import Intents
+from ._gateway.status import GatewayState, GatewayStatus
 from ._models.audio import (
     AudioFinish,
     AudioOffMic,
@@ -351,6 +352,8 @@ __all__ = [
     "FriendAddScene",
     "FriendDel",
     "GatewayError",
+    "GatewayState",
+    "GatewayStatus",
     "GroupAddRobot",
     "GroupAtMessage",
     "GroupBotState",

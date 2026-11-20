@@ -58,6 +58,26 @@ asyncio.run(main())
 - `close()` 依次断开网关、取消还在运行的处理函数（最多等 5 秒）、关闭 HTTP 连接；可以在处理函数里调用。
 - 要先停收事件、让在途的处理函数做完再关：`await bot.stop()` 只断开网关（`start()` 随之返回），等处理函数自然结束、
   不取消它们，HTTP 连接照常可用；之后再 `close()`。要限时就套 `asyncio.timeout()`。
+- **网关状态**：断线由 SDK 自己重连，`bot.gateway_status` 告诉你现在连着没有、处于这个状态多久，适合每隔
+  几十秒轮询一次，做断线告警或容器的健康检查。它只读本地状态，不发请求；没有回调。
+
+  ```python
+  from datetime import timedelta
+
+
+  def gateway_healthy(bot: pyqbot.Bot) -> bool:
+      status = bot.gateway_status
+      match status.state:
+          case pyqbot.GatewayState.CONNECTED:
+              return True
+          case pyqbot.GatewayState.STOPPED:
+              return False
+          case _:  # NOT_STARTED、DISCONNECTED
+              return status.elapsed <= timedelta(minutes=10)
+  ```
+
+  为什么这样判断见 `pyqbot.Bot.gateway_status`；各状态的含义见 `pyqbot.GatewayState`，`since`（UTC 时间，
+  适合写进告警）与 `elapsed` 的计时见 `pyqbot.GatewayStatus`。
 - 走代理时传 `proxy="socks5h://user:pass@host:1080"`（也支持 http、https、socks5）：接口请求、网关连接和经
   `client.http_client` 下载附件都走它，账号密码不会出现在 `repr`、日志和异常里。不传时照常读取 `HTTPS_PROXY` 等环境变量。
 - 要自定义证书、连接池等时传 `http_client=httpx2.AsyncClient(...)`，它由你负责关闭，不能再传 `proxy`（代理配在它上面）。
@@ -78,8 +98,9 @@ asyncio.run(main())
 **细节去哪看**
 
 - `pyqbot.Client`、`pyqbot.Client.get_access_token`（`src/pyqbot/_client.py`）；`pyqbot.Bot`、`pyqbot.Bot.start`、
-  `pyqbot.Bot.run`、`pyqbot.Bot.close`（`src/pyqbot/_bot.py`）。
-- [`design.md`](design.md)「入口与初始化」；断线后重连还是放弃，见「网关连接」。
+  `pyqbot.Bot.run`、`pyqbot.Bot.close`、`pyqbot.Bot.gateway_status`（`src/pyqbot/_bot.py`）；`pyqbot.GatewayStatus`、
+  `pyqbot.GatewayState`（`src/pyqbot/_gateway/status.py`）。
+- [`design.md`](design.md)「入口与初始化」（含「网关状态」）；断线后重连还是放弃，见「网关连接」。
 
 ## 2. 收消息与注册事件
 

@@ -96,6 +96,7 @@ class GatewayConnection:
         get_token: Callable[[], Awaitable[str]],
         intents: Intents,
         on_dispatch: Callable[[GatewayPayload], None],
+        on_connection_change: Callable[[bool], None] = lambda connected: None,
         known_secrets: Callable[[], Iterable[str | None]] = tuple,
         shard: tuple[int, int] = (0, 1),
         connect_timeout: float = 30.0,
@@ -133,6 +134,7 @@ class GatewayConnection:
         self._get_token = get_token
         self._intents = intents
         self._on_dispatch = on_dispatch
+        self._on_connection_change = on_connection_change
         self._known_secrets = known_secrets
         self._shard = shard
         self._connect_timeout = connect_timeout
@@ -149,6 +151,7 @@ class GatewayConnection:
         self._last_identify: float | None = None
         self._delay = 0.0  # 不含抖动的退避间隔
         self._invalid_sessions = 0
+        self._connected = False
         self._closed = False
         self._closing_connection = False  # 已拿到断开原因，正在等 WebSocket 会话退出
         self._worker: asyncio.Task[None] | None = None
@@ -288,13 +291,18 @@ class GatewayConnection:
         return cast(_DisconnectError, outcome)
 
     async def _serve(self, ws: AsyncWebSocketSession, token: str) -> _DisconnectError:
+        outcome: _DisconnectError | None = None  # _read 不会正常返回，只能经下面的 except* 赋值
         try:
             async with asyncio.TaskGroup() as tg:
-                await self._read(ws, token, tg)
+                try:
+                    await self._read(ws, token, tg)
+                finally:
+                    # 读循环一结束就报告，不等心跳任务收尾：它被取消后可能还要等一阵。
+                    self._set_connected(False)
         except* _DisconnectError as group:
             # TaskGroup 的异常组不嵌套；读循环与心跳同时结束时取第一个。
             outcome = cast(_DisconnectError, group.exceptions[0])
-        return outcome
+        return cast(_DisconnectError, outcome)
 
     async def _read(self, ws: AsyncWebSocketSession, token: str, tg: asyncio.TaskGroup) -> Never:
         """读循环；认证成功后在 `tg` 里启动心跳，任何一方抛 `_DisconnectError` 都结束这条连接。"""
@@ -316,11 +324,15 @@ class GatewayConnection:
                     if payload is None:
                         continue
                     match payload.op:
+                        case OpCode.DISPATCH if deadline.when() is not None:
+                            # 本连接第一条 Dispatch：认证成功。心跳在 _dispatch 之后启动：
+                            # eager 任务工厂下它会当场发出第一次心跳，要带上这一条的 s。
+                            deadline.reschedule(None)
+                            self._set_connected(True)
+                            self._dispatch(payload)
+                            tg.create_task(heartbeat.run())
                         case OpCode.DISPATCH:
                             self._dispatch(payload)
-                            if deadline.when() is not None:  # 本连接第一条 Dispatch：认证成功
-                                deadline.reschedule(None)
-                                tg.create_task(heartbeat.run())
                         case OpCode.HEARTBEAT_ACK:
                             heartbeat.acked = True
                         case OpCode.HEARTBEAT:
@@ -384,6 +396,11 @@ class GatewayConnection:
             return encode_identify(token, self._intents, shard=self._shard)
         logger.info("发送 Resume（seq=%s）", self._seq)
         return encode_resume(token, self._session_id, self._seq or 0)
+
+    def _set_connected(self, connected: bool) -> None:
+        if connected != self._connected:
+            self._connected = connected
+            self._on_connection_change(connected)
 
     def _dispatch(self, payload: GatewayPayload) -> None:
         if payload.t == READY_EVENT:
