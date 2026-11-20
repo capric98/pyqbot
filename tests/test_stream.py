@@ -334,6 +334,41 @@ async def test_failed_final_chunk_is_logged_without_hiding_the_body_error(
     assert TOKEN not in caplog.text
 
 
+ENDED = {"err_code": 40034019, "message": "流式引导已经结束，不能继续发送"}
+
+
+async def test_final_chunk_after_the_platform_ended_the_stream_counts_as_finished(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    platform = Platform()
+    platform.responses = [httpx2.Response(200, json=CHUNK), httpx2.Response(400, json=ENDED)]
+
+    async with client_for(platform) as client:
+        with caplog.at_level(logging.DEBUG, logger="pyqbot"):
+            async with client.users.stream_message("u", reply_to=c2c()) as stream:
+                await stream.append("过程")
+        with pytest.raises(RuntimeError, match="已经结束"):
+            await stream.append("之后")
+
+    assert stream.finished
+    assert stream.sent_text == "过程"
+    assert "流式消息已被平台结束" in caplog.text
+
+
+async def test_content_chunk_after_the_platform_ended_the_stream_still_raises() -> None:
+    platform = Platform()
+    platform.responses = [httpx2.Response(200, json=CHUNK), httpx2.Response(400, json=ENDED)]
+
+    async with client_for(platform) as client:
+        stream = client.users.stream_message("u", reply_to=c2c(), coalesce=False)
+        await stream.append("一")
+        with pytest.raises(pyqbot.APIError) as caught:
+            await stream.append("二")
+
+    assert caught.value.err_code == 40034019
+    assert stream.sent_text == "一"
+
+
 async def test_failed_chunk_ends_the_stream_without_a_final_chunk() -> None:
     platform = Platform()
     platform.responses = [

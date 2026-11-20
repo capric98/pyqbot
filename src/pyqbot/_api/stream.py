@@ -6,13 +6,14 @@ from collections.abc import Awaitable
 from types import TracebackType
 from typing import Self
 
-from .._errors import QQBotError
+from .._errors import APIError, QQBotError
 from .._http import HTTP
 from .._models.event import C2CReplyTarget, reply_fields
 from .._models.stream import SentStreamChunk, StreamContentType, StreamInputMode, StreamInputState
 from .message import send_reply
 
 _logger = logging.getLogger("pyqbot")
+STREAM_ENDED = 40034019  # 「流式引导已经结束，不能继续发送」
 
 
 class StreamMessage:
@@ -34,6 +35,9 @@ class StreamMessage:
     平台把超过约 15000 字节（Markdown 原文的 UTF-8 字节数）的流式消息拆成几条气泡，硬切在分片之间，
     切到代码块、表格、列表中间时两边都可能显示错乱。要在合适的位置分条，就在接近上限时 `finish()`，
     再对同一条消息开一条新的流式消息。拆出的每条气泡多占被回复消息的一个 `msg_seq`，SDK 之后的被动回复会自动跳过。
+
+    给同一个用户开下一条流式消息、或回复他的另一条消息之前，先结束这一条：否则平台会提前结束它，之后的分片报 40034019
+    （空的结束分片除外，见 `finish()`）。对同一条消息插一条普通回复不受影响。
 
     Example:
         ```python
@@ -137,6 +141,9 @@ class StreamMessage:
     async def finish(self) -> None:
         """等攒着的内容发完，再发出结束分片，之后不能再追加内容。可以重复调用；一个分片也没发过时不发请求。
 
+        平台说这条流已经结束（`err_code` 40034019：在它结束前，机器人又给这个用户开了一条流式消息，或回复了他的
+        另一条消息）时，用户看到的已是定稿，当作正常结束、不抛出。
+
         Raises:
             APIError: 平台拒绝结束分片，或合并模式下之前某一片发送失败。
             NetworkError: 没有拿到平台的响应。
@@ -146,7 +153,13 @@ class StreamMessage:
             # shield：调用方被取消时，正在发的分片照常发完，不把这条流打成「失败」。
             await asyncio.shield(self._sender)
         self._raise_unreported()
-        await self._send(StreamInputMode.APPEND, "", StreamInputState.DONE)
+        try:
+            await self._send(StreamInputMode.APPEND, "", StreamInputState.DONE)
+        except APIError as error:
+            if error.err_code != STREAM_ENDED:
+                raise
+            self._failed = False  # 结束分片是空的，没有丢内容
+            _logger.debug("流式消息已被平台结束，结束分片不再需要：%s", error)
 
     async def __aenter__(self) -> Self:
         """进入 `async with`。
