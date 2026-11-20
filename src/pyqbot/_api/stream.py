@@ -31,6 +31,10 @@ class StreamMessage:
     分片发送失败（抛 `APIError` / `NetworkError`）后，平台那边的状态无从得知，这条流式消息就此终止：
     失败抛出过一次之后，`append()` / `replace()` 抛 `RuntimeError`，退出 `async with` 时也不再发结束分片。
 
+    平台把超过约 15000 字节（Markdown 原文的 UTF-8 字节数）的流式消息拆成几条气泡，硬切在分片之间，
+    切到代码块、表格、列表中间时两边都可能显示错乱。要在合适的位置分条，就在接近上限时 `finish()`，
+    再对同一条消息开一条新的流式消息。拆出的每条气泡多占被回复消息的一个 `msg_seq`，SDK 之后的被动回复会自动跳过。
+
     Example:
         ```python
         async with message.reply_stream() as stream:
@@ -57,7 +61,7 @@ class StreamMessage:
         self._stream_msg_id: str | None = None
         self._last_sent: SentStreamChunk | None = None
         self._sent_text = ""
-        self._ref_idx: str | None = None
+        self._ref_idxs: list[str] = []
         self._finished = False
         self._failed = False
         self._lock = asyncio.Lock()
@@ -87,7 +91,16 @@ class StreamMessage:
     @property
     def ref_idx(self) -> str | None:
         """引用这条流式消息时要用的索引，取自平台第一次在分片响应里给出的 `ext_info.ref_idx`；还没有时为 `None`。"""
-        return self._ref_idx
+        return self._ref_idxs[0] if self._ref_idxs else None
+
+    @property
+    def ref_idxs(self) -> tuple[str, ...]:
+        """平台在分片响应里给出过的所有 `ext_info.ref_idx`，按出现的顺序，第一个即 `ref_idx`。
+
+        流式消息被拆成几条气泡时，每条一个引用索引，用户引用哪条，`ref_msg_idx` 就是哪个。新的索引要晚 0～2 片
+        才出现在响应里，所以拆在最后一两片时会缺最后一条的（`docs/errata.md`）。
+        """
+        return tuple(self._ref_idxs)
 
     @property
     def finished(self) -> bool:
@@ -229,8 +242,9 @@ class StreamMessage:
                 raise
             if self._stream_msg_id is None:
                 self._stream_msg_id = sent.id
-            if self._ref_idx is None and sent.ext_info is not None:
-                self._ref_idx = sent.ext_info.ref_idx
+            ref_idx = sent.ext_info.ref_idx if sent.ext_info is not None else None
+            if ref_idx and ref_idx not in self._ref_idxs:
+                self._ref_idxs.append(ref_idx)
             self._sent_text = text if mode == StreamInputMode.REPLACE else self._sent_text + text
             self._last_sent = sent
 

@@ -30,7 +30,7 @@ class SentStreamChunk(SentMessage):
 
     Attributes:
         id: 这条流式消息的 ID（`stream_msg_id`），各分片相同。
-        remain_msg_len: 流式消息的剩余长度（字符数），含义以平台为准。
+        remain_msg_len: 文档说是流式消息的剩余长度（字符数），实测一直是 0（`docs/errata.md`）。
     """
 
     remain_msg_len: int | None = None

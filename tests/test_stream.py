@@ -135,6 +135,25 @@ async def test_only_the_first_chunk_retries_a_taken_msg_seq() -> None:
     assert len(platform.requests) == 2
 
 
+async def test_ref_idxs_lists_each_bubble_once_in_order() -> None:
+    platform = Platform()
+    platform.responses = [
+        httpx2.Response(200, json=CHUNK | {"ext_info": {"ref_idx": ref_idx}})
+        for ref_idx in ("REFIDX_1", "REFIDX_1", "REFIDX_2")
+    ] + [httpx2.Response(200, json={"id": "stream-1"})]  # 没有 ext_info
+
+    async with (
+        client_for(platform) as client,
+        client.users.stream_message("u", reply_to=c2c(), coalesce=False) as stream,
+    ):
+        assert stream.ref_idxs == ()
+        for piece in ("一", "二", "三"):
+            await stream.append(piece)
+
+    assert stream.ref_idxs == ("REFIDX_1", "REFIDX_2")
+    assert stream.ref_idx == "REFIDX_1"
+
+
 async def test_replace_and_plain_text() -> None:
     platform = Platform()
 
