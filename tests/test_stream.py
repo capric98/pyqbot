@@ -103,6 +103,38 @@ async def test_chunks_share_msg_seq_and_carry_the_stream_id_after_the_first() ->
     ]
 
 
+async def test_first_chunk_moves_past_a_taken_msg_seq_and_later_chunks_follow() -> None:
+    platform = Platform()
+    duplicate = {"err_code": 40054005, "message": "消息被去重，请检查请求msgseq"}
+    platform.responses = [httpx2.Response(400, json=duplicate)]
+
+    async with (
+        client_for(platform) as client,
+        client.users.stream_message("u", reply_to=c2c(), coalesce=False) as stream,
+    ):
+        await stream.append("你好")
+
+    assert platform.bodies() == [
+        chunk(0, 1, "你好"),
+        chunk(0, 1, "你好", msg_seq=2),
+        chunk(1, 10, "", msg_seq=2, stream_msg_id="stream-1"),
+    ]
+
+
+async def test_only_the_first_chunk_retries_a_taken_msg_seq() -> None:
+    platform = Platform()
+    duplicate = {"err_code": 40054005, "message": "消息被去重，请检查请求msgseq"}
+    platform.responses = [httpx2.Response(200, json=CHUNK), httpx2.Response(400, json=duplicate)]
+
+    async with client_for(platform) as client:
+        stream = client.users.stream_message("u", reply_to=c2c(), coalesce=False)
+        await stream.append("一")
+        with pytest.raises(pyqbot.APIError):
+            await stream.append("二")
+
+    assert len(platform.requests) == 2
+
+
 async def test_replace_and_plain_text() -> None:
     platform = Platform()
 

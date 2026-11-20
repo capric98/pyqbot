@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from collections.abc import Awaitable
 from types import TracebackType
 from typing import Self
 
@@ -9,6 +10,7 @@ from .._errors import QQBotError
 from .._http import HTTP
 from .._models.event import C2CReplyTarget, reply_fields
 from .._models.stream import SentStreamChunk, StreamContentType, StreamInputMode, StreamInputState
+from .message import send_reply
 
 _logger = logging.getLogger("pyqbot")
 
@@ -214,7 +216,6 @@ class StreamMessage:
                 "index": self._index,
                 "content_type": self._content_type,
                 "content_raw": text,
-                **self._reply,
             }
             if self._stream_msg_id is not None:
                 body["stream_msg_id"] = self._stream_msg_id
@@ -222,9 +223,7 @@ class StreamMessage:
             if state == StreamInputState.DONE:
                 self._finished = True
             try:
-                sent = await self._http.request(
-                    "POST", self._path, type_=SentStreamChunk, json=body
-                )
+                sent = await self._post(body, self._reply)
             except BaseException:
                 self._failed = True
                 raise
@@ -234,3 +233,12 @@ class StreamMessage:
                 self._ref_idx = sent.ext_info.ref_idx
             self._sent_text = text if mode == StreamInputMode.REPLACE else self._sent_text + text
             self._last_sent = sent
+
+    async def _post(self, body: dict[str, object], reply: dict[str, object]) -> SentStreamChunk:
+        def post(fields: dict[str, object]) -> Awaitable[SentStreamChunk]:
+            self._reply = fields  # 第一个分片换过 msg_seq 时，之后的分片跟着用
+            return self._http.request("POST", self._path, type_=SentStreamChunk, json=body | fields)
+
+        if self._stream_msg_id is not None:
+            return await post(reply)
+        return await send_reply(self._reply_to, post, fields=reply)

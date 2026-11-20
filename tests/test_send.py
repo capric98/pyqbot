@@ -11,7 +11,7 @@ import pytest
 
 import pyqbot
 from pyqbot._model import decode
-from pyqbot._models.event import next_msg_seq
+from pyqbot._models.event import bind_client, next_msg_seq
 from pyqbot._models.message import MessageScene
 
 APP_SECRET = "secret-value-never-shown"
@@ -19,17 +19,21 @@ SENT = {"id": "ROBOT1.0_sent", "ext_info": {"ref_idx": "REFIDX_sent"}}
 CARD = pyqbot.Card(title="标题", description="描述", url="https://a", pic_url="https://b/1.png")
 
 
+DUPLICATE = {"err_code": 40054005, "message": "消息被去重，请检查请求msgseq"}
+
+
 class Platform:
     def __init__(self) -> None:
         self.requests: list[tuple[str, str, dict[str, object] | None]] = []
         self.response = httpx2.Response(200, json=SENT)
+        self.queued: list[httpx2.Response] = []  # 先于 response 依次返回
 
     def handle(self, request: httpx2.Request) -> httpx2.Response:
         if request.url.path == "/app/getAppAccessToken":
             return httpx2.Response(200, json={"access_token": "t", "expires_in": "7200"})
         body: dict[str, object] | None = json.loads(request.content) if request.content else None
         self.requests.append((request.method, request.url.raw_path.decode(), body))
-        return self.response
+        return self.queued.pop(0) if self.queued else self.response
 
     def bodies(self) -> list[dict[str, object]]:
         return [body for _, _, body in self.requests if body is not None]
@@ -46,6 +50,12 @@ async def client_for(platform: Platform) -> AsyncGenerator[pyqbot.Client]:
 
 def c2c(message_id: str = "m") -> pyqbot.C2CMessage:
     return pyqbot.C2CMessage(id=message_id, author=pyqbot.C2CUser(user_openid="u"))
+
+
+def group_message() -> pyqbot.GroupMessage:
+    return pyqbot.GroupMessage(
+        id="m", group_openid="g", author=pyqbot.GroupMessageAuthor(member_openid="member")
+    )
 
 
 # ---- msg_type 推断与请求体 ----
@@ -258,6 +268,67 @@ async def test_quote_accepts_sent_and_received_messages_and_indexes() -> None:
         {"message_id": "REFIDX_in"},
         {"message_id": "REFIDX_raw"},
     ]
+
+
+# ---- msg_seq 被占用 ----
+
+
+async def test_reply_moves_past_msg_seq_values_the_platform_has_taken() -> None:
+    platform = Platform()
+    platform.queued = [httpx2.Response(400, json=DUPLICATE)] * 2  # 如被拆成三条的流式消息占掉的
+    message = c2c()
+
+    async with client_for(platform) as client:
+        bind_client(message, client)
+        sent = await message.reply("拆分之后")
+        await message.reply("再下一条")
+
+    assert sent.id == "ROBOT1.0_sent"
+    assert [body["msg_seq"] for body in platform.bodies()] == [1, 2, 3, 4]
+
+
+async def test_msg_seq_retries_are_bounded() -> None:
+    platform = Platform()
+    platform.response = httpx2.Response(400, json=DUPLICATE)
+
+    async with client_for(platform) as client:
+        with pytest.raises(pyqbot.APIError) as caught:
+            await client.groups.send_message("g", "a", reply_to=group_message())
+
+    assert caught.value.err_code == 40054005
+    assert [body["msg_seq"] for body in platform.bodies()] == list(range(1, 12))
+
+
+@pytest.mark.parametrize(
+    ("response", "reply_to"),
+    [
+        (httpx2.Response(400, json={"err_code": 40034025, "message": "其它错误"}), c2c()),
+        (httpx2.Response(500, json=DUPLICATE), c2c()),  # 结果不明，平台可能已经发出
+        (httpx2.Response(400, json=DUPLICATE), None),  # 主动消息没有 msg_seq 可换
+    ],
+    ids=["other-error", "outcome-unknown", "active-message"],
+)
+async def test_other_failures_are_not_retried(
+    response: httpx2.Response, reply_to: pyqbot.C2CMessage | None
+) -> None:
+    platform = Platform()
+    platform.response = response
+
+    async with client_for(platform) as client:
+        with pytest.raises(pyqbot.APIError):
+            await client.users.send_message("u", "a", reply_to=reply_to)
+
+    assert len(platform.requests) == 1
+
+
+async def test_typing_also_moves_past_a_taken_msg_seq() -> None:
+    platform = Platform()
+    platform.queued = [httpx2.Response(400, json=DUPLICATE)]
+
+    async with client_for(platform) as client:
+        await client.users.send_typing("u", seconds=5, reply_to=c2c())
+
+    assert [body["msg_seq"] for body in platform.bodies()] == [1, 2]
 
 
 async def test_wakeup_marks_an_active_c2c_message() -> None:

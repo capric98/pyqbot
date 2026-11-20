@@ -3,6 +3,9 @@
 `msg_type` 的推断与参数组合的规则见 `docs/design.md`「请求层与接口分组」。
 """
 
+from collections.abc import Awaitable, Callable
+
+from .._errors import APIError
 from .._http import HTTP, path_segment
 from .._models.event import ReplyTarget, reply_fields
 from .._models.message import C2CMessage, GroupMessage, MessageType, SentMessage
@@ -13,6 +16,8 @@ type Quote = str | SentMessage | C2CMessage | GroupMessage
 _CARD_TYPE = "tuwen"  # 图文卡片，目前唯一的卡片类型
 _INPUT_TYPE = 1  # 文档只说「填1」
 MAX_TYPING_SECONDS = 60
+DUPLICATE_MSG_SEQ = 40054005  # 「消息被去重，请检查请求msgseq」
+MAX_SEQ_RETRIES = 10
 
 
 def message_body(
@@ -70,9 +75,33 @@ async def send_message(
     reply_to: ReplyTarget | None,
 ) -> SentMessage:
     """发送 `message_body()` 拼好的消息；`reply_to` 不为 `None` 时是被动回复。"""
-    if reply_to is not None:
-        body |= reply_fields(reply_to)
-    return await http.request("POST", path, type_=SentMessage, json=body)
+    return await send_reply(
+        reply_to, lambda fields: http.request("POST", path, type_=SentMessage, json=body | fields)
+    )
+
+
+async def send_reply[T](
+    reply_to: ReplyTarget | None,
+    send: Callable[[dict[str, object]], Awaitable[T]],
+    *,
+    fields: dict[str, object] | None = None,
+) -> T:
+    """把被动回复的字段（`fields`，不传时现取；`reply_to` 为 `None` 时为空）交给 `send` 发出。
+
+    平台以 `DUPLICATE_MSG_SEQ` 拒绝时换下一个 `msg_seq` 重发，原因见 `docs/design.md`「被动回复」。
+    """
+    if reply_to is None:
+        return await send({})
+    if fields is None:
+        fields = reply_fields(reply_to)
+    for _ in range(MAX_SEQ_RETRIES):
+        try:
+            return await send(fields)
+        except APIError as error:
+            if error.err_code != DUPLICATE_MSG_SEQ or error.outcome_unknown:
+                raise
+        fields = reply_fields(reply_to)
+    return await send(fields)
 
 
 def typing_body(seconds: int) -> dict[str, object]:

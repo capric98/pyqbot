@@ -3,12 +3,12 @@
 import os
 
 from .._http import HTTP, path_segment
-from .._models.event import C2CReplyTarget, reply_fields
+from .._models.event import C2CReplyTarget
 from .._models.message import C2CMessage, SentMessage
 from .._models.send import Card, Keyboard, Markdown, Media
 from .._models.stream import StreamContentType
 from .._models.upload import FileType
-from .message import message_body, message_path, send_message, typing_body
+from .message import message_body, message_path, send_message, send_reply, typing_body
 from .stream import StreamMessage
 from .upload import upload_media
 
@@ -106,10 +106,11 @@ class Users:
         """
         path = f"/v2/users/{path_segment(user_openid, 'user_openid')}/messages"
         body = typing_body(seconds)
-        if reply_to is not None:
-            body |= reply_fields(reply_to)
         # 文档没有给出响应体，不解码。
-        await self._http.request("POST", path, type_=None, json=body)
+        await send_reply(
+            reply_to,
+            lambda fields: self._http.request("POST", path, type_=None, json=body | fields),
+        )
 
     async def recall_message(self, user_openid: str, message: str | SentMessage) -> None:
         """撤回机器人发给用户的一条消息。发出超过 2 分钟的消息不能撤回。
