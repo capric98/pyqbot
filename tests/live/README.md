@@ -19,7 +19,7 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 | `APP_ID`、`APP_SECRET` | 机器人凭证，所有真实接口用例都要 |
 | `TEST_USER_OPENID` | 测试用户的单聊 openid；只能给他发消息 |
 | `LIVE_GATEWAY` | 连网关的用例（每个消耗一次连接次数） |
-| `LIVE_WAIT_SECONDS` | 连上网关后等测试用户操作的秒数；`test_live.py`、`test_live_bot.py` 默认 0，`test_live_quote.py` 默认 600，`test_live_stream_split.py` 默认 3600，其余默认 180 |
+| `LIVE_WAIT_SECONDS` | 连上网关后等测试用户操作的秒数；`test_live.py`、`test_live_bot.py` 默认 0，`test_live_quote.py` 默认 600，`test_live_stream_split.py` 默认 3600，`test_live_stream_finish.py` 默认 1800，其余默认 180 |
 | `LIVE_WRONG_SECRET` | 用错误的密钥鉴权一次 |
 | `LIVE_TOKEN_WINDOW` | 观察 token 换发，最长两个多小时 |
 | `LIVE_GLOBAL_CONFIG` | 改菜单、增删面板（影响所有用户） |
@@ -86,6 +86,10 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 - `test_live_stream_split.py::test_stream_auto_split`：测试用户按指令（发「帮助」查看）让机器人流式回复很长的编号段落，
   每条发完引用拆出的第二条气泡并写上看到几条；另有「配额」看拆出的气泡占不占被动回复次数。看 `split.txt` 里
   拆分点在原文的位置、逐片响应里 `id`、`ref_idx`、`remain_msg_len` 的变化与文档外字段，以及被拒的分片。
+- `test_live_stream_finish.py::test_stream_finish_variants`：测试用户发编号（「帮助」查看），机器人按不同方式回一条流式消息
+  并结束：纯文本、emoji、换行、链接、带内容的结束分片、replace 结束、改 content_type、在同一条消息上插别的流式消息或普通
+  回复、等一会再结束、照 qtalk-bot 的时序。看 `finish.txt` 里各结束分片是否被拒（40034019、40034016）；被拒时三个点的
+  状态由测试用户发「看 编号 说明」记下。
 - `test_live_events.py::test_friend_del_then_add`：删好友再加回（在 QQ 里打开 `test_generate_share_link` 生成的链接），收到「pyqbot：欢迎回来」。
 - `test_live_events.py::test_c2c_reply_limit_and_plain_stream`：先后发两条单聊；第一条收到「正在输入」与最多 4 条回复，第二条收到纯文本流式回复（`**` 不加粗）。
 - `test_live_events.py::test_c2c_reply_after_10_and_55_minutes`：发一条单聊后约 10、55 分钟各收到一条被动回复（被拒的收不到）；约 56 分钟，在后台跑。
