@@ -19,7 +19,7 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 | `APP_ID`、`APP_SECRET` | 机器人凭证，所有真实接口用例都要 |
 | `TEST_USER_OPENID` | 测试用户的单聊 openid；只能给他发消息 |
 | `LIVE_GATEWAY` | 连网关的用例（每个消耗一次连接次数） |
-| `LIVE_WAIT_SECONDS` | 连上网关后等测试用户操作的秒数；`test_live.py`、`test_live_bot.py` 默认 0，`test_live_quote.py` 默认 600，`test_live_stream_split.py` 默认 3600，`test_live_stream_finish.py` 默认 1800，其余默认 180 |
+| `LIVE_WAIT_SECONDS` | 连上网关后等测试用户操作的秒数；`test_live.py`、`test_live_bot.py` 默认 0，`test_live_quote.py` 默认 600，`test_live_stream_split.py` 默认 3600，`test_live_stream_finish.py`、`test_live_markdown_images.py` 默认 1800，其余默认 180 |
 | `LIVE_WRONG_SECRET` | 用错误的密钥鉴权一次 |
 | `LIVE_TOKEN_WINDOW` | 观察 token 换发，最长两个多小时 |
 | `LIVE_GLOBAL_CONFIG` | 改菜单、增删面板（影响所有用户） |
@@ -90,6 +90,10 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
   并结束：纯文本、emoji、换行、链接、带内容的结束分片、replace 结束、改 content_type、在同一条消息上插别的流式消息或普通
   回复、等一会再结束、照 qtalk-bot 的时序。看 `finish.txt` 里各结束分片是否被拒（40034019、40034016）；被拒时三个点的
   状态由测试用户发「看 编号 说明」记下。
+- `test_live_markdown_images.py::test_markdown_image_variants`：测试用户发编号（「帮助」查看），机器人回一条正文中间带图的
+  消息：第三方图站的图（境内、境外、带查询串）、打不开的地址（404、网页、解析不了）、不写宽高或宽高不符、素材库的图
+  （发出后立刻删掉素材；素材库是机器人全局的，须单独同意并设 `LIVE_MEDIA_IMAGES=1`，否则这几种跳过）。每种看图有没有
+  显示、何时出现、大小与比例，用「看 编号 说明」记下；各分片是否被拒在 `markdown_images.txt`。
 - `test_live_events.py::test_friend_del_then_add`：删好友再加回（在 QQ 里打开 `test_generate_share_link` 生成的链接），收到「pyqbot：欢迎回来」。
 - `test_live_events.py::test_c2c_reply_limit_and_plain_stream`：先后发两条单聊；第一条收到「正在输入」与最多 4 条回复，第二条收到纯文本流式回复（`**` 不加粗）。
 - `test_live_events.py::test_c2c_reply_after_10_and_55_minutes`：发一条单聊后约 10、55 分钟各收到一条被动回复（被拒的收不到）；约 56 分钟，在后台跑。
