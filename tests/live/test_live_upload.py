@@ -359,6 +359,52 @@ async def test_media_image_library_jpg(client: pyqbot.Client) -> None:
         await client.images.delete(image)
 
 
+async def test_media_image_same_content_twice(client: pyqbot.Client) -> None:
+    """素材库是机器人全局的，须单独同意后设 `LIVE_MEDIA_IMAGES=1`。不发消息。
+
+    同样内容的图片用两个文件名各上传一次，看两次得到的是不是同一个素材：编号与引用地址是否相同，列表里是一条
+    还是两条、各自的文件名与上传时间在不在；再依次删除，看删掉第一个之后第二个还在不在列表里、第二次删除是否
+    被拒。调用方若在消息发完后删素材，两处同时引用同一张图时要知道会不会互相影响。
+    """
+    if os.environ.get("LIVE_MEDIA_IMAGES") != "1":
+        pytest.skip("素材库是机器人全局的，须单独同意后设 LIVE_MEDIA_IMAGES=1")
+    data = png(96, 64, b"\x20\xa0\x60" * 96)
+    first = await client.images.upload(data=data, file_name="pyqbot-same-a.png")
+    try:
+        second = await client.images.upload(data=data, file_name="pyqbot-same-b.png")
+    except pyqbot.APIError as error:
+        _logger.warning("素材库同图两次：第二次上传被拒 %s", (error.err_code, error.message))
+        await client.images.delete(first)
+        return
+    same_id = first.image_id == second.image_id
+    ids = {first.image_id, second.image_id}
+    listed = [item async for item in client.images.iter_images() if item.image_id in ids]
+    _logger.warning(
+        "素材库同图两次：编号相同=%s，地址相同=%s；列表里 %d 条：%s",
+        same_id,
+        first.url == second.url,
+        len(listed),
+        [(item.file_name, item.created_at is not None) for item in listed],
+    )
+    await client.images.delete(first)
+    after_first = [
+        item.image_id async for item in client.images.iter_images() if item.image_id in ids
+    ]
+    try:
+        await client.images.delete(second)
+    except pyqbot.APIError as error:
+        _logger.warning("素材库同图两次：第二次删除被拒 %s", (error.err_code, error.message))
+    else:
+        _logger.warning("素材库同图两次：第二次删除被接受")
+    _logger.warning(
+        "素材库同图两次：删掉第一个之后，第二个还在列表里=%s", second.image_id in after_first
+    )
+    remaining = [
+        item.image_id async for item in client.images.iter_images() if item.image_id in ids
+    ]
+    assert not remaining
+
+
 TONE = ("-f", "lavfi", "-i", "sine=frequency=440:duration=2")
 
 

@@ -118,6 +118,8 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 - `test_live_bot.py::test_panel_lifecycle`（`LIVE_GLOBAL_CONFIG`）：在单聊输入框输入 `/` 唤出面板，约 30 秒内是「pyqbot」，之后约 30 秒是「pyqbot2」（删掉 `/` 重新输入才刷新），结束后消失。
 - `test_live_upload.py::test_media_image_library`（`LIVE_MEDIA_IMAGES`）：收到「素材库」与蓝色图片，结束后图片从列表里删除。
 - `test_live_upload.py::test_media_image_library_jpg`（`LIVE_MEDIA_IMAGES`）：不发消息，看 `.jpg` 文件名是否被接受，成功就删除。
+- `test_live_upload.py::test_media_image_same_content_twice`（`LIVE_MEDIA_IMAGES`）：不发消息，同样内容的图上传两次，看日志里
+  两次的编号与地址是否相同、列表里几条、删掉一个之后另一个还在不在；结束时两个都删掉。
 
 ### 需要测试群
 
