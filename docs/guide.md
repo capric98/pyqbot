@@ -213,6 +213,9 @@ await client.groups.send_message(group_openid, "大家好")
 - **主动消息的前提**：群里要有主动消息权限，实测 `get_bot_state()` 的 `allow_proactive_msg` 为假时被拒（`err_code` 40034105）。
 - **被动回复的期限**：单聊实测收到消息 55 分钟后仍能回复（接口页写的 5 分钟不对）。
 - Markdown 实际支持的语法比官方文档列的多（代码块、表格、LaTeX 等），HTML 标签不生效。
+- Markdown 里的图片写 `![说明 #宽px #高px](地址)`，流式消息里也能用。宽高必须写，并按原图的比例：不写时只显示
+  「[说明]」，写错会变形。平台抓不到图（地址打不开、境内访问不了的网站）时消息照发，客户端显示「图片加载失败」；
+  普通消息可以用 `pyqbot.Markdown(content=..., force_verify_image_resource=True)` 让它直接失败（40034141）。
 - 卡片的 `pic_url` 用 `.ico` 会转存失败，用 jpg 等常见格式。
 
 **细节去哪看**
@@ -225,7 +228,7 @@ await client.groups.send_message(group_openid, "大家好")
 - [`design.md`](design.md)「请求层与接口分组」的「发消息」「被动回复」「其它消息操作」。
 - [`errata.md`](errata.md)「引用、带文字的富媒体与卡片」「键盘：单聊发送成功，`enter` 在群里只填进输入框」
   「Markdown：实际支持的语法比文档多」「卡片：`pic_url` 用 .ico 时转存失败」「单聊被动回复的有效期：至少 55 分钟」
-  「正在输入与被动回复的次数」。
+  「正在输入与被动回复的次数」「Markdown 图片：不写宽高不显示，抓不到时显示「图片加载失败」，接口不报错」。
 
 ## 4. 上传富媒体
 
@@ -431,6 +434,8 @@ async def configure() -> None:
   客户端里要删掉 `/` 重新输入才会刷新。
 - 素材库：格式由扩展名决定（png、jpg、jpeg、gif、webp）；`iter_images()` 列出、`delete()` 释放额度；
   连续 90 天没被引用就失效。`preview_url` 带签名，`repr()` 里显示为 `***`。
+  引用它的消息（含流式消息）发完之后就可以 `delete()`，已发的消息不受影响，所以临时的图不必一直占着 100 张的额度；
+  引用已经删掉的素材时流式消息不报错，客户端显示「图片加载失败」。
 
 **细节去哪看**
 
@@ -439,7 +444,8 @@ async def configure() -> None:
 - `client.images`（`Images`，`src/pyqbot/_api/images.py`）与 `pyqbot.MediaImage`（`src/pyqbot/_models/upload.py`）。
 - [`design.md`](design.md)「请求层与接口分组」的「机器人自身」「菜单与面板的模型」「素材库」。
 - [`errata.md`](errata.md)「自定义菜单：`set([])` 能清空」「自定义菜单：没有设置过时 `menu` 是空对象」
-  「指令面板：版本号在顶层递增，不传 `remark` 会清空备注」「素材库：列表的时间是数字字符串，有效期 90 天」「素材库：`.jpg` 被接受」。
+  「指令面板：版本号在顶层递增，不传 `remark` 会清空备注」「素材库：列表的时间是数字字符串，有效期 90 天」「素材库：`.jpg` 被接受」
+  「素材库：流式消息里可以引用，发出后删掉素材不影响已发的消息」。
 
 ## 9. 频道（已实现，未实测）
 

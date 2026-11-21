@@ -80,7 +80,7 @@ class ImagePrepared(Model):
 
 
 class MediaImage(Model):
-    """素材库里的一张图片，在 Markdown 里写 `![说明 #宽px #高px](url)` 引用（宽高可省略）。
+    """素材库里的一张图片，在 Markdown 里写 `![说明 #宽px #高px](url)` 引用（宽高必须写，否则不显示）。
 
     Attributes:
         image_id: 图片 ID，删除时用。

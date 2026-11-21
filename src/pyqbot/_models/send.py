@@ -23,12 +23,15 @@ class Markdown(RequestModel):
     只为已申请过模板的机器人保留）二选一，模板用 `Markdown.from_template()` 构造更方便。
     平台模板的整数 `template_id` 已弃用，不支持。语法见官方文档 `server-inter/message/type/markdown.md`。
     形如 `[文字](目标)` 而目标不是 URL 的文字，即使转义了方括号也会被判违规（40034006），圆括号也要转义。
+    图片写 `![说明 #宽px #高px](地址)`：宽高必须写，并按原图的比例，不写时不显示图片，写错会变形。
+    平台抓不到图时消息照发，客户端显示「图片加载失败」。
 
     Attributes:
         content: Markdown 正文。
         custom_template_id: 模板 ID。
         params: 模板变量。
-        force_verify_image_resource: 为 `True` 时，正文里的图片转存失败则整条消息发送失败。
+        force_verify_image_resource: 为 `True` 时，正文里的图片转存失败则整条消息发送失败
+            （`err_code` 40034141）；流式消息没有这个开关。
 
     Raises:
         ValueError: `content` 与 `custom_template_id` 都给了或都没给，或没有模板却给了 `params`。
