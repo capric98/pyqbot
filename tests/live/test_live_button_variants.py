@@ -13,6 +13,7 @@
 - 各种代码块写法里的图片语法显示成代码还是图片：顶格的反引号围栏、波浪线围栏、块公式（`\\[`、`$$`）里夹着反引号
   行、行中间的三个反引号、反引号后面跟着别的字的行、列表项里缩进的围栏、四个反引号套三个反引号。
 - 超长的流式消息被平台拆成几条气泡时，切口落在代码块里的话，后一条气泡里的图片语法会不会显示成图片。
+- 点了回调按钮之后，能不能用互动事件作被动回复的对象发「正在输入」与流式消息（已测过的只有普通消息）。
 
 测试用户在单聊里发编号（发「帮助」看清单），机器人回对应的一条或几条消息。按钮的点击都记下来：标了「会回复」的
 每次点击回一句，其余的不回复（收到新消息会让按钮的临时状态复原，见 errata「回应互动」），发「查」看记到了哪些
@@ -245,11 +246,13 @@ TEXTS: dict[int, Text] = {
     ),
 }
 LONG = 22
+STREAM_REPLY = 23
 SPECIAL = {
     7: "二次确认的文字超过文档写的长度（两条消息）",
     8: "按钮文字 10、12、20 个字",
     9: "指令按钮：直接发、填进输入框、引用着发",
     LONG: "超长的流式消息，切口落在代码块里",
+    STREAM_REPLY: "点按钮之后用「正在输入」与流式消息回复这次点击",
 }
 
 
@@ -458,7 +461,41 @@ async def test_button_and_markdown_variants(
             return await run_modal(number, message)
         if number == 8:
             return await run_labels(number, message)
+        if number == STREAM_REPLY:
+            keyboard = pyqbot.Keyboard.from_rows(
+                [button(number, Spec("流式回复", "stream", "已点"), grouped=False)]
+            )
+            text = (
+                f"**实测{number}**：点「流式回复」。机器人先发「正在输入」，再用流式消息回复这次点击；"
+                "看有没有「正在输入」、流式消息是不是逐片出现。被拒的话会另回一句。"
+            )
+            return await send(message, text, keyboard)
         return await run_commands(number, message)
+
+    async def stream_reply(interaction: pyqbot.Interaction) -> None:
+        """用互动事件作被动回复的对象：先发「正在输入」，再发一条两片的流式消息。"""
+        result: dict[str, object] = {}
+        try:
+            await bot.users.send_typing(openid, seconds=10, reply_to=interaction)
+            result["typing"] = "被接受"
+        except pyqbot.QQBotError as error:
+            result["typing"] = describe(error)
+        await asyncio.sleep(2)
+        stream = bot.users.stream_message(openid, reply_to=interaction, coalesce=False)
+        try:
+            await stream.append("pyqbot：这是回复按钮点击的流式消息，第一片。\n\n")
+            await asyncio.sleep(2)
+            await stream.append("第二片。")
+            await stream.finish()
+            result["stream"] = "被接受"
+        except pyqbot.QQBotError as error:
+            result["stream"] = describe(error)
+        note("click.stream_reply", result)
+        if any(value != "被接受" for value in result.values()):
+            try:
+                await interaction.reply(f"pyqbot：流式回复点击的结果：{summarize(result)}")
+            except pyqbot.QQBotError as error:
+                note("click.reply", describe(error))
 
     @bot.on_c2c_message
     async def on_message(message: pyqbot.C2CMessage) -> None:
@@ -514,6 +551,9 @@ async def test_button_and_markdown_variants(
             {"variant": number, "button": name, "this_run": current, "seconds_since_sent": since},
         )
         clicks.append(f"第 {number} 种「{name}」" + ("" if current else "（旧消息上的按钮）"))
+        if number == STREAM_REPLY and current:
+            await stream_reply(interaction)
+            return
         variant = BUTTONS.get(number)
         if variant is not None and variant.reply and current:
             try:
