@@ -14,6 +14,7 @@
   行、行中间的三个反引号、反引号后面跟着别的字的行、列表项里缩进的围栏、四个反引号套三个反引号。
 - 超长的流式消息被平台拆成几条气泡时，切口落在代码块里的话，后一条气泡里的图片语法会不会显示成图片。
 - 点了回调按钮之后，能不能用互动事件作被动回复的对象发「正在输入」与流式消息（已测过的只有普通消息）。
+- 流式消息写到一半、代码块还没有结束行时，里面的图片语法显示成代码还是图片；消息结束时代码块仍没闭合呢。
 
 测试用户在单聊里发编号（发「帮助」看清单），机器人回对应的一条或几条消息。按钮的点击都记下来：标了「会回复」的
 每次点击回一句，其余的不回复（收到新消息会让按钮的临时状态复原，见 errata「回应互动」），发「查」看记到了哪些
@@ -247,12 +248,16 @@ TEXTS: dict[int, Text] = {
 }
 LONG = 22
 STREAM_REPLY = 23
+SLOW_FENCE = 24
+OPEN_FENCE = 25
 SPECIAL = {
     7: "二次确认的文字超过文档写的长度（两条消息）",
     8: "按钮文字 10、12、20 个字",
     9: "指令按钮：直接发、填进输入框、引用着发",
     LONG: "超长的流式消息，切口落在代码块里",
     STREAM_REPLY: "点按钮之后用「正在输入」与流式消息回复这次点击",
+    SLOW_FENCE: "流式消息里的代码块，结束行晚 8 秒才到",
+    OPEN_FENCE: "流式消息结束时代码块没有闭合",
 }
 
 
@@ -461,6 +466,8 @@ async def test_button_and_markdown_variants(
             return await run_modal(number, message)
         if number == 8:
             return await run_labels(number, message)
+        if number in (SLOW_FENCE, OPEN_FENCE):
+            return await run_open_fence(number, message, close=number == SLOW_FENCE)
         if number == STREAM_REPLY:
             keyboard = pyqbot.Keyboard.from_rows(
                 [button(number, Spec("流式回复", "stream", "已点"), grouped=False)]
@@ -471,6 +478,25 @@ async def test_button_and_markdown_variants(
             )
             return await send(message, text, keyboard)
         return await run_commands(number, message)
+
+    async def run_open_fence(number: int, message: pyqbot.C2CMessage, *, close: bool) -> object:
+        """代码块的开头行与图片写法先发出，停 8 秒：这段时间里消息停在没闭合的代码块里。`close` 时再补上结束行，
+        否则就这样结束。"""
+        ask = (
+            "下面的代码块先只有开头，8 秒后才补上结尾。看这 8 秒里图片写法显示成代码还是图片，补上之后呢。"
+            if close
+            else "下面的代码块一直没有结尾。看图片写法显示成代码还是图片：停着的 8 秒里，以及消息结束之后。"
+        )
+        stream = message.reply_stream(coalesce=False)
+        try:
+            await stream.append(f"**实测{number}**：{ask}\n\n```text\n{SHOWN}\n")
+            await asyncio.sleep(8)
+            if close:
+                await stream.append("```\n\n（完）")
+            await stream.finish()
+        except pyqbot.QQBotError as error:
+            return describe(error)
+        return "被接受"
 
     async def stream_reply(interaction: pyqbot.Interaction) -> None:
         """用互动事件作被动回复的对象：先发「正在输入」，再发一条两片的流式消息。"""

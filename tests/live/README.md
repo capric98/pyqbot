@@ -98,7 +98,7 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
   1～11 是按钮：四种样式、同组的按钮点了一个之后其余的变化（含只有一个按钮、收到回复之后）、二次确认弹窗、超长的
   弹窗文字与按钮文字、指令按钮发出的原文、四个按钮的排版；点击都记下来，发「查」查看。12～22 是 Markdown：嵌套列表的
   缩进、不该成图的写法（`<img>`、转义、全角感叹号、行内代码）、各种代码块写法里的图片语法显示成代码还是图片、超长
-  流式消息被拆开后代码块里的图片语法。23 是点按钮之后用「正在输入」与流式消息回复这次点击。每种用「看 编号 说明」
+  流式消息被拆开后代码块里的图片语法。23 是点按钮之后用「正在输入」与流式消息回复这次点击；24、25 是流式消息里还没闭合的代码块。每种用「看 编号 说明」
   记下；结果在 `button_variants.txt`。
 - `test_live_events.py::test_friend_del_then_add`：删好友再加回（在 QQ 里打开 `test_generate_share_link` 生成的链接），收到「pyqbot：欢迎回来」。
 - `test_live_events.py::test_c2c_reply_limit_and_plain_stream`：先后发两条单聊；第一条收到「正在输入」与最多 4 条回复，第二条收到纯文本流式回复（`**` 不加粗）。
