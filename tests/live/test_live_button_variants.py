@@ -245,6 +245,11 @@ TEXTS: dict[int, Text] = {
         "看：是不是一整个代码块，图片写法显示成代码还是图片。\n\n"
         f"````markdown\n```python\nprint(1)\n```\n{SHOWN}\n````\n\n（完）",
     ),
+    26: Text(
+        "代码块前后都没有空行",
+        "看：图片写法显示成代码还是图片，前后的两行字在不在代码块里。\n\n"
+        f"代码块紧跟在这一行后面：\n```text\n{SHOWN}\n```\n这一行紧跟在代码块后面。\n\n（完）",
+    ),
 }
 LONG = 22
 STREAM_REPLY = 23
