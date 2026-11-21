@@ -19,7 +19,7 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
 | `APP_ID`、`APP_SECRET` | 机器人凭证，所有真实接口用例都要 |
 | `TEST_USER_OPENID` | 测试用户的单聊 openid；只能给他发消息 |
 | `LIVE_GATEWAY` | 连网关的用例（每个消耗一次连接次数） |
-| `LIVE_WAIT_SECONDS` | 连上网关后等测试用户操作的秒数；`test_live.py`、`test_live_bot.py` 默认 0，`test_live_quote.py` 默认 600，`test_live_stream_split.py` 默认 3600，`test_live_stream_finish.py`、`test_live_markdown_images.py` 默认 1800，其余默认 180 |
+| `LIVE_WAIT_SECONDS` | 连上网关后等测试用户操作的秒数；`test_live.py`、`test_live_bot.py` 默认 0，`test_live_quote.py` 默认 600，`test_live_stream_split.py` 默认 3600，`test_live_stream_finish.py`、`test_live_markdown_images.py` 默认 1800，`test_live_button_variants.py` 默认 3600，其余默认 180 |
 | `LIVE_WRONG_SECRET` | 用错误的密钥鉴权一次 |
 | `LIVE_TOKEN_WINDOW` | 观察 token 换发，最长两个多小时 |
 | `LIVE_GLOBAL_CONFIG` | 改菜单、增删面板（影响所有用户） |
@@ -94,6 +94,11 @@ LIVE_GATEWAY=1 uv run --env-file .env pytest -m live --no-cov tests/live/test_li
   消息：第三方图站的图（境内、境外、带查询串）、打不开的地址（404、网页、解析不了）、不写宽高或宽高不符、素材库的图
   （发出后立刻删掉素材；素材库是机器人全局的，须单独同意并设 `LIVE_MEDIA_IMAGES=1`，否则这几种跳过）。每种看图有没有
   显示、何时出现、大小与比例，用「看 编号 说明」记下；各分片是否被拒在 `markdown_images.txt`。
+- `test_live_button_variants.py::test_button_and_markdown_variants`：测试用户发编号（「帮助」查看），机器人回对应的消息。
+  1～11 是按钮：四种样式、同组的按钮点了一个之后其余的变化（含只有一个按钮、收到回复之后）、二次确认弹窗、超长的
+  弹窗文字与按钮文字、指令按钮发出的原文、四个按钮的排版；点击都记下来，发「查」查看。12～22 是 Markdown：嵌套列表的
+  缩进、不该成图的写法（`<img>`、转义、全角感叹号、行内代码）、各种代码块写法里的图片语法显示成代码还是图片、超长
+  流式消息被拆开后代码块里的图片语法。每种用「看 编号 说明」记下；结果在 `button_variants.txt`。
 - `test_live_events.py::test_friend_del_then_add`：删好友再加回（在 QQ 里打开 `test_generate_share_link` 生成的链接），收到「pyqbot：欢迎回来」。
 - `test_live_events.py::test_c2c_reply_limit_and_plain_stream`：先后发两条单聊；第一条收到「正在输入」与最多 4 条回复，第二条收到纯文本流式回复（`**` 不加粗）。
 - `test_live_events.py::test_c2c_reply_after_10_and_55_minutes`：发一条单聊后约 10、55 分钟各收到一条被动回复（被拒的收不到）；约 56 分钟，在后台跑。
