@@ -149,7 +149,8 @@ class Users:
 
         Args:
             user_openid: 用户的 openid。
-            reply_to: 被动回复的对象，同 `send_message()`；整条流式消息只占用它的一个 `msg_seq`。
+            reply_to: 被动回复的对象，要用收到的消息：用互动等事件时平台拒绝第一个分片（`err_code` 40111003
+                「参数msg_id不能为空」）。整条流式消息只占用它的一个 `msg_seq`。
             markdown: 内容按 Markdown 渲染；为 `False` 时按纯文本。
             coalesce: 上一片还在发送时把之后的内容攒成一片（默认）；为 `False` 时每次调用发一片，见 `StreamMessage`。
 

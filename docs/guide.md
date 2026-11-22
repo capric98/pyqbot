@@ -209,10 +209,14 @@ await client.groups.send_message(group_openid, "大家好")
   `stream.ref_idx`），内容在 `message.msg_elements`。
 - 用户每发一条单聊消息，客户端都先显示一个跳动三个点的空气泡，等机器人的回复来替换；不回复的话它约 1 分钟后才消失。
 - **按钮**：`Button.callback()` 回调（见第 6 节）、`Button.link()` 跳转、`Button.command()` 指令。`enter=True` 的指令按钮
-  在群里只会填进输入框，不会直接发出。
+  在单聊里点了直接替用户发出 `data`（没有「@机器人」），在群里只会填进输入框，不会直接发出。
+- **按钮点过之后**：几个回调按钮给相同的 `group_id`、各带一个 `id` 时，点了一个，它显示 `visited_label`，同组其余的
+  变灰，一直保持；同组而不带 `id` 时整条消息被拒（40011021）。不分组的按钮点过之后的样子只是临时的，下一条消息
+  （谁发的都算）到来后就恢复成可以点的样子。二次确认（`ButtonModal`）的文字超过上限时整条消息也被拒。
 - **主动消息的前提**：群里要有主动消息权限，实测 `get_bot_state()` 的 `allow_proactive_msg` 为假时被拒（`err_code` 40034105）。
 - **被动回复的期限**：单聊实测收到消息 55 分钟后仍能回复（接口页写的 5 分钟不对）。
-- Markdown 实际支持的语法比官方文档列的多（代码块、表格、LaTeX 等），HTML 标签不生效。
+- Markdown 实际支持的语法比官方文档列的多（代码块、表格、LaTeX 等），HTML 标签不生效（`<img>` 也不会加载图片）；
+  嵌套列表的子项缩进 2 个空格也有层次。
 - Markdown 里的图片写 `![说明 #宽px #高px](地址)`，流式消息里也能用。宽高必须写，并按原图的比例：不写时只显示
   「[说明]」，写错会变形。平台抓不到图（地址打不开、境内访问不了的网站）时消息照发，客户端显示「图片加载失败」；
   普通消息可以用 `pyqbot.Markdown(content=..., force_verify_image_resource=True)` 让它直接失败（40034141）。
@@ -227,6 +231,8 @@ await client.groups.send_message(group_openid, "大家好")
 - `pyqbot.Markdown`、`pyqbot.Keyboard`、`pyqbot.Button`、`pyqbot.Card`（`src/pyqbot/_models/send.py`）。
 - [`design.md`](design.md)「请求层与接口分组」的「发消息」「被动回复」「其它消息操作」。
 - [`errata.md`](errata.md)「引用、带文字的富媒体与卡片」「键盘：单聊发送成功，`enter` 在群里只填进输入框」
+  「键盘：同组的回调按钮要各带 `id`，同组的点过之后一直变灰，不分组的只是临时的」
+  「Markdown：2 个空格的嵌套列表不会压平，代码块里的图片写法只在气泡被拆开后才成图」
   「Markdown：实际支持的语法比文档多」「卡片：`pic_url` 用 .ico 时转存失败」「单聊被动回复的有效期：至少 55 分钟」
   「正在输入与被动回复的次数」「Markdown 图片：不写宽高不显示，抓不到时显示「图片加载失败」，接口不报错」。
 
@@ -288,7 +294,8 @@ async def chat(message: pyqbot.C2CMessage) -> None:
 - `stream.sent_text` 是平台已经确认收下的全文（用户看到的内容），某一片失败后停在失败之前；
   `stream.ref_idx` 是引用这条消息时要用的索引，平台还没给出时为 `None`。
 - **超长会被拆成几条**：平台把超过约 15000 字节（Markdown 原文按 UTF-8 计，中文约 5000 字）的流式消息拆成几条气泡，
-  硬切在两片之间，不看段落。切到代码块、表格、列表项中间时，后一条显示错乱（代码块还会连带之后的正文）。
+  硬切在两片之间，不看段落。切到代码块、表格、列表项中间时，后一条显示错乱：代码块里的内容成了正文（其中的
+  图片写法会被抓取、显示成图片），结尾的围栏还会连带之后的正文。
   想在合适的位置分条，就在接近上限时在段落之间 `finish()`，再对同一条消息开一条新的流式消息；留些余量，实测有一次
   不到 14400 字节就拆了。拆出的每条有自己的引用索引，在 `stream.ref_idxs` 里（新的要晚 0～2 片才出现）。
 - `reply_stream(markdown=False)` 按纯文本显示。没被拆开的流式消息只占用一个 `msg_seq`，拆成几条就占几个；
@@ -298,6 +305,8 @@ async def chat(message: pyqbot.C2CMessage) -> None:
   否则平台会提前结束它，之后的分片报 40034019（空的结束分片 SDK 当作正常结束，不抛出）。
   对同一条消息插一条普通回复不受影响。比如「过程消息 + 回答」：先 `await progress.finish()`，再开回答流。
 - 不在处理函数里时用 `client.users.stream_message(user_openid, reply_to=message)`。
+- `reply_to` 要用收到的消息。拿互动事件（按钮点击）来回复时平台拒绝第一片（40111003「参数msg_id不能为空」）；
+  点了按钮之后要流式回答，就回复一条还在有效期内的用户消息。「正在输入」与普通的被动回复可以用互动事件。
 
 **细节去哪看**
 
@@ -306,7 +315,8 @@ async def chat(message: pyqbot.C2CMessage) -> None:
 - [`design.md`](design.md)「请求层与接口分组」的「流式消息」。
 - [`errata.md`](errata.md)「流式消息：每片要等上一片的往返，逐片发送很慢」「流式消息：路径用 `user_openid`，空的结束分片可用」
   「流式消息：`content_type=text` 时按原文显示」「流式消息撤回不了」「流式消息：超过约 15000 字节被拆成几条气泡，多出的每条占一个 `msg_seq`」
-  「流式消息：被下一条流式消息或另一条回复提前结束，之后的分片报 40034019」。
+  「流式消息：被下一条流式消息或另一条回复提前结束，之后的分片报 40034019」
+  「互动事件作被动回复的对象：「正在输入」可以，流式消息不行」。
 
 ## 6. 互动：按钮回调
 
@@ -344,6 +354,7 @@ async def admin_only(interaction: pyqbot.Interaction) -> None:
 - 回应用的 `interaction.id` 与被动回复用的 `event_id` 不是同一个值，两者都由 SDK 处理。
 - `interaction.reply()` 按发生的场景选接口，返回 `SentMessage`（单聊、群聊）或 `GuildMessage`（频道）；
   要撤回它就把返回值交给 `interaction.recall()`，同样按场景选接口，不用先判断类型。
+- 用互动事件作被动回复的对象时，普通消息与「正在输入」可以，流式消息不行（见第 5 节）。
 - 用户在资料卡切换主动消息开关时，推的是 `type` 为 `USER_AUTHORIZE` 的互动，开关状态看
   `interaction.data.resolved.authorize_data.switch`。
 - SDK 自建的 HTTP 客户端把空闲连接保留 60 秒，免得回应时重新握手；自备 `http_client` 时建议同样调长 `keepalive_expiry`。
@@ -512,6 +523,8 @@ async def notify() -> None:
 - `error.outcome_unknown` 为假时可以确定请求没有生效（连不上、平台带错误码或以 4xx 拒绝），可以放心改发别的内容或重试。
   为真时请求可能已经（部分）生效（如消息其实发出去了）：请求发出后超时或断开、HTTP 5xx、2xx 或 3xx 却确认不了成功，
   以及 `PartialFailureError`（其余已生效）、`AuditPendingError`（审核通过后会发出）。
+- 列表类的结果（`iter_panels()`、`iter_images()` 等）里，某条记录缺了必填字段（如 ID）或类型不对时，只丢掉这一条、
+  不报错，其余照常返回。所以「列表里没有」不等于「平台上没有」；要据此创建或删除东西时留意这一点。
 - SDK 不自动重试普通请求（分片上传的分片除外），也不做限频退避。网关断线会自动重连，只有无法恢复时 `start()` 才抛 `GatewayError`。
 - 处理函数里没接住的异常只记 ERROR 日志，机器人继续运行；要给用户反馈就自己 `try`。
 - AppSecret 与 access_token 不会出现在异常文案、异常链、日志和 `repr`（如 `client.config`）里，可以放心记录和上报。

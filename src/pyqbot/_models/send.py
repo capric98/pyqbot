@@ -122,8 +122,9 @@ class ButtonRenderData(RequestModel):
     """按钮的外观。
 
     Attributes:
-        label: 按钮文字，最多 10 个字符。
-        visited_label: 点击后的文字。
+        label: 按钮文字。文档写最多 10 个字符，实测 20 个字也被接受。
+        visited_label: 点击后的文字。同组的按钮（`Button.group_id`）点过之后一直显示它；不分组的只是临时显示，
+            下一条消息到来后变回 `label`。
         style: 样式。
     """
 
@@ -167,7 +168,7 @@ class ButtonPermission(RequestModel):
 
 
 class ButtonModal(RequestModel):
-    """点击后的二次确认。
+    """点击后的二次确认。文字超过下面的长度时整条消息被拒（`err_code` 40011021）。
 
     Attributes:
         content: 提示文字，最多 40 个字符，不能有链接。
@@ -208,10 +209,11 @@ class Button(RequestModel):
     """消息键盘上的一个按钮，一般用 `link()`、`callback()`、`command()` 构造。
 
     Attributes:
-        id: 按钮 ID，在同一个键盘内唯一；回调事件里会带上它。
+        id: 按钮 ID，在同一个键盘内唯一；回调事件里会带上它。用 `group_id` 时必须填。
         render_data: 外观。
         action: 点击后的行为。
-        group_id: 分组：同组的一个回调按钮被点击后，其余按钮变灰不可点。只对回调按钮有效。
+        group_id: 分组：同组的一个回调按钮被点击后，其余按钮变灰不可点，这个状态一直保持。同组的按钮必须各带
+            一个 `id`，否则整条消息被拒（`err_code` 40011021）。只对回调按钮有效。
     """
 
     render_data: ButtonRenderData
@@ -265,7 +267,7 @@ class Button(RequestModel):
         """回调按钮：点击后平台推送 `INTERACTION_CREATE` 事件，带上 `data` 与 `id`。
 
         `permission=None` 表示所有人可点；`visited_label=None` 表示点击后文字不变；
-        `group_id` 相同的回调按钮被点了一个，其余变灰不可点。
+        `group_id` 相同的回调按钮被点了一个，其余变灰不可点，同组的按钮要各传一个 `id`（见 `Button`）。
         """
         return cls._make(
             label,
@@ -297,10 +299,10 @@ class Button(RequestModel):
         modal: ButtonModal | None = None,
         unsupport_tips: str | None = None,
     ) -> Button:
-        """指令按钮：点击后在输入框插入 `@机器人 data`。
+        """指令按钮：点击后把指令填进输入框，群里是 `@机器人 data`，单聊里就是 `data`。
 
-        `enter=True` 时点击后直接发送，不用用户再按发送（官方说只有单聊可用）；
-        `reply=True` 时发送的指令引用这条消息。`permission=None` 表示所有人可点；
+        `enter=True` 时点击后直接发送，不用用户再按发送（只有单聊可用，群里仍只填进输入框）；
+        `reply=True` 时发送的指令引用这条消息（单聊实测收到的消息里没有 `ref_msg_idx`）。`permission=None` 表示所有人可点；
         `visited_label=None` 表示点击后文字不变。
         """
         return cls._make(
