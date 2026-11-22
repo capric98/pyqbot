@@ -365,9 +365,11 @@ async def test_button_and_markdown_variants(
     outcome: dict[str, object] = {}
 
     def button(number: int, spec: Spec, *, grouped: bool) -> pyqbot.Button:
+        # 同组的按钮要各带一个 `id`：不带时两个以上同组的按钮被拒（40011021「rows.buttons.id无效」，2026-11-21）。
         return pyqbot.Button.callback(
             spec.label,
             f"pqb:{run}:{number}:{spec.name}",
+            id=spec.name if grouped else None,
             visited_label=spec.done or None,
             style=spec.style,
             group_id=f"g{run}{number}" if grouped else None,
